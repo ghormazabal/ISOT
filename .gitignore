@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.env
+
+# Frontend
+web/node_modules/
+web/dist/
+
+# Editores y SO
+.idea/
+.vscode/
+*.swp
+.DS_Store

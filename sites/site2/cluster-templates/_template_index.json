@@ -1,0 +1,16 @@
+[
+  {
+    "name": "rke2-edge-calico",
+    "site": "site2",
+    "scope": "site",
+    "version": null,
+    "distro": "rke2",
+    "cni": "calico",
+    "path": "sites/site2/cluster-templates/rke2-edge-calico/template.yaml",
+    "chart_count": 1,
+    "charts": [
+      "metallb"
+    ],
+    "used_by": []
+  }
+]

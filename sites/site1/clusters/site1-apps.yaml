@@ -1,0 +1,118 @@
+cluster_name: site1-apps
+kind: kubernetes
+# [AI-Context]: Downstream Apps. Usa template rke2-rancher-hybrid-calico.
+#              Masters = VMs; workers = NODE002 y NODE007.
+rancher_id: c-m-apps001
+template_ref: rke2-rancher-hybrid-calico
+template_version: 1.34.8+lab.1-rc1
+release_namespace: fleet-default
+distro: rke2
+version: v1.34.8+rke2r2
+os:
+  masters: Ubuntu 24.04.3 LTS
+  workers: Ubuntu 22.04 LTS
+cni:
+  primary: calico IPIP (rke2-calico v3.32)
+  secondary: rke2-multus v4.2 + whereabouts (corriendo aunque values diga multusEnabled false)
+  sriov: sriov-network-operator 1.6.4
+pod_cidr: 10.42.0.0/16
+service_cidr: 10.43.0.0/16
+nodes:
+  - hostname: site1-appvm001
+    k8s_name: site1-appvm001
+    roles: [control-plane, etcd, worker]
+    internal_ip: 10.10.19.2
+  - hostname: site1-appvm002
+    k8s_name: site1-appvm002
+    roles: [control-plane, etcd, worker]
+    internal_ip: 10.10.19.3
+  - hostname: site1-appvm003
+    k8s_name: site1-appvm003
+    roles: [control-plane, etcd, worker]
+    internal_ip: 10.10.19.4
+  - hostname: SITE1-NODE002
+    k8s_name: site1-node002
+    roles: [worker]
+    internal_ip: 10.10.19.19
+    sriov_capable: true
+  - hostname: SITE1-NODE007
+    k8s_name: site1-node007
+    roles: [worker]
+    internal_ip: 10.10.19.24
+    sriov_capable: true
+workers_note: NODE002 y NODE007
+nads: []
+nads_note: ninguno documentado
+metallb:
+  version: 0.15.3
+  pools: []
+  vips: []
+storage_classes: []
+storage_note: sin StorageClass/CSI documentado
+sriov:
+  operator: 1.6.4
+  nodestates:
+    site1-node002: Succeeded
+    site1-node007: Succeeded
+  policies: ""
+sdn:
+  chart: sdn-controller
+  version_live: 0.5.0
+  version_template: 0.3.0
+  url: http://sdn.site1.example.net/
+  az: SITE1
+  state_nodes: 2
+  bond_sdn: bondD11
+values_overrides:
+  # Sobrescribe el chart umbral del template. Misma información que el antiguo
+  # values_summary: no se inventan claves ni se copian apps_live al template.
+  - release: rke2-rancher-hybrid-calico
+    values_inline:
+      cluster:
+        name: site1-apps
+        enabledCIS: true
+        agentEnvVars:
+          HTTP_PROXY: http://10.10.18.201:8080
+          HTTPS_PROXY: http://10.10.18.201:8080
+          NO_PROXY: localhost,127.0.0.1,10.0.0.0/8,172.16.0.0/12,.svc,.cluster.local,.site1.example.net,manager.site1.example.net,10.10.22.90,10.10.19.0/24,10.10.20.0/24,10.10.18.0/24
+        kubeProxy: [proxy-mode=ipvs, ipvs-strict-arp=true]
+      controlPlaneNodes:
+        openstack: disabled
+        baremetal: "nodes: [] (masters = VMs custom-join)"
+      workerNodes:
+        openstack: disabled
+        baremetal: "nodes: [] (workers unidos por join custom/SSH)"
+      cniConfig:
+        internalAddressInterface: eth0
+        podCIDR: 10.42.0.0/16
+        serviceCIDR: 10.43.0.0/16
+        tunnelProtocol: IPIP
+        multusEnabled: false
+      kubevirt: disabled
+      storage:
+        longhorn: disabled
+      traefik: enabled
+      ingressNginx: disabled
+      ntp:
+        enabled: true
+        sources: [10.30.0.10, 10.30.0.11, 10.30.0.12]
+        minimum-agreeing-sources: 2
+apps_live:
+  metallb: 0.15.3
+  node-config-operator: 0.3.1
+  ntpd-rs: 1.1.2
+  sriov-network-operator: 1.6.4
+  sdn-controller: 0.5.0
+  cert-manager: v1.21.0
+  rancher-logging: 108.0.2
+  etcd-defrag: 0.40.0
+  rke2-traefik: 39.0.703
+workloads: []
+status_note: ""
+access:
+  jumphost: site1-jump001
+  jumphost_ip: 10.10.18.100
+  api: https://10.10.19.2:6443
+infra:
+  hypervisor_cluster: site1-platform
+  vlans: [2005, 2006, 2003, 2000]

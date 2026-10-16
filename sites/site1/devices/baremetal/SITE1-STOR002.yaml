@@ -1,0 +1,41 @@
+hostname: SITE1-STOR002
+role: storage-server
+kind: baremetal
+vendor: generic
+model: compute-2u
+cluster_ref: ceph-site1
+os: ""
+# [AI-Context]: Nodo Ceph (mon/mgr/mds/osd). OS desconocido.
+oob:
+  type: bmc
+  ip: 10.10.16.15/24
+  switch: SITE1-MGMT001
+  port: Ethernet9
+bonds:
+  - name: bondC
+    leaf_pc: {SITE1-LEAF001: PortChannel33, SITE1-LEAF002: PortChannel33}
+    allowed_vlans: [2003]
+  - name: bondD0
+    leaf_pc: {SITE1-LEAF001: PortChannel32, SITE1-LEAF002: PortChannel32}
+    allowed_vlans: [2001]
+  - name: bondS
+    leaf_pc: {SITE1-LEAF001: PortChannel34, SITE1-LEAF002: PortChannel34}
+    allowed_vlans: [2000]
+networking:
+  - interface: MGMT_SW
+    parent: bondC
+    vlan: 2003
+    ip: 10.10.17.15/24
+    gateway: 10.10.17.1
+    connected_to: {device: SITE1-LEAF001, port: PortChannel33}
+  - interface: CLOUD_STOR
+    parent: bondS
+    vlan: 2000
+    ip: 10.10.0.15/21
+    connected_to: {device: SITE1-LEAF001, port: PortChannel34}
+  - interface: CLOUD_BKP_STOR
+    parent: bondD0
+    vlan: 2001
+    ip: 10.10.8.15/21
+    connected_to: {device: SITE1-LEAF001, port: PortChannel32}
+

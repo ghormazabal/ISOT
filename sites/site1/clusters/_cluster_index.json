@@ -1,0 +1,46 @@
+[
+  {
+    "name": "ceph-site1",
+    "site": "site1",
+    "kind": "ceph",
+    "template_ref": null,
+    "distro": "ceph",
+    "version": "16.2.15 (pacific)",
+    "path": "sites/site1/clusters/ceph-site1.yaml",
+    "node_count": 2,
+    "override_count": 0
+  },
+  {
+    "name": "site1-apps",
+    "site": "site1",
+    "kind": "kubernetes",
+    "template_ref": "rke2-rancher-hybrid-calico",
+    "distro": "rke2",
+    "version": "v1.34.8+rke2r2",
+    "path": "sites/site1/clusters/site1-apps.yaml",
+    "node_count": 5,
+    "override_count": 1
+  },
+  {
+    "name": "site1-manager",
+    "site": "site1",
+    "kind": "kubernetes",
+    "template_ref": null,
+    "distro": "kubeadm (kubespray)",
+    "version": "v1.33.5",
+    "path": "sites/site1/clusters/site1-manager.yaml",
+    "node_count": 3,
+    "override_count": 0
+  },
+  {
+    "name": "site1-platform",
+    "site": "site1",
+    "kind": "kubernetes",
+    "template_ref": null,
+    "distro": "rke2",
+    "version": "v1.34.8+rke2r2",
+    "path": "sites/site1/clusters/site1-platform.yaml",
+    "node_count": 3,
+    "override_count": 0
+  }
+]

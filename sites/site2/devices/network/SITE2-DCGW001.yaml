@@ -1,0 +1,24 @@
+hostname: SITE2-DCGW001
+role: dcgw
+kind: network
+vendor: generic
+model: leaf-32x100g
+os: nos
+# [AI-Context]: Gateway de borde. Ethernet31 cruza a SITE1-DCGW001 (DCI).
+networking:
+  - interface: Management0
+    vlan: 2002
+    ip: 10.80.0.20/24
+  - interface: Loopback0
+    ip: 10.80.15.5/32
+  - interface: Ethernet0
+    connected_to: {device: SITE2-LEAF001, port: Ethernet48}
+  - interface: Ethernet31
+    vlan: 4094
+    ip: 192.0.2.2/24
+    vrf: VRF_DCI
+    connected_to: {device: SITE1-DCGW001, site: site1, port: Ethernet31}
+bgp:
+  asn: 64610
+  vrfs: [Vrf_OAM, VRF_DCI]
+  router_id: 10.80.15.5

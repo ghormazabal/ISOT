@@ -1,0 +1,27 @@
+hostname: site1-appvm003
+role: apps-control
+k8s_roles: [control-plane, etcd, worker]
+kind: vm
+cluster_ref: site1-apps
+os: Ubuntu 24.04.3 LTS
+# [AI-Context]: Master de la app (VM KubeVirt). NAD macvtap sobre bridges del platform (VLAN 2005/2006).
+hypervisor:
+  cluster: site1-platform
+  namespace: apps-control-plane
+  device: SITE1-CTRL003
+resources: {vcpu: 8, memory: 16Gi, disk: 96Gi}
+networking:
+  - interface: eth0
+    network: APP_CTRL
+    vlan: 2005
+    ip: 10.10.19.4/24
+    gateway: 10.10.19.1
+    nad: apps-control-plane/app-ctrl
+    connected_to: {device: SITE1-CTRL003, port: br-app2005}
+  - interface: eth1
+    network: APP_DATA
+    vlan: 2006
+    ip: 10.10.20.4/24
+    nad: apps-control-plane/app-cni
+    connected_to: {device: SITE1-CTRL003, port: br-app2006}
+

@@ -1,0 +1,574 @@
+import { useEffect, useMemo, useState } from "react";
+
+import { CompareSidebar } from "./components/CompareSidebar";
+import { CompareValues } from "./components/CompareValues";
+import { DetailPanel } from "./components/DetailPanel";
+import { RefPicker, effectiveRef } from "./components/RefPicker";
+import { Sidebar } from "./components/Sidebar";
+import { TemplateExplorer } from "./components/TemplateExplorer";
+import { TopologyGraph } from "./components/TopologyGraph";
+import { ValuesDiffView } from "./components/ValuesDiff";
+import { api } from "./api";
+import type {
+  AppView,
+  CanvasMode,
+  ClusterDetail,
+  ClusterIndexEntry,
+  DeviceDetail,
+  DeviceIndexEntry,
+  DiffEntity,
+  GraphNode,
+  GraphPayload,
+  GroupBy,
+  RefsPayload,
+  Selection,
+  SemanticDiff,
+  SiteFilter,
+  SiteIndexEntry,
+  TemplateDetail,
+  TemplateIndexEntry,
+  Topology,
+  ValuesDiff,
+} from "./types";
+
+export default function App() {
+  const [view, setView] = useState<AppView>("network");
+  const [siteFilter, setSiteFilter] = useState<SiteFilter>("all");
+  const [sites, setSites] = useState<SiteIndexEntry[]>([]);
+  const [devicesBySite, setDevicesBySite] = useState<Record<string, DeviceIndexEntry[]>>({});
+  const [clustersBySite, setClustersBySite] = useState<Record<string, ClusterIndexEntry[]>>({});
+  const [templates, setTemplates] = useState<TemplateIndexEntry[]>([]);
+  const [graphs, setGraphs] = useState<Record<string, GraphPayload>>({});
+  const [topologies, setTopologies] = useState<Record<string, Topology>>({});
+  const [query, setQuery] = useState("");
+  const [groupBy, setGroupBy] = useState<GroupBy>("cluster");
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const [deviceDetail, setDeviceDetail] = useState<DeviceDetail | null>(null);
+  const [clusterDetail, setClusterDetail] = useState<ClusterDetail | null>(null);
+  const [templateDetail, setTemplateDetail] = useState<TemplateDetail | null>(null);
+  const [valuesDiff, setValuesDiff] = useState<ValuesDiff | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [bootError, setBootError] = useState<string | null>(null);
+  const [canvas, setCanvas] = useState<CanvasMode>("graph");
+  const [compare, setCompare] = useState(false);
+  const [refs, setRefs] = useState<RefsPayload | null>(null);
+  const [baseBranch, setBaseBranch] = useState("");
+  const [baseCommit, setBaseCommit] = useState("");
+  const [baseCustom, setBaseCustom] = useState("");
+  const [headBranch, setHeadBranch] = useState("");
+  const [headCommit, setHeadCommit] = useState("");
+  const [headCustom, setHeadCustom] = useState("");
+  const [diff, setDiff] = useState<SemanticDiff | null>(null);
+  const [diffError, setDiffError] = useState<string | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [onlyChanges, setOnlyChanges] = useState(true);
+  const [diffEntity, setDiffEntity] = useState<DiffEntity | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [siteIdx, templateIdx, globalGraph, gitRefs] = await Promise.all([
+          api.sites(),
+          api.templates(),
+          api.globalGraph(),
+          api.refs().catch(() => null),
+        ]);
+        if (cancelled) return;
+        const devices: Record<string, DeviceIndexEntry[]> = {};
+        const clusters: Record<string, ClusterIndexEntry[]> = {};
+        const graphMap: Record<string, GraphPayload> = { "all:global": globalGraph };
+        const topoMap: Record<string, Topology> = {};
+        await Promise.all(
+          siteIdx.map(async (site) => {
+            const [devs, clus, net, k8s, topo] = await Promise.all([
+              api.devices(site.id),
+              api.clusters(site.id),
+              api.graph(site.id, "network"),
+              api.graph(site.id, "kubernetes"),
+              api.topology(site.id),
+            ]);
+            devices[site.id] = devs;
+            clusters[site.id] = clus;
+            graphMap[`${site.id}:network`] = net;
+            graphMap[`${site.id}:kubernetes`] = k8s;
+            topoMap[site.id] = topo;
+          }),
+        );
+        if (cancelled) return;
+        const allK8s = await api.allKubernetesGraph();
+        if (cancelled) return;
+        graphMap["all:kubernetes"] = allK8s;
+        setSites(siteIdx);
+        setTemplates(templateIdx);
+        setDevicesBySite(devices);
+        setClustersBySite(clusters);
+        setGraphs(graphMap);
+        setTopologies(topoMap);
+        if (gitRefs) {
+          setRefs(gitRefs);
+          const pick = pickDefaultRefs(gitRefs);
+          setBaseBranch(pick.base);
+          setHeadBranch(pick.head);
+        }
+      } catch (err) {
+        if (!cancelled) setBootError(err instanceof Error ? err.message : String(err));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (compare) {
+      setDeviceDetail(null);
+      setClusterDetail(null);
+      setTemplateDetail(null);
+      setValuesDiff(null);
+      setLoadingDetail(false);
+      return;
+    }
+    if (!selection || selection.type === "site") {
+      setDeviceDetail(null);
+      setClusterDetail(null);
+      setTemplateDetail(null);
+      setValuesDiff(null);
+      setError(null);
+      if (!selection || selection.type === "site") setLoadingDetail(false);
+      return;
+    }
+    let cancelled = false;
+    setLoadingDetail(true);
+    setError(null);
+    setValuesDiff(null);
+    const selected = selection;
+    const request =
+      selected.type === "device"
+        ? api.device(selected.site, selected.hostname)
+        : selected.type === "cluster"
+          ? api.cluster(selected.site, selected.name)
+          : api.template(selected.site, selected.name);
+    request
+      .then(async (payload) => {
+        if (cancelled) return;
+        setDeviceDetail(selected.type === "device" ? (payload as DeviceDetail) : null);
+        const cluster = selected.type === "cluster" ? (payload as ClusterDetail) : null;
+        setClusterDetail(cluster);
+        setTemplateDetail(selected.type === "template" ? (payload as TemplateDetail) : null);
+        if (selected.type === "template") setCanvas("explorer");
+        if (selected.type === "cluster" && cluster?.data?.template_ref) {
+          try {
+            const diff = await api.clusterValuesDiff(selected.site, selected.name);
+            if (!cancelled) {
+              setValuesDiff(diff);
+              setCanvas("diff");
+            }
+          } catch (err) {
+            if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+          }
+        } else if (selected.type === "cluster") {
+          setCanvas("graph");
+        }
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingDetail(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selection, compare]);
+
+  const baseRef = effectiveRef(baseBranch, baseCommit, baseCustom);
+  const headRef = effectiveRef(headBranch, headCommit, headCustom);
+
+  useEffect(() => {
+    if (!compare || !baseRef || !headRef) return;
+    let cancelled = false;
+    setDiffLoading(true);
+    setDiffError(null);
+    api
+      .diff(baseRef, headRef, siteFilter)
+      .then((payload) => {
+        if (!cancelled) {
+          setDiff(payload);
+          const changed = payload.summary.added + payload.summary.removed + payload.summary.modified;
+          setOnlyChanges(changed > 0);
+          setDiffEntity((prev) => {
+            if (!prev) return null;
+            return payload.entities.find((item) => item.id === prev.id) ?? null;
+          });
+        }
+      })
+      .catch((err: Error) => {
+        if (!cancelled) {
+          setDiff(null);
+          setDiffError(err.message);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setDiffLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [compare, baseRef, headRef, siteFilter]);
+
+  const devices = useMemo(() => {
+    if (siteFilter === "all") return Object.values(devicesBySite).flat();
+    return devicesBySite[siteFilter] ?? [];
+  }, [devicesBySite, siteFilter]);
+
+  const clusters = useMemo(() => {
+    if (siteFilter === "all") return Object.values(clustersBySite).flat();
+    return clustersBySite[siteFilter] ?? [];
+  }, [clustersBySite, siteFilter]);
+
+  const visibleTemplates = useMemo(() => {
+    if (siteFilter === "all") return templates;
+    const used = new Set(
+      (clustersBySite[siteFilter] ?? [])
+        .map((item) => item.template_ref)
+        .filter((item): item is string => Boolean(item)),
+    );
+    return templates.filter(
+      (item) => item.site === siteFilter || (item.scope === "global" && used.has(item.name)),
+    );
+  }, [templates, siteFilter, clustersBySite]);
+
+  const graphKey =
+    siteFilter === "all"
+      ? view === "kubernetes"
+        ? "all:kubernetes"
+        : "all:global"
+      : `${siteFilter}:${view}`;
+  const liveGraph = graphs[graphKey] ?? null;
+  const compareGraph =
+    compare && diff
+      ? siteFilter === "all" && view === "network"
+        ? (diff.graphs.global ?? diff.graphs.network ?? null)
+        : view === "kubernetes"
+          ? (diff.graphs.kubernetes ?? null)
+          : (diff.graphs.network ?? null)
+      : null;
+  const graph = compare ? compareGraph : liveGraph;
+  const topology = siteFilter === "all" ? null : (topologies[siteFilter] ?? null);
+
+  const selectedId = (() => {
+    if (!selection) return null;
+    if (selection.type === "device") return `${selection.site}:${selection.hostname}`;
+    if (selection.type === "cluster") return `cluster:${selection.site}:${selection.name}`;
+    if (selection.type === "template") return `template:${selection.site}:${selection.name}`;
+    return `site:${selection.id}`;
+  })();
+
+  const entityByGraphId = (nodeId: string | null): DiffEntity | null => {
+    if (!diff || !nodeId) return null;
+    return (
+      diff.entities.find((item) => item.graph_ids.includes(nodeId) || item.id === nodeId) ?? null
+    );
+  };
+
+  const onGraphNode = (node: GraphNode) => {
+    const siteIdFromNode =
+      node.entity === "site" ? node.site || node.id.replace(/^site:/, "") : null;
+    if (compare && diff) {
+      const found = entityByGraphId(node.id);
+      if (found) {
+        setDiffEntity(found);
+        setSelection(selectionFromEntity(found, siteFilter));
+        if (found.kind === "site" || siteIdFromNode) {
+          const siteId = found.kind === "site" ? found.site || found.id : siteIdFromNode;
+          if (siteId && siteId !== "all") setSiteFilter(siteId);
+        }
+        return;
+      }
+    }
+    setDiffEntity(null);
+    if (siteIdFromNode) {
+      setSiteFilter(siteIdFromNode);
+      setSelection({ type: "site", id: siteIdFromNode });
+      return;
+    }
+    if (node.entity === "template") {
+      setSelection({ type: "template", site: node.site || "global", name: node.hostname });
+      setView("kubernetes");
+    } else if (node.entity === "cluster") {
+      setSelection({ type: "cluster", site: node.site || siteFilter, name: node.hostname });
+    } else if (node.hostname && node.site) {
+      setSelection({ type: "device", site: node.site, hostname: node.hostname });
+    }
+  };
+
+  const onDiffEntity = (entity: DiffEntity) => {
+    setDiffEntity(entity);
+    setSelection(selectionFromEntity(entity, siteFilter));
+    if (entity.kind === "site") {
+      const siteId = entity.site || entity.id;
+      if (siteId && siteId !== "all") setSiteFilter(siteId);
+    } else if (entity.site && entity.site !== "global" && siteFilter === "all") {
+      setSiteFilter(entity.site);
+    }
+    if (entity.kind === "values" || entity.kind === "release" || entity.kind === "template" || entity.kind === "cluster") {
+      setView("kubernetes");
+      if (entity.kind === "values") setCanvas("diff");
+    }
+  };
+
+  const onSelectDiffChild = (id: string) => {
+    if (!diff) return;
+    const found = diff.entities.find((item) => item.id === id);
+    if (found) onDiffEntity(found);
+  };
+
+  const activeSite = sites.find((item) => item.id === siteFilter);
+
+  return (
+    <div className="app">
+      <header className="topbar">
+        <div>
+          <p className="brand">ISoT</p>
+          <p className="tagline">
+            {siteFilter === "all"
+              ? `${sites.length} sitios · vista global`
+              : `${activeSite?.name ?? siteFilter} · ${activeSite?.description ?? ""}`}
+          </p>
+        </div>
+        <label className="site-picker">
+          <span>Sitio</span>
+          <select
+            id="site-filter"
+            name="site-filter"
+            value={siteFilter}
+            onChange={(event) => {
+              const next = event.target.value as SiteFilter;
+              setSiteFilter(next);
+              setSelection(null);
+              setQuery("");
+            }}
+          >
+            <option value="all">Todos (global)</option>
+            {sites.map((site) => (
+              <option key={site.id} value={site.id}>
+                {site.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <nav className="view-tabs">
+          <button type="button" className={view === "network" ? "is-active" : ""} onClick={() => setView("network")}>
+            {siteFilter === "all" ? "Sitios" : "Red"}
+          </button>
+          <button
+            type="button"
+            className={view === "kubernetes" ? "is-active" : ""}
+            onClick={() => setView("kubernetes")}
+          >
+            Kubernetes
+          </button>
+        </nav>
+        <nav className="view-tabs">
+          <button
+            type="button"
+            className={compare ? "is-active" : ""}
+            onClick={() => {
+              setCompare((value) => !value);
+              setCanvas("graph");
+              setDiffEntity(null);
+            }}
+          >
+            Comparar
+          </button>
+        </nav>
+        {compare ? (
+          <div className="ref-pickers">
+            <RefPicker
+              id="base-ref"
+              label="Base"
+              refs={refs}
+              branch={baseBranch}
+              commit={baseCommit}
+              custom={baseCustom}
+              resolvedSha={diff?.base.sha}
+              onBranch={setBaseBranch}
+              onCommit={setBaseCommit}
+              onCustom={setBaseCustom}
+            />
+            <RefPicker
+              id="head-ref"
+              label="Head"
+              refs={refs}
+              branch={headBranch}
+              commit={headCommit}
+              custom={headCustom}
+              resolvedSha={diff?.head.sha}
+              onBranch={setHeadBranch}
+              onCommit={setHeadCommit}
+              onCustom={setHeadCustom}
+            />
+          </div>
+        ) : null}
+        {view === "kubernetes" || compare ? (
+          <nav className="view-tabs canvas-tabs">
+            <button
+              type="button"
+              className={canvas === "graph" ? "is-active" : ""}
+              onClick={() => setCanvas("graph")}
+            >
+              Grafo
+            </button>
+            {!compare ? (
+              <button
+                type="button"
+                className={canvas === "explorer" ? "is-active" : ""}
+                disabled={!templateDetail}
+                onClick={() => templateDetail && setCanvas("explorer")}
+              >
+                Explorador
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className={canvas === "diff" ? "is-active" : ""}
+              disabled={compare ? !diff : !valuesDiff}
+              onClick={() => (compare ? diff : valuesDiff) && setCanvas("diff")}
+            >
+              Diff values
+            </button>
+          </nav>
+        ) : null}
+        <p className="badge">solo lectura · Git-as-a-Database</p>
+      </header>
+      {bootError ? <p className="boot-error">No se pudieron leer los índices: {bootError}</p> : null}
+      {compare && diffError ? <p className="boot-error">Diff: {diffError}</p> : null}
+      {compare && diffLoading ? <p className="boot-error">Calculando diff…</p> : null}
+      {compare && diff ? (
+        <CompareSidebar
+          diff={diff}
+          view={view}
+          siteFilter={siteFilter}
+          query={query}
+          selectedId={diffEntity?.id ?? selectedId}
+          onlyChanges={onlyChanges}
+          onQuery={setQuery}
+          onSelect={onDiffEntity}
+          onOnlyChanges={setOnlyChanges}
+        />
+      ) : (
+      <Sidebar
+        view={view}
+        siteFilter={siteFilter}
+        sites={sites}
+        devices={devices}
+        clusters={clusters}
+        templates={visibleTemplates}
+        query={query}
+        selectedId={selectedId}
+        onQuery={setQuery}
+        onSelectSite={(id) => {
+          setSiteFilter(id);
+          setSelection({ type: "site", id });
+        }}
+        onSelectDevice={(site, hostname) => setSelection({ type: "device", site, hostname })}
+        onSelectCluster={(site, name) => {
+          setSelection({ type: "cluster", site, name });
+          setView("kubernetes");
+        }}
+        onSelectTemplate={(site, name) => {
+          setSelection({ type: "template", site, name });
+          setView("kubernetes");
+        }}
+      />
+      )}
+      {compare && canvas === "diff" && diff ? (
+        <CompareValues diff={diff} onSelectEntity={onDiffEntity} />
+      ) : view === "kubernetes" && canvas === "explorer" && templateDetail ? (
+        <TemplateExplorer
+          template={templateDetail}
+          onOpenCluster={(site, name) => {
+            setSelection({ type: "cluster", site, name });
+            setView("kubernetes");
+          }}
+        />
+      ) : view === "kubernetes" && canvas === "diff" && valuesDiff ? (
+        <ValuesDiffView
+          diff={valuesDiff}
+          onOpenTemplate={(site, name) => {
+            setSelection({ type: "template", site, name });
+            setView("kubernetes");
+          }}
+          onOpenCluster={(site, name) => setSelection({ type: "cluster", site, name })}
+        />
+      ) : (
+        <TopologyGraph
+          graph={graph}
+          topology={topology}
+          groupBy={groupBy}
+          view={view}
+          siteFilter={siteFilter}
+          selectedId={selectedId}
+          onSelectNode={onGraphNode}
+          onGroupBy={setGroupBy}
+          compare={compare}
+          onlyChanges={onlyChanges}
+          onOnlyChanges={setOnlyChanges}
+        />
+      )}
+      <DetailPanel
+        selection={selection}
+        sites={sites}
+        device={deviceDetail}
+        cluster={clusterDetail}
+        template={templateDetail}
+        loading={loadingDetail}
+        error={error}
+        onOpenDevice={(site, hostname) => setSelection({ type: "device", site, hostname })}
+        onOpenCluster={(site, name) => setSelection({ type: "cluster", site, name })}
+        onOpenTemplate={(site, name) => setSelection({ type: "template", site, name })}
+        onOpenSite={(id) => {
+          setSiteFilter(id);
+          setSelection({ type: "site", id });
+        }}
+        onShowExplorer={() => setCanvas("explorer")}
+        onShowDiff={() => setCanvas("diff")}
+        diffEntity={compare ? diffEntity : null}
+        onSelectDiffEntity={onSelectDiffChild}
+      />
+    </div>
+  );
+}
+
+function pickDefaultRefs(payload: RefsPayload): { base: string; head: string } {
+  const branches = payload.branches.map((item) => item.name);
+  const prefer = (names: string[]): string =>
+    names.find((name) => branches.includes(name)) || branches[0] || payload.commits[0]?.sha || "";
+  const demo = prefer(["demo/diff-example", "origin/demo/diff-example", "cursor/demo-diff-example-9fbc"]);
+  const main = prefer(["origin/main", "main", "master"]);
+  const head = demo && demo !== main ? demo : branches.find((name) => name !== main) || main;
+  return { base: main, head };
+}
+
+function selectionFromEntity(entity: DiffEntity, siteFilter: string): Selection {
+  if (entity.kind === "site") return { type: "site", id: entity.site || entity.id };
+  if (entity.kind === "cluster") {
+    const [site, name] = entity.id.split(":");
+    return { type: "cluster", site: site || siteFilter, name: name || entity.label };
+  }
+  if (entity.kind === "template") {
+    const [site, name] = entity.id.split(":");
+    return { type: "template", site: site || "global", name: name || entity.label };
+  }
+  if (entity.kind === "device") {
+    const idx = entity.id.indexOf(":");
+    return {
+      type: "device",
+      site: entity.site || entity.id.slice(0, idx),
+      hostname: entity.id.slice(idx + 1),
+    };
+  }
+  return { type: "site", id: entity.site || siteFilter || "site1" };
+}

@@ -1,0 +1,16 @@
+hostname: SITE1-LEAF003
+role: server-leaf
+kind: network
+vendor: generic
+model: leaf-32x100g
+os: nos
+# [AI-Context]: Leaf pair con LEAF004.
+pair: SITE1-LEAF004
+networking:
+  - interface: Management0
+    vlan: 2002
+    ip: 10.10.16.242/24
+  - interface: Loopback0
+    ip: 10.10.21.9/32
+vlans: [2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008]
+

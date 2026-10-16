@@ -1,0 +1,47 @@
+hostname: SITE1-CTRL003
+role: platform-server
+k8s_roles: [control-plane, etcd, worker]
+kind: baremetal
+vendor: generic
+model: compute-2u
+cluster_ref: site1-platform
+os: Ubuntu 22.04 LTS
+# [AI-Context]: Nodo CTRL003 sobre LEAF003/004.
+oob:
+  type: bmc
+  ip: 10.10.16.13/24
+bonds:
+  - name: bondC
+    leaf_pc: {SITE1-LEAF003: PortChannel22, SITE1-LEAF004: PortChannel22}
+    allowed_vlans: [2003, 2007]
+  - name: bondD0
+    leaf_pc: {SITE1-LEAF003: PortChannel21, SITE1-LEAF004: PortChannel21}
+    allowed_vlans: [2004, 2008]
+  - name: bondD1
+    leaf_pc: {SITE1-LEAF003: PortChannel24, SITE1-LEAF004: PortChannel24}
+    allowed_vlans: [2005, 2006]
+  - name: bondS
+    leaf_pc: {SITE1-LEAF003: PortChannel23, SITE1-LEAF004: PortChannel23}
+    allowed_vlans: [2000]
+networking:
+  - interface: MGMT_SW
+    parent: bondC
+    vlan: 2003
+    ip: 10.10.17.13/24
+    gateway: 10.10.17.1
+    connected_to: {device: SITE1-LEAF003, port: PortChannel22}
+  - interface: CLOUD_STOR
+    parent: bondS
+    vlan: 2000
+    ip: 10.10.0.13/21
+    connected_to: {device: SITE1-LEAF003, port: PortChannel23}
+  - interface: bondD0.2004
+    parent: bondD0
+    vlan: 2004
+    ip: 10.10.18.13/24
+    connected_to: {device: SITE1-LEAF003, port: PortChannel21}
+  - interface: BM_CALICO
+    parent: bondD0
+    vlan: 2008
+    ip: 10.10.22.49/27
+

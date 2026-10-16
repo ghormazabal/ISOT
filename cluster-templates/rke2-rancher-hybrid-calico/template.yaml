@@ -1,0 +1,240 @@
+template_name: rke2-rancher-hybrid-calico
+# [AI-Context]: Familia usada en SITE1 por site1-apps y en SITE2 por site2-edge.
+#              Chart Helm en fleet-default. Catálogo de ejemplo: oci://registry.example.net/cluster-templates
+#              charts[] solo declara releases que ya estaban en addons_default/catálogo.
+#              others_keys no tienen versión ni values: se listan como faltantes.
+version: 1.34.8+lab.1-rc1
+description: "rke2 + Rancher; control plane OpenStack o baremetal + workers baremetal"
+distro: rke2
+kubernetes_version: v1.34.8+rke2r2
+cni:
+  primary: calico
+  defaults:
+    podCIDR: 10.42.0.0/16
+    serviceCIDR: 10.43.0.0/16
+    mtu: 1440
+    tunnelProtocol: IPIP
+    bgp: true
+    multusEnabled: false
+node_pools:
+  controlPlaneNodes: [openstack, baremetal]
+  workerNodes: [openstack, baremetal]
+  flavors: "por pool/nodo en values (openstackDefaults / baremetalDefaults); sin flavor por defecto fijo"
+addons_default:
+  storage:
+    longhorn: enabled
+    alternatives_in_inventory:
+      - ceph-csi-rbd 3.15.0
+      - ceph-csi-cephfs 3.15.0
+      - openebs 4.5.1
+      - longhorn 108.2.0
+  metallb: {enabled: true, version: 0.15.3}
+  sriovOperator: {enabled: true, version: 1.6.4}
+  nodeConfigOperator: {enabled: true, version: 0.3.1}
+  sdnController: {enabled: true, chart: sdn-controller, version: 0.3.0}
+  ntp: {enabled: true, chart: ntpd-rs, version: 1.1.2}
+  certManager: {version: 1.17.1}
+  others_keys:
+    - logging
+    - monitoring
+    - ingressNginx
+    - kubevirt
+    - x509CertExporter
+    - selfNodeRemediation
+    - nodeHealthcheckOperator
+    - nmstateOperator
+    - macvtapCni
+    - kubemacpool
+    - descheduler
+    - kured
+    - etcdDefrag
+    - registries
+catalog:
+  clusterrepo: cluster-templates-oci
+  url: oci://registry.example.net/cluster-templates
+  note: catálogo de ejemplo
+charts:
+  - name: rke2-rancher-hybrid-calico
+    repo: oci://registry.example.net/cluster-templates
+    chart: rke2-rancher-hybrid-calico
+    version: 1.34.8+lab.1-rc1
+    namespace: ""
+    order: 0
+    depends_on: []
+    values_ref: values/rke2-rancher-hybrid-calico.yaml
+    note: namespace del release no documentado en el template (el clúster site1-apps usa fleet-default)
+  - name: longhorn
+    repo: ""
+    chart: longhorn
+    version: ""
+    namespace: ""
+    order: 10
+    depends_on: [rke2-rancher-hybrid-calico]
+    values_inline:
+      enabled: true
+    note: "addons_default.storage.longhorn=enabled; versión del chart no documentada (108.2.0 es alternativa listada, no default)"
+  - name: metallb
+    repo: ""
+    chart: metallb
+    version: 0.15.3
+    namespace: ""
+    order: 20
+    depends_on: [rke2-rancher-hybrid-calico]
+    values_inline:
+      enabled: true
+  - name: sriovOperator
+    repo: ""
+    chart: sriovOperator
+    version: 1.6.4
+    namespace: ""
+    order: 30
+    depends_on: [rke2-rancher-hybrid-calico]
+    values_inline:
+      enabled: true
+  - name: nodeConfigOperator
+    repo: ""
+    chart: nodeConfigOperator
+    version: 0.3.1
+    namespace: ""
+    order: 40
+    depends_on: [rke2-rancher-hybrid-calico]
+    values_inline:
+      enabled: true
+  - name: sdnController
+    repo: ""
+    chart: sdn-controller
+    version: 0.3.0
+    namespace: ""
+    order: 50
+    depends_on: [rke2-rancher-hybrid-calico]
+    values_inline:
+      enabled: true
+  - name: ntp
+    repo: ""
+    chart: ntpd-rs
+    version: 1.1.2
+    namespace: ""
+    order: 60
+    depends_on: [rke2-rancher-hybrid-calico]
+    values_inline:
+      enabled: true
+  - name: certManager
+    repo: ""
+    chart: certManager
+    version: 1.17.1
+    namespace: ""
+    order: 70
+    depends_on: [rke2-rancher-hybrid-calico]
+    note: "addons_default no declara enabled ni values"
+  - name: logging
+    repo: ""
+    chart: logging
+    version: ""
+    namespace: ""
+    order: 100
+    depends_on: [rke2-rancher-hybrid-calico]
+    note: others_keys; versión, repo, namespace y values faltantes
+  - name: monitoring
+    repo: ""
+    chart: monitoring
+    version: ""
+    namespace: ""
+    order: 101
+    depends_on: [rke2-rancher-hybrid-calico]
+    note: others_keys; versión, repo, namespace y values faltantes
+  - name: ingressNginx
+    repo: ""
+    chart: ingressNginx
+    version: ""
+    namespace: ""
+    order: 102
+    depends_on: [rke2-rancher-hybrid-calico]
+    note: others_keys; versión, repo, namespace y values faltantes
+  - name: kubevirt
+    repo: ""
+    chart: kubevirt
+    version: ""
+    namespace: ""
+    order: 103
+    depends_on: [rke2-rancher-hybrid-calico]
+    note: others_keys; versión, repo, namespace y values faltantes
+  - name: x509CertExporter
+    repo: ""
+    chart: x509CertExporter
+    version: ""
+    namespace: ""
+    order: 104
+    depends_on: [rke2-rancher-hybrid-calico]
+    note: others_keys; versión, repo, namespace y values faltantes
+  - name: selfNodeRemediation
+    repo: ""
+    chart: selfNodeRemediation
+    version: ""
+    namespace: ""
+    order: 105
+    depends_on: [rke2-rancher-hybrid-calico]
+    note: others_keys; versión, repo, namespace y values faltantes
+  - name: nodeHealthcheckOperator
+    repo: ""
+    chart: nodeHealthcheckOperator
+    version: ""
+    namespace: ""
+    order: 106
+    depends_on: [rke2-rancher-hybrid-calico]
+    note: others_keys; versión, repo, namespace y values faltantes
+  - name: nmstateOperator
+    repo: ""
+    chart: nmstateOperator
+    version: ""
+    namespace: ""
+    order: 107
+    depends_on: [rke2-rancher-hybrid-calico]
+    note: others_keys; versión, repo, namespace y values faltantes
+  - name: macvtapCni
+    repo: ""
+    chart: macvtapCni
+    version: ""
+    namespace: ""
+    order: 108
+    depends_on: [rke2-rancher-hybrid-calico]
+    note: others_keys; versión, repo, namespace y values faltantes
+  - name: kubemacpool
+    repo: ""
+    chart: kubemacpool
+    version: ""
+    namespace: ""
+    order: 109
+    depends_on: [rke2-rancher-hybrid-calico]
+    note: others_keys; versión, repo, namespace y values faltantes
+  - name: descheduler
+    repo: ""
+    chart: descheduler
+    version: ""
+    namespace: ""
+    order: 110
+    depends_on: [rke2-rancher-hybrid-calico]
+    note: others_keys; versión, repo, namespace y values faltantes
+  - name: kured
+    repo: ""
+    chart: kured
+    version: ""
+    namespace: ""
+    order: 111
+    depends_on: [rke2-rancher-hybrid-calico]
+    note: others_keys; versión, repo, namespace y values faltantes
+  - name: etcdDefrag
+    repo: ""
+    chart: etcdDefrag
+    version: ""
+    namespace: ""
+    order: 112
+    depends_on: [rke2-rancher-hybrid-calico]
+    note: others_keys; versión, repo, namespace y values faltantes
+  - name: registries
+    repo: ""
+    chart: registries
+    version: ""
+    namespace: ""
+    order: 113
+    depends_on: [rke2-rancher-hybrid-calico]
+    note: others_keys; versión, repo, namespace y values faltantes

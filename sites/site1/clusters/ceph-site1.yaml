@@ -1,0 +1,18 @@
+cluster_name: ceph-site1
+kind: ceph
+# [AI-Context]: Ceph. Hosts documentados: STOR001 y STOR002.
+type: ceph
+version: 16.2.15 (pacific)
+hosts:
+  - SITE1-STOR001
+  - SITE1-STOR002
+hosts_missing: []
+mons:
+  - SITE1-STOR001
+  - SITE1-STOR002
+osds: 96
+filesystems: [platform-tools-cephfs]
+rbd_pools_known: [platform-tools-rbd]
+networks:
+  public: CLOUD_STOR
+  replication: CLOUD_BACKUP_STOR

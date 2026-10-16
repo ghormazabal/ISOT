@@ -1,0 +1,21 @@
+hostname: site1-mgrvm002
+role: platform-manager
+k8s_roles: [control-plane]
+kind: vm
+cluster_ref: site1-manager
+os: Ubuntu 24.04.2 LTS
+# [AI-Context]: VM Manager HA sobre CTRL002. eth0 IP desconocida.
+hypervisor:
+  cluster: site1-platform
+  namespace: platform-manager
+  device: SITE1-CTRL002
+resources: {vcpu: 8, memory: 16Gi, disk: 80Gi}
+networking:
+  - interface: eth0
+    network: pod network platform
+    ip: ""
+  - interface: eth1
+    network: MNGR_CTRL
+    vlan: 2009
+    ip: 10.10.22.67/27
+    connected_to: {device: SITE1-CTRL002, port: br-mngr2009}

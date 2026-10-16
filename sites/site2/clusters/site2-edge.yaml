@@ -1,0 +1,44 @@
+cluster_name: site2-edge
+kind: kubernetes
+# [AI-Context]: Clúster edge. Comparte el template global rke2-rancher-hybrid-calico con SITE1.
+template_ref: rke2-rancher-hybrid-calico
+template_version: 1.34.8+lab.1-rc1
+distro: rke2
+version: v1.34.8+rke2r2
+os: Ubuntu 22.04 LTS
+cni:
+  primary: calico
+  secondary: multus+whereabouts
+pod_cidr: 10.44.0.0/16
+service_cidr: 10.45.0.0/16
+values_overrides:
+  # Solo diffs documentados frente al template (CIDRs). No hay values_summary.
+  - release: rke2-rancher-hybrid-calico
+    values_inline:
+      cniConfig:
+        podCIDR: 10.44.0.0/16
+        serviceCIDR: 10.45.0.0/16
+nodes:
+  - hostname: SITE2-CTRL001
+    k8s_name: site2-ctrl001
+    roles: [control-plane, etcd, worker]
+    internal_ip: 10.80.1.11
+  - hostname: SITE2-CTRL002
+    k8s_name: site2-ctrl002
+    roles: [control-plane, etcd, worker]
+    internal_ip: 10.80.1.12
+nads:
+  - {namespace: default, name: edge-svc, type: macvlan, master: bondC, vlan: 2100, subnet: EDGE_SVC}
+metallb:
+  version: 0.15.3
+  mode: L2
+  pools:
+    - name: edge-svc
+      subnet: EDGE_SVC
+      addresses: ["10.80.2.50-10.80.2.80"]
+      autoAssign: false
+storage_classes:
+  - {name: longhorn, default: true, provisioner: driver.longhorn.io}
+infra:
+  vlans: [2003, 2100]
+  dci_peer: {site: site1, device: SITE1-DCGW001}

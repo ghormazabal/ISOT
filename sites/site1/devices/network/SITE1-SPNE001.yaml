@@ -1,0 +1,21 @@
+hostname: SITE1-SPNE001
+role: spine
+kind: network
+vendor: generic
+model: leaf-32x100g
+os: nos
+# [AI-Context]: Spine 1. Downlinks a LEAF001-004.
+networking:
+  - interface: Management0
+    vlan: 2002
+    ip: 10.10.16.250/24
+    connected_to: {device: SITE1-MGMT001, port: Ethernet10}
+  - interface: Loopback0
+    ip: 10.10.21.1/32
+bgp: {asn: 4200000100, router_id: 10.10.21.1}
+downlinks:
+  - {pc: PortChannel101, peer: SITE1-LEAF001}
+  - {pc: PortChannel102, peer: SITE1-LEAF002}
+  - {pc: PortChannel103, peer: SITE1-LEAF003}
+  - {pc: PortChannel104, peer: SITE1-LEAF004}
+

@@ -1,0 +1,31 @@
+hostname: SITE1-LEAF001
+role: server-leaf
+kind: network
+vendor: generic
+model: leaf-32x100g
+os: nos
+# [AI-Context]: Leaf pair con LEAF002 (EVPN ESI).
+pair: SITE1-LEAF002
+networking:
+  - interface: Management0
+    vlan: 2002
+    ip: 10.10.16.244/24
+    connected_to: {device: SITE1-MGMT001, port: Ethernet5}
+  - interface: Loopback0
+    ip: 10.10.21.7/32
+  - interface: PortChannel101
+    connected_to: {device: SITE1-SPNE001, port: Eth1/1}
+  - interface: PortChannel102
+    connected_to: {device: SITE1-SPNE002, port: Eth1/1}
+bgp:
+  asn: 4200000101
+  router_id: 10.10.21.7
+  peer_group: SPINES (remote-as external)
+  afi: [ipv4-unicast, l2vpn-evpn]
+evpn:
+  vtep: vtep1 (source Loopback0)
+  l2vni: 2000-2008 mapeadas 1:1 a VLAN
+  route_target: "65003:<vni>"
+vlans: [2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008]
+mtu: 9216
+

@@ -1,0 +1,15 @@
+hostname: SITE1-LEAF002
+role: server-leaf
+kind: network
+vendor: generic
+model: leaf-32x100g
+os: nos
+# [AI-Context]: Par ESI de LEAF001. Ficha mínima.
+pair: SITE1-LEAF001
+networking:
+  - interface: Management0
+    vlan: 2002
+    ip: 10.10.16.243/24
+  - interface: Loopback0
+    ip: 10.10.21.8/32
+

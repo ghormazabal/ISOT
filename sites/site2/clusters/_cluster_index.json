@@ -1,0 +1,13 @@
+[
+  {
+    "name": "site2-edge",
+    "site": "site2",
+    "kind": "kubernetes",
+    "template_ref": "rke2-rancher-hybrid-calico",
+    "distro": "rke2",
+    "version": "v1.34.8+rke2r2",
+    "path": "sites/site2/clusters/site2-edge.yaml",
+    "node_count": 2,
+    "override_count": 1
+  }
+]

@@ -1,0 +1,119 @@
+# Instrucciones para agentes de IA (ISoT)
+
+Este repositorio es la **fuente de verdad** de varios sitios lógicos. El
+estado vive en Git como YAML/JSON. Si un objeto no está en estos archivos,
+**no existe**. Los campos vacíos y `topology/index.yaml` → `gaps` /
+`undocumented_peers` son huecos reales: no los rellenes.
+
+Los datos de ejemplo están **anonimizados**. No reintroduzcas nombres de
+clientes, operadores, FQDN reales ni planes IP originales. El hook
+`isot-leakcheck` (hashes, no texto en claro) debe seguir en verde.
+
+## 1. Navegar siempre desde los índices
+
+No parsees todos los YAML de golpe.
+
+1. `sites.yaml` — catálogo de sitios y `address_spaces` compartidos.
+2. `sites/_sites_index.json` — conteos y enlaces entre sitios.
+3. `sites/<id>/devices/_device_index.json` — hosts de ese sitio.
+4. `sites/<id>/clusters/_cluster_index.json`
+5. `cluster-templates/_template_index.json` — catálogo global (`used_by` incluye `sitio/clúster`).
+6. `sites/<id>/cluster-templates/_template_index.json` — templates solo de ese sitio.
+
+Los JSON índice son **generados**. No los edites a mano.
+
+## 2. Carga perezosa
+
+Abre el YAML de detalle **solo bajo demanda**:
+
+- Host: `path` del índice de dispositivos.
+- Clúster: `sites/<id>/clusters/<nombre>.yaml`.
+- Template global: `cluster-templates/<nombre>/template.yaml` (legacy: `<nombre>.yaml` en el primer nivel).
+- Template de sitio: `sites/<id>/cluster-templates/<nombre>/template.yaml`.
+- Values de un chart: **no** están en el YAML del template si usa `values_ref`. Abre `cluster-templates/<nombre>/values/<archivo>.yaml` (o el `values_inline` del chart) **solo al expandir ese release**.
+- No indexar ni tratar `values/*.yaml` como templates.
+
+## 3. Cómo resolver referencias
+
+Por defecto el sitio del documento actual. Para cruzar DCs hay que ser explícito.
+
+| Campo | Resolución |
+| --- | --- |
+| `cluster_ref: nombre` | `sites/<sitio-actual>/clusters/<nombre>.yaml` |
+| `cluster_ref: otro/nombre` | `sites/otro/clusters/nombre.yaml` |
+| `template_ref: nombre` | primero `sites/<sitio>/cluster-templates/<nombre>/template.yaml`, si no el catálogo global |
+| `charts[].values_ref` | ruta relativa a la carpeta del template; si no existe o no es YAML, el validador falla |
+| `values_overrides[].release` | debe ser un `charts[].name` del template resuelto |
+| `connected_to.device` + `site` | hostname en `sites/<site>/devices/` |
+| `connected_to.device` sin `site` | hostname en el sitio actual |
+| NAD `vlan` / `subnet` | topology **de ese sitio** |
+| MetalLB `subnet` y addresses | CIDR de la topology **de ese sitio** |
+
+Las IPs y VLANs **pueden repetirse entre sitios** (espacios separados). El
+validador solo cruza sitios si un `address_space` los lista (p. ej.
+`dci-overlay` con la subred `DCI`).
+
+Los nodos de un clúster kubernetes (`nodes[].hostname`) deben existir en el
+**mismo sitio** y tener el mismo `cluster_ref`. Los hosts de un clúster Ceph
+viven en `hosts[]`; no inventes fichas para equipos que no están ahí.
+
+Hostnames de Kubernetes a veces van en minúsculas (`site1-ctrl001`); el
+hostname canónico del dispositivo es el del YAML (`SITE1-CTRL001`). El
+campo `k8s_name` guarda el nombre k8s.
+
+## 4. No alucinar inventario
+
+- No inventes hosts, IPs, VLANs, templates ni workloads.
+- Hardware sin marca: `vendor: generic`, `model: leaf-32x100g` /
+  `mgmt-48x1g` / `compute-2u` / `compute-12x25g`. Switches: `os: nos`.
+  OOB: `type: bmc` (no nombres de BMC de fabricante).
+- No conviertas el modelo en DCIM físico (racks, U, cables).
+- `undocumented_peers` no tienen YAML: menciónalos como ausentes.
+
+## 5. Tras editar YAML
+
+1. `python -m isot.validator`
+2. `python -m isot.indexer`
+3. `python -m isot.leakcheck`
+4. No hagas commit si alguno falla o si un `_*_index.json` quedó desfasado.
+
+## 6. `[AI-Context]`
+
+Comentarios `# [AI-Context]: ...` son contexto semántico. No son campos parseables.
+
+## 7. Kubernetes y sitios
+
+Un clúster k8s referencia opcionalmente un template (`template_ref`). El
+template define distro, CNI, node_pools, add-ons y `charts[]` (nombre, repo,
+chart, versión, namespace, orden, `depends_on`, values). El clúster aporta
+CIDRs, NADs, MetalLB, StorageClasses, nodos y `values_overrides` por release.
+
+Cómo leer charts y values **sin alucinar**:
+
+1. La lista de Helm releases es `charts[]`. Si un chart no está ahí, **no lo
+   instala el template**. `apps_live` del clúster es estado observado, no
+   catálogo del template: no copies `rancher-logging` / `etcd-defrag` /
+   `rke2-traefik` al template porque aparecen en vivo.
+2. `version`, `repo` o `namespace` vacíos son **faltantes**. No inventes
+   registry, chart name distinto ni versión a partir de `apps_live`.
+3. Values del template: `values_ref` (archivo) o `values_inline`. Si ambos
+   faltan, los values son desconocidos. No rellenes un árbol Helm “típico”.
+4. Values del clúster: solo las claves en `values_overrides` de ese release.
+   El resto se **hereda** del template. Deep-merge de mapas; listas y
+   escalares se sustituyen. No asumas que `pod_cidr` del clúster es un
+   override Helm si no está en `values_overrides`.
+5. `others_keys` del template se modelan como charts sin versión ni values.
+   No los traduzcas a nombres de chart de Rancher (`logging` ≠
+   `rancher-logging`) salvo que el inventario lo declare.
+
+`site1-platform` y `site1-manager` no usan template (`template_ref: null`).
+`site1-apps` y `site2-edge` usan el template **global**
+`rke2-rancher-hybrid-calico`.
+
+La UI tiene selector de sitio (Todos / SITE1 / SITE2). Vista **Sitios**
+(global: DCs y DCI), **Red** (dispositivos de un sitio) y **Kubernetes**
+(templates y clústeres; pestañas Grafo / Explorador / Diff values). El modo
+**Comparar** pide `/api/refs`, `/api/commits?rev=` y `/api/diff` (árboles
+de git, sin checkout). Base y head pueden ser rama, tag, SHA o `HEAD~N`.
+El estado de un hijo se propaga al sitio/clúster/template/release padre
+(`inherited`, `child_counts`, `children`). Todo es de solo lectura.

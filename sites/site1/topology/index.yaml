@@ -1,0 +1,133 @@
+# [AI-Context]: Sitio SITE1 (Platform Manager / nube privada). Inventario de ejemplo.
+#              No hay racks ni datacenters. Campos vacíos son desconocidos, no inventados.
+site:
+  id: site1
+  operator: Operador-Ejemplo
+  description: "Nube privada: Platform cluster + Platform Manager HA + downstream apps"
+  infra_range: 10.10.0.0/19
+  vlan_range: "2000-2099"
+  dns_servers: [10.20.1.53]
+  ntp_servers: [10.30.0.10, 10.30.0.11, 10.30.0.12]
+  http_proxy: http://10.10.18.201:8080
+
+subnets:
+  - name: CLOUD_STOR
+    cidr: 10.10.0.0/21
+    vlan: 2000
+    gateway: 10.10.0.1
+    vrf: CLOUD_STOR
+    description: Ceph pública (Ceph MON/OSD, clientes RBD/CephFS)
+  - name: CLOUD_BACKUP_STOR
+    cidr: 10.10.8.0/21
+    vlan: 2001
+    gateway: 10.10.8.1
+    vrf: CLOUD_STOR
+    description: Replicación / backup storage
+  - name: CLOUD_MGMT_HW
+    cidr: 10.10.16.0/24
+    vlan: 2002
+    gateway: 10.10.16.1
+    vrf: ""
+    description: "OOB: BMC y Management0 de switches (VRRP master en MGMT001)"
+  - name: CLOUD_MGMT_SW
+    cidr: 10.10.17.0/24
+    vlan: 2003
+    gateway: 10.10.17.1
+    vrf: VRF_OAM
+    description: Gestión in-band de baremetal; default GW de hosts
+  - name: PLAT_SVC
+    cidr: 10.10.18.0/24
+    vlan: 2004
+    gateway: 10.10.18.1
+    vrf: VRF_OAM
+    description: Publicación de servicios (VIPs MetalLB L2, jumphost)
+  - name: APP_CTRL
+    cidr: 10.10.19.0/24
+    vlan: 2005
+    gateway: 10.10.19.1
+    vrf: VRF_OAM
+    description: Kubelets y etcd del cluster apps
+  - name: APP_DATA
+    cidr: 10.10.20.0/24
+    vlan: 2006
+    gateway: ""
+    vrf: ""
+    description: Inter-pod (Calico) cluster apps; L2 puro
+  - name: PLAT_CTRL
+    cidr: 10.10.22.0/27
+    vlan: 2007
+    gateway: 10.10.22.1
+    vrf: VRF_OAM
+    description: Kubelets/etcd Platform cluster (opera sobre MGMT_SW)
+  - name: PLAT_POD
+    cidr: 10.10.22.32/27
+    vlan: 2008
+    gateway: ""
+    vrf: ""
+    description: Inter-pod Platform cluster; L2 puro
+  - name: MNGR_CTRL
+    cidr: 10.10.22.64/27
+    vlan: 2009
+    gateway: 10.10.22.65
+    vrf: VRF_OAM
+    description: Plano de control Platform Manager HA (mgrvm001-003, VIP .90)
+  - name: MNGR_CNI
+    cidr: 10.10.22.96/27
+    vlan: 2010
+    gateway: ""
+    vrf: ""
+    description: Inter-pod Manager (no usado en este ejemplo)
+  - name: EGRESS
+    cidr: 10.20.0.0/28
+    vlan: 2011
+    gateway: 10.20.0.1
+    vrf: SERVICES
+    description: Egress a Internet exclusivo (pod Tinyproxy .4)
+  - name: FABRIC_LOOPBACK
+    cidr: 10.10.21.0/24
+    vlan: null
+    gateway: ""
+    vrf: ""
+    description: Loopbacks del IP fabric (spine/leaf/DCGW)
+  - name: WAN_OAM
+    cidr: ""
+    vlan: 550
+    gateway: ""
+    vrf: Vrf_OAM
+    description: "Subinterfaz DCGW hacia WAN/CORE (Po15.550, /30 10.10.32.10 en DCGW001)"
+  - name: DCI
+    cidr: 192.0.2.0/24
+    vlan: 4094
+    gateway: ""
+    vrf: VRF_DCI
+    description: "Enlace DCI a SITE2 (espacio de direcciones compartido dci-overlay)"
+
+vlans:
+  - {id: 2000, name: CLOUD_STOR, subnet: CLOUD_STOR}
+  - {id: 2001, name: CLOUD_BACKUP_STOR, subnet: CLOUD_BACKUP_STOR}
+  - {id: 2002, name: CLOUD_MGMT_HW, subnet: CLOUD_MGMT_HW}
+  - {id: 2003, name: CLOUD_MGMT_SW, subnet: CLOUD_MGMT_SW}
+  - {id: 2004, name: PLAT_SVC, subnet: PLAT_SVC}
+  - {id: 2005, name: APP_CTRL, subnet: APP_CTRL}
+  - {id: 2006, name: APP_DATA, subnet: APP_DATA}
+  - {id: 2007, name: PLAT_CTRL, subnet: PLAT_CTRL}
+  - {id: 2008, name: PLAT_POD, subnet: PLAT_POD}
+  - {id: 2009, name: MNGR_CTRL, subnet: MNGR_CTRL}
+  - {id: 2010, name: MNGR_CNI, subnet: MNGR_CNI}
+  - {id: 2011, name: EGRESS, subnet: EGRESS}
+  - {id: 550, name: WAN_OAM, subnet: WAN_OAM}
+  - {id: 4094, name: DCI, subnet: DCI}
+
+clusters:
+  - {name: site1-platform, kind: kubernetes, path: sites/site1/clusters/site1-platform.yaml}
+  - {name: site1-manager, kind: kubernetes, path: sites/site1/clusters/site1-manager.yaml, product: Platform Manager HA}
+  - {name: site1-apps, kind: kubernetes, path: sites/site1/clusters/site1-apps.yaml}
+  - {name: ceph-site1, kind: ceph, path: sites/site1/clusters/ceph-site1.yaml}
+
+undocumented_peers: []
+
+gaps:
+  - "SPNE002: ASN y router_id desconocidos."
+  - "site1-platform: pod_cidr y service_cidr desconocidos."
+  - "site1-apps: MetalLB sin IPAddressPool; sin StorageClass/CSI documentado."
+  - "WAN_OAM: CIDR de subred no documentado; solo el /30 en DCGW001."

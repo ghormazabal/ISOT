@@ -1,0 +1,1060 @@
+[
+  {
+    "hostname": "SITE1-CTRL001",
+    "site": "site1",
+    "role": "platform-server",
+    "ip": "10.10.17.11/24",
+    "path": "sites/site1/devices/baremetal/SITE1-CTRL001.yaml",
+    "kind": "baremetal",
+    "cluster_ref": "site1-platform",
+    "cluster_ref_site": "site1",
+    "links": [
+      {
+        "interface": "MGMT_SW",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel22",
+        "vlan": 2003,
+        "site": "site1"
+      },
+      {
+        "interface": "CLOUD_STOR",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel23",
+        "vlan": 2000,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD0.2004",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel21",
+        "vlan": 2004,
+        "site": "site1"
+      },
+      {
+        "interface": "bondC",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel22",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondC",
+        "device": "SITE1-LEAF002",
+        "port": "PortChannel22",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD0",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel21",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD0",
+        "device": "SITE1-LEAF002",
+        "port": "PortChannel21",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD1",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel24",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD1",
+        "device": "SITE1-LEAF002",
+        "port": "PortChannel24",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondS",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel23",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondS",
+        "device": "SITE1-LEAF002",
+        "port": "PortChannel23",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "oob",
+        "device": "SITE1-MGMT001",
+        "port": "Ethernet0",
+        "vlan": 2002,
+        "site": "site1"
+      }
+    ]
+  },
+  {
+    "hostname": "SITE1-CTRL002",
+    "site": "site1",
+    "role": "platform-server",
+    "ip": "10.10.17.12/24",
+    "path": "sites/site1/devices/baremetal/SITE1-CTRL002.yaml",
+    "kind": "baremetal",
+    "cluster_ref": "site1-platform",
+    "cluster_ref_site": "site1",
+    "links": [
+      {
+        "interface": "MGMT_SW",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel26",
+        "vlan": 2003,
+        "site": "site1"
+      },
+      {
+        "interface": "CLOUD_STOR",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel27",
+        "vlan": 2000,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD0.2004",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel25",
+        "vlan": 2004,
+        "site": "site1"
+      },
+      {
+        "interface": "bondC",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel26",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondC",
+        "device": "SITE1-LEAF002",
+        "port": "PortChannel26",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD0",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel25",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD0",
+        "device": "SITE1-LEAF002",
+        "port": "PortChannel25",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD1",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel28",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD1",
+        "device": "SITE1-LEAF002",
+        "port": "PortChannel28",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondS",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel27",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondS",
+        "device": "SITE1-LEAF002",
+        "port": "PortChannel27",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "oob",
+        "device": "SITE1-MGMT001",
+        "port": "Ethernet6",
+        "vlan": 2002,
+        "site": "site1"
+      }
+    ]
+  },
+  {
+    "hostname": "SITE1-CTRL003",
+    "site": "site1",
+    "role": "platform-server",
+    "ip": "10.10.17.13/24",
+    "path": "sites/site1/devices/baremetal/SITE1-CTRL003.yaml",
+    "kind": "baremetal",
+    "cluster_ref": "site1-platform",
+    "cluster_ref_site": "site1",
+    "links": [
+      {
+        "interface": "MGMT_SW",
+        "device": "SITE1-LEAF003",
+        "port": "PortChannel22",
+        "vlan": 2003,
+        "site": "site1"
+      },
+      {
+        "interface": "CLOUD_STOR",
+        "device": "SITE1-LEAF003",
+        "port": "PortChannel23",
+        "vlan": 2000,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD0.2004",
+        "device": "SITE1-LEAF003",
+        "port": "PortChannel21",
+        "vlan": 2004,
+        "site": "site1"
+      },
+      {
+        "interface": "bondC",
+        "device": "SITE1-LEAF003",
+        "port": "PortChannel22",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondC",
+        "device": "SITE1-LEAF004",
+        "port": "PortChannel22",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD0",
+        "device": "SITE1-LEAF003",
+        "port": "PortChannel21",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD0",
+        "device": "SITE1-LEAF004",
+        "port": "PortChannel21",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD1",
+        "device": "SITE1-LEAF003",
+        "port": "PortChannel24",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD1",
+        "device": "SITE1-LEAF004",
+        "port": "PortChannel24",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondS",
+        "device": "SITE1-LEAF003",
+        "port": "PortChannel23",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondS",
+        "device": "SITE1-LEAF004",
+        "port": "PortChannel23",
+        "vlan": null,
+        "site": "site1"
+      }
+    ]
+  },
+  {
+    "hostname": "SITE1-NODE002",
+    "site": "site1",
+    "role": "apps-worker",
+    "ip": "10.10.17.19/24",
+    "path": "sites/site1/devices/baremetal/SITE1-NODE002.yaml",
+    "kind": "baremetal",
+    "cluster_ref": "site1-apps",
+    "cluster_ref_site": "site1",
+    "links": [
+      {
+        "interface": "MGMT_SW",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel43",
+        "vlan": 2003,
+        "site": "site1"
+      },
+      {
+        "interface": "APP_DATA",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel42",
+        "vlan": 2006,
+        "site": "site1"
+      },
+      {
+        "interface": "CLOUD_STOR",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel46",
+        "vlan": 2000,
+        "site": "site1"
+      },
+      {
+        "interface": "bondC",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel43",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondC",
+        "device": "SITE1-LEAF002",
+        "port": "PortChannel43",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD00",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel41",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD00",
+        "device": "SITE1-LEAF002",
+        "port": "PortChannel41",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD01",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel42",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD01",
+        "device": "SITE1-LEAF002",
+        "port": "PortChannel42",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD10",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel44",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD10",
+        "device": "SITE1-LEAF002",
+        "port": "PortChannel44",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD11",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel45",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD11",
+        "device": "SITE1-LEAF002",
+        "port": "PortChannel45",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondS",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel46",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondS",
+        "device": "SITE1-LEAF002",
+        "port": "PortChannel46",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "oob",
+        "device": "SITE1-MGMT001",
+        "port": "Ethernet2",
+        "vlan": 2002,
+        "site": "site1"
+      }
+    ]
+  },
+  {
+    "hostname": "SITE1-NODE007",
+    "site": "site1",
+    "role": "apps-worker",
+    "ip": "10.10.17.24/24",
+    "path": "sites/site1/devices/baremetal/SITE1-NODE007.yaml",
+    "kind": "baremetal",
+    "cluster_ref": "site1-apps",
+    "cluster_ref_site": "site1",
+    "links": [
+      {
+        "interface": "MGMT_SW",
+        "device": "SITE1-LEAF003",
+        "port": "PortChannel39",
+        "vlan": 2003,
+        "site": "site1"
+      },
+      {
+        "interface": "APP_DATA",
+        "device": "SITE1-LEAF003",
+        "port": "PortChannel38",
+        "vlan": 2006,
+        "site": "site1"
+      },
+      {
+        "interface": "CLOUD_STOR",
+        "device": "SITE1-LEAF003",
+        "port": "PortChannel42",
+        "vlan": 2000,
+        "site": "site1"
+      },
+      {
+        "interface": "bondC",
+        "device": "SITE1-LEAF003",
+        "port": "PortChannel39",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondC",
+        "device": "SITE1-LEAF004",
+        "port": "PortChannel39",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD00",
+        "device": "SITE1-LEAF003",
+        "port": "PortChannel37",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD00",
+        "device": "SITE1-LEAF004",
+        "port": "PortChannel37",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD01",
+        "device": "SITE1-LEAF003",
+        "port": "PortChannel38",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD01",
+        "device": "SITE1-LEAF004",
+        "port": "PortChannel38",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD10",
+        "device": "SITE1-LEAF003",
+        "port": "PortChannel40",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD10",
+        "device": "SITE1-LEAF004",
+        "port": "PortChannel40",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD11",
+        "device": "SITE1-LEAF003",
+        "port": "PortChannel41",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD11",
+        "device": "SITE1-LEAF004",
+        "port": "PortChannel41",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondS",
+        "device": "SITE1-LEAF003",
+        "port": "PortChannel42",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondS",
+        "device": "SITE1-LEAF004",
+        "port": "PortChannel42",
+        "vlan": null,
+        "site": "site1"
+      }
+    ]
+  },
+  {
+    "hostname": "SITE1-STOR001",
+    "site": "site1",
+    "role": "storage-server",
+    "ip": "10.10.17.14/24",
+    "path": "sites/site1/devices/baremetal/SITE1-STOR001.yaml",
+    "kind": "baremetal",
+    "cluster_ref": "ceph-site1",
+    "cluster_ref_site": "site1",
+    "links": [
+      {
+        "interface": "MGMT_SW",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel30",
+        "vlan": 2003,
+        "site": "site1"
+      },
+      {
+        "interface": "CLOUD_STOR",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel31",
+        "vlan": 2000,
+        "site": "site1"
+      },
+      {
+        "interface": "CLOUD_BKP_STOR",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel29",
+        "vlan": 2001,
+        "site": "site1"
+      },
+      {
+        "interface": "bondC",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel30",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondC",
+        "device": "SITE1-LEAF002",
+        "port": "PortChannel30",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD0",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel29",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD0",
+        "device": "SITE1-LEAF002",
+        "port": "PortChannel29",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondS",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel31",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondS",
+        "device": "SITE1-LEAF002",
+        "port": "PortChannel31",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "oob",
+        "device": "SITE1-MGMT001",
+        "port": "Ethernet4",
+        "vlan": 2002,
+        "site": "site1"
+      }
+    ]
+  },
+  {
+    "hostname": "SITE1-STOR002",
+    "site": "site1",
+    "role": "storage-server",
+    "ip": "10.10.17.15/24",
+    "path": "sites/site1/devices/baremetal/SITE1-STOR002.yaml",
+    "kind": "baremetal",
+    "cluster_ref": "ceph-site1",
+    "cluster_ref_site": "site1",
+    "links": [
+      {
+        "interface": "MGMT_SW",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel33",
+        "vlan": 2003,
+        "site": "site1"
+      },
+      {
+        "interface": "CLOUD_STOR",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel34",
+        "vlan": 2000,
+        "site": "site1"
+      },
+      {
+        "interface": "CLOUD_BKP_STOR",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel32",
+        "vlan": 2001,
+        "site": "site1"
+      },
+      {
+        "interface": "bondC",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel33",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondC",
+        "device": "SITE1-LEAF002",
+        "port": "PortChannel33",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD0",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel32",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondD0",
+        "device": "SITE1-LEAF002",
+        "port": "PortChannel32",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondS",
+        "device": "SITE1-LEAF001",
+        "port": "PortChannel34",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "bondS",
+        "device": "SITE1-LEAF002",
+        "port": "PortChannel34",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "oob",
+        "device": "SITE1-MGMT001",
+        "port": "Ethernet9",
+        "vlan": 2002,
+        "site": "site1"
+      }
+    ]
+  },
+  {
+    "hostname": "SITE1-DCGW001",
+    "site": "site1",
+    "role": "dcgw",
+    "ip": "10.10.16.246/24",
+    "path": "sites/site1/devices/network/SITE1-DCGW001.yaml",
+    "kind": "network",
+    "cluster_ref": null,
+    "cluster_ref_site": null,
+    "links": [
+      {
+        "interface": "Ethernet31",
+        "device": "SITE2-DCGW001",
+        "port": "Ethernet31",
+        "vlan": 4094,
+        "site": "site2"
+      }
+    ]
+  },
+  {
+    "hostname": "SITE1-LEAF001",
+    "site": "site1",
+    "role": "server-leaf",
+    "ip": "10.10.16.244/24",
+    "path": "sites/site1/devices/network/SITE1-LEAF001.yaml",
+    "kind": "network",
+    "cluster_ref": null,
+    "cluster_ref_site": null,
+    "links": [
+      {
+        "interface": "Management0",
+        "device": "SITE1-MGMT001",
+        "port": "Ethernet5",
+        "vlan": 2002,
+        "site": "site1"
+      },
+      {
+        "interface": "PortChannel101",
+        "device": "SITE1-SPNE001",
+        "port": "Eth1/1",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "PortChannel102",
+        "device": "SITE1-SPNE002",
+        "port": "Eth1/1",
+        "vlan": null,
+        "site": "site1"
+      }
+    ]
+  },
+  {
+    "hostname": "SITE1-LEAF002",
+    "site": "site1",
+    "role": "server-leaf",
+    "ip": "10.10.16.243/24",
+    "path": "sites/site1/devices/network/SITE1-LEAF002.yaml",
+    "kind": "network",
+    "cluster_ref": null,
+    "cluster_ref_site": null,
+    "links": []
+  },
+  {
+    "hostname": "SITE1-LEAF003",
+    "site": "site1",
+    "role": "server-leaf",
+    "ip": "10.10.16.242/24",
+    "path": "sites/site1/devices/network/SITE1-LEAF003.yaml",
+    "kind": "network",
+    "cluster_ref": null,
+    "cluster_ref_site": null,
+    "links": []
+  },
+  {
+    "hostname": "SITE1-LEAF004",
+    "site": "site1",
+    "role": "server-leaf",
+    "ip": "10.10.16.241/24",
+    "path": "sites/site1/devices/network/SITE1-LEAF004.yaml",
+    "kind": "network",
+    "cluster_ref": null,
+    "cluster_ref_site": null,
+    "links": []
+  },
+  {
+    "hostname": "SITE1-MGMT001",
+    "site": "site1",
+    "role": "management-switch",
+    "ip": "10.10.16.254/24",
+    "path": "sites/site1/devices/network/SITE1-MGMT001.yaml",
+    "kind": "network",
+    "cluster_ref": null,
+    "cluster_ref_site": null,
+    "links": [
+      {
+        "interface": "Ethernet0",
+        "device": "SITE1-CTRL001",
+        "port": "BMC",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "Ethernet6",
+        "device": "SITE1-CTRL002",
+        "port": "BMC",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "Ethernet10",
+        "device": "SITE1-SPNE001",
+        "port": "Management0",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "Ethernet2",
+        "device": "SITE1-NODE002",
+        "port": "BMC",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "Ethernet4",
+        "device": "SITE1-STOR001",
+        "port": "BMC",
+        "vlan": null,
+        "site": "site1"
+      },
+      {
+        "interface": "Ethernet9",
+        "device": "SITE1-STOR002",
+        "port": "BMC",
+        "vlan": null,
+        "site": "site1"
+      }
+    ]
+  },
+  {
+    "hostname": "SITE1-SPNE001",
+    "site": "site1",
+    "role": "spine",
+    "ip": "10.10.16.250/24",
+    "path": "sites/site1/devices/network/SITE1-SPNE001.yaml",
+    "kind": "network",
+    "cluster_ref": null,
+    "cluster_ref_site": null,
+    "links": [
+      {
+        "interface": "Management0",
+        "device": "SITE1-MGMT001",
+        "port": "Ethernet10",
+        "vlan": 2002,
+        "site": "site1"
+      }
+    ]
+  },
+  {
+    "hostname": "SITE1-SPNE002",
+    "site": "site1",
+    "role": "spine",
+    "ip": "10.10.16.249/24",
+    "path": "sites/site1/devices/network/SITE1-SPNE002.yaml",
+    "kind": "network",
+    "cluster_ref": null,
+    "cluster_ref_site": null,
+    "links": []
+  },
+  {
+    "hostname": "site1-appvm001",
+    "site": "site1",
+    "role": "apps-control",
+    "ip": "10.10.19.2/24",
+    "path": "sites/site1/devices/virtual-machines/site1-appvm001.yaml",
+    "kind": "virtual-machines",
+    "cluster_ref": "site1-apps",
+    "cluster_ref_site": "site1",
+    "links": [
+      {
+        "interface": "eth0",
+        "device": "SITE1-CTRL001",
+        "port": "br-app2005",
+        "vlan": 2005,
+        "site": "site1"
+      },
+      {
+        "interface": "eth1",
+        "device": "SITE1-CTRL001",
+        "port": "br-app2006",
+        "vlan": 2006,
+        "site": "site1"
+      },
+      {
+        "interface": "hypervisor",
+        "device": "SITE1-CTRL001",
+        "port": null,
+        "vlan": null,
+        "site": "site1"
+      }
+    ]
+  },
+  {
+    "hostname": "site1-appvm002",
+    "site": "site1",
+    "role": "apps-control",
+    "ip": "10.10.19.3/24",
+    "path": "sites/site1/devices/virtual-machines/site1-appvm002.yaml",
+    "kind": "virtual-machines",
+    "cluster_ref": "site1-apps",
+    "cluster_ref_site": "site1",
+    "links": [
+      {
+        "interface": "eth0",
+        "device": "SITE1-CTRL002",
+        "port": "br-app2005",
+        "vlan": 2005,
+        "site": "site1"
+      },
+      {
+        "interface": "eth1",
+        "device": "SITE1-CTRL002",
+        "port": "br-app2006",
+        "vlan": 2006,
+        "site": "site1"
+      },
+      {
+        "interface": "hypervisor",
+        "device": "SITE1-CTRL002",
+        "port": null,
+        "vlan": null,
+        "site": "site1"
+      }
+    ]
+  },
+  {
+    "hostname": "site1-appvm003",
+    "site": "site1",
+    "role": "apps-control",
+    "ip": "10.10.19.4/24",
+    "path": "sites/site1/devices/virtual-machines/site1-appvm003.yaml",
+    "kind": "virtual-machines",
+    "cluster_ref": "site1-apps",
+    "cluster_ref_site": "site1",
+    "links": [
+      {
+        "interface": "eth0",
+        "device": "SITE1-CTRL003",
+        "port": "br-app2005",
+        "vlan": 2005,
+        "site": "site1"
+      },
+      {
+        "interface": "eth1",
+        "device": "SITE1-CTRL003",
+        "port": "br-app2006",
+        "vlan": 2006,
+        "site": "site1"
+      },
+      {
+        "interface": "hypervisor",
+        "device": "SITE1-CTRL003",
+        "port": null,
+        "vlan": null,
+        "site": "site1"
+      }
+    ]
+  },
+  {
+    "hostname": "site1-jump001",
+    "site": "site1",
+    "role": "jumphost",
+    "ip": "10.10.18.100/24",
+    "path": "sites/site1/devices/virtual-machines/site1-jump001.yaml",
+    "kind": "virtual-machines",
+    "cluster_ref": null,
+    "cluster_ref_site": null,
+    "links": [
+      {
+        "interface": "eth0",
+        "device": "SITE1-CTRL001",
+        "port": "bondD0.2004",
+        "vlan": 2004,
+        "site": "site1"
+      },
+      {
+        "interface": "hypervisor",
+        "device": "SITE1-CTRL001",
+        "port": null,
+        "vlan": null,
+        "site": "site1"
+      }
+    ]
+  },
+  {
+    "hostname": "site1-mgrvm001",
+    "site": "site1",
+    "role": "platform-manager",
+    "ip": "10.10.22.66/27",
+    "path": "sites/site1/devices/virtual-machines/site1-mgrvm001.yaml",
+    "kind": "virtual-machines",
+    "cluster_ref": "site1-manager",
+    "cluster_ref_site": "site1",
+    "links": [
+      {
+        "interface": "eth1",
+        "device": "SITE1-CTRL001",
+        "port": "br-mngr2009",
+        "vlan": 2009,
+        "site": "site1"
+      },
+      {
+        "interface": "hypervisor",
+        "device": "SITE1-CTRL001",
+        "port": null,
+        "vlan": null,
+        "site": "site1"
+      }
+    ]
+  },
+  {
+    "hostname": "site1-mgrvm002",
+    "site": "site1",
+    "role": "platform-manager",
+    "ip": "10.10.22.67/27",
+    "path": "sites/site1/devices/virtual-machines/site1-mgrvm002.yaml",
+    "kind": "virtual-machines",
+    "cluster_ref": "site1-manager",
+    "cluster_ref_site": "site1",
+    "links": [
+      {
+        "interface": "eth1",
+        "device": "SITE1-CTRL002",
+        "port": "br-mngr2009",
+        "vlan": 2009,
+        "site": "site1"
+      },
+      {
+        "interface": "hypervisor",
+        "device": "SITE1-CTRL002",
+        "port": null,
+        "vlan": null,
+        "site": "site1"
+      }
+    ]
+  },
+  {
+    "hostname": "site1-mgrvm003",
+    "site": "site1",
+    "role": "platform-manager",
+    "ip": "10.10.22.68/27",
+    "path": "sites/site1/devices/virtual-machines/site1-mgrvm003.yaml",
+    "kind": "virtual-machines",
+    "cluster_ref": "site1-manager",
+    "cluster_ref_site": "site1",
+    "links": [
+      {
+        "interface": "eth1",
+        "device": "SITE1-CTRL003",
+        "port": "br-mngr2009",
+        "vlan": 2009,
+        "site": "site1"
+      },
+      {
+        "interface": "hypervisor",
+        "device": "SITE1-CTRL003",
+        "port": null,
+        "vlan": null,
+        "site": "site1"
+      }
+    ]
+  }
+]

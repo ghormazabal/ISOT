@@ -1,0 +1,19 @@
+# Catálogo de sitios lógicos y espacios de direcciones compartidos.
+# Los YAML de inventario viven bajo sites/<id>/. Los cluster-templates
+# globales están en cluster-templates/; un sitio puede tener los suyos.
+sites:
+  - id: site1
+    name: SITE1
+    path: sites/site1
+    description: "Nube privada de ejemplo (Platform Manager + apps + Ceph)"
+  - id: site2
+    name: SITE2
+    path: sites/site2
+    description: "Sitio edge de ejemplo; comparte template hybrid-calico con SITE1"
+
+address_spaces:
+  - id: dci-overlay
+    description: "Enlace DCI SITE1↔SITE2 (documentación RFC 5737)"
+    sites: [site1, site2]
+    match:
+      subnets: [DCI]

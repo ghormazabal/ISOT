@@ -1,0 +1,141 @@
+[
+  {
+    "hostname": "SITE2-CTRL001",
+    "site": "site2",
+    "role": "edge-server",
+    "ip": "10.80.1.11/24",
+    "path": "sites/site2/devices/baremetal/SITE2-CTRL001.yaml",
+    "kind": "baremetal",
+    "cluster_ref": "site2-edge",
+    "cluster_ref_site": "site2",
+    "links": [
+      {
+        "interface": "MGMT_SW",
+        "device": "SITE2-LEAF001",
+        "port": "PortChannel10",
+        "vlan": 2003,
+        "site": "site2"
+      },
+      {
+        "interface": "EDGE_SVC",
+        "device": "SITE2-LEAF001",
+        "port": "PortChannel10",
+        "vlan": 2100,
+        "site": "site2"
+      },
+      {
+        "interface": "bondC",
+        "device": "SITE2-LEAF001",
+        "port": "PortChannel10",
+        "vlan": null,
+        "site": "site2"
+      },
+      {
+        "interface": "oob",
+        "device": "SITE2-LEAF001",
+        "port": "Ethernet1",
+        "vlan": 2002,
+        "site": "site2"
+      }
+    ]
+  },
+  {
+    "hostname": "SITE2-CTRL002",
+    "site": "site2",
+    "role": "edge-server",
+    "ip": "10.80.1.12/24",
+    "path": "sites/site2/devices/baremetal/SITE2-CTRL002.yaml",
+    "kind": "baremetal",
+    "cluster_ref": "site2-edge",
+    "cluster_ref_site": "site2",
+    "links": [
+      {
+        "interface": "MGMT_SW",
+        "device": "SITE2-LEAF001",
+        "port": "PortChannel11",
+        "vlan": 2003,
+        "site": "site2"
+      },
+      {
+        "interface": "EDGE_SVC",
+        "device": "SITE2-LEAF001",
+        "port": "PortChannel11",
+        "vlan": 2100,
+        "site": "site2"
+      },
+      {
+        "interface": "bondC",
+        "device": "SITE2-LEAF001",
+        "port": "PortChannel11",
+        "vlan": null,
+        "site": "site2"
+      },
+      {
+        "interface": "oob",
+        "device": "SITE2-LEAF001",
+        "port": "Ethernet2",
+        "vlan": 2002,
+        "site": "site2"
+      }
+    ]
+  },
+  {
+    "hostname": "SITE2-DCGW001",
+    "site": "site2",
+    "role": "dcgw",
+    "ip": "10.80.0.20/24",
+    "path": "sites/site2/devices/network/SITE2-DCGW001.yaml",
+    "kind": "network",
+    "cluster_ref": null,
+    "cluster_ref_site": null,
+    "links": [
+      {
+        "interface": "Ethernet0",
+        "device": "SITE2-LEAF001",
+        "port": "Ethernet48",
+        "vlan": null,
+        "site": "site2"
+      },
+      {
+        "interface": "Ethernet31",
+        "device": "SITE1-DCGW001",
+        "port": "Ethernet31",
+        "vlan": 4094,
+        "site": "site1"
+      }
+    ]
+  },
+  {
+    "hostname": "SITE2-LEAF001",
+    "site": "site2",
+    "role": "server-leaf",
+    "ip": "10.80.0.10/24",
+    "path": "sites/site2/devices/network/SITE2-LEAF001.yaml",
+    "kind": "network",
+    "cluster_ref": null,
+    "cluster_ref_site": null,
+    "links": [
+      {
+        "interface": "PortChannel10",
+        "device": "SITE2-CTRL001",
+        "port": "bondC",
+        "vlan": null,
+        "site": "site2"
+      },
+      {
+        "interface": "PortChannel11",
+        "device": "SITE2-CTRL002",
+        "port": "bondC",
+        "vlan": null,
+        "site": "site2"
+      },
+      {
+        "interface": "Ethernet48",
+        "device": "SITE2-DCGW001",
+        "port": "Ethernet0",
+        "vlan": null,
+        "site": "site2"
+      }
+    ]
+  }
+]

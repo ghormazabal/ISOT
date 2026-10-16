@@ -1,0 +1,49 @@
+hostname: SITE1-CTRL002
+role: platform-server
+k8s_roles: [control-plane, etcd, worker]
+kind: baremetal
+vendor: generic
+model: compute-2u
+cluster_ref: site1-platform
+os: Ubuntu 22.04 LTS
+# [AI-Context]: Nodo CTRL002. Port2 de cada slot hacia LEAF002 (mismo Eth).
+oob:
+  type: bmc
+  ip: 10.10.16.12/24
+  switch: SITE1-MGMT001
+  port: Ethernet6
+bonds:
+  - name: bondC
+    leaf_pc: {SITE1-LEAF001: PortChannel26, SITE1-LEAF002: PortChannel26}
+    allowed_vlans: [2003, 2007]
+  - name: bondD0
+    leaf_pc: {SITE1-LEAF001: PortChannel25, SITE1-LEAF002: PortChannel25}
+    allowed_vlans: [2004, 2008]
+  - name: bondD1
+    leaf_pc: {SITE1-LEAF001: PortChannel28, SITE1-LEAF002: PortChannel28}
+    allowed_vlans: [2005, 2006]
+  - name: bondS
+    leaf_pc: {SITE1-LEAF001: PortChannel27, SITE1-LEAF002: PortChannel27}
+    allowed_vlans: [2000]
+networking:
+  - interface: MGMT_SW
+    parent: bondC
+    vlan: 2003
+    ip: 10.10.17.12/24
+    gateway: 10.10.17.1
+    connected_to: {device: SITE1-LEAF001, port: PortChannel26}
+  - interface: CLOUD_STOR
+    parent: bondS
+    vlan: 2000
+    ip: 10.10.0.12/21
+    connected_to: {device: SITE1-LEAF001, port: PortChannel27}
+  - interface: bondD0.2004
+    parent: bondD0
+    vlan: 2004
+    ip: 10.10.18.12/24
+    connected_to: {device: SITE1-LEAF001, port: PortChannel25}
+  - interface: BM_CALICO
+    parent: bondD0
+    vlan: 2008
+    ip: 10.10.22.48/27
+

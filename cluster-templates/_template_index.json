@@ -1,0 +1,76 @@
+[
+  {
+    "name": "hosted-controlplane-baremetal",
+    "site": "global",
+    "scope": "global",
+    "version": "1.30.x",
+    "distro": "hosted-controlplane",
+    "cni": "calico",
+    "path": "cluster-templates/hosted-controlplane-baremetal/template.yaml",
+    "chart_count": 0,
+    "charts": [],
+    "used_by": []
+  },
+  {
+    "name": "rke2-openstack-calico",
+    "site": "global",
+    "scope": "global",
+    "version": null,
+    "distro": "rke2",
+    "cni": "calico",
+    "path": "cluster-templates/rke2-openstack-calico/template.yaml",
+    "chart_count": 0,
+    "charts": [],
+    "used_by": []
+  },
+  {
+    "name": "rke2-openstack-cilium",
+    "site": "global",
+    "scope": "global",
+    "version": null,
+    "distro": "rke2",
+    "cni": "cilium",
+    "path": "cluster-templates/rke2-openstack-cilium/template.yaml",
+    "chart_count": 0,
+    "charts": [],
+    "used_by": []
+  },
+  {
+    "name": "rke2-rancher-hybrid-calico",
+    "site": "global",
+    "scope": "global",
+    "version": "1.34.8+lab.1-rc1",
+    "distro": "rke2",
+    "cni": "calico",
+    "path": "cluster-templates/rke2-rancher-hybrid-calico/template.yaml",
+    "chart_count": 22,
+    "charts": [
+      "rke2-rancher-hybrid-calico",
+      "longhorn",
+      "metallb",
+      "sriovOperator",
+      "nodeConfigOperator",
+      "sdnController",
+      "ntp",
+      "certManager",
+      "logging",
+      "monitoring",
+      "ingressNginx",
+      "kubevirt",
+      "x509CertExporter",
+      "selfNodeRemediation",
+      "nodeHealthcheckOperator",
+      "nmstateOperator",
+      "macvtapCni",
+      "kubemacpool",
+      "descheduler",
+      "kured",
+      "etcdDefrag",
+      "registries"
+    ],
+    "used_by": [
+      "site1/site1-apps",
+      "site2/site2-edge"
+    ]
+  }
+]

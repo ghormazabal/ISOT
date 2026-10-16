@@ -1,0 +1,28 @@
+hostname: SITE1-MGMT001
+role: management-switch
+kind: network
+vendor: generic
+model: mgmt-48x1g
+os: nos
+# [AI-Context]: Switch OOB MGMT_HW. VRRP master .208.1.
+networking:
+  - interface: Vlan2002
+    vlan: 2002
+    ip: 10.10.16.254/24
+  - interface: Ethernet0
+    connected_to: {device: SITE1-CTRL001, port: BMC}
+  - interface: Ethernet6
+    connected_to: {device: SITE1-CTRL002, port: BMC}
+  - interface: Ethernet10
+    connected_to: {device: SITE1-SPNE001, port: Management0}
+  - interface: Ethernet2
+    connected_to: {device: SITE1-NODE002, port: BMC}
+  - interface: Ethernet4
+    connected_to: {device: SITE1-STOR001, port: BMC}
+  - interface: Ethernet9
+    connected_to: {device: SITE1-STOR002, port: BMC}
+vlans: [2002]
+vrrp: {vlan: 2002, vrid: 1, vip: 10.10.16.1, priority: 199}
+bgp: {asn: 64600}
+uplink_core: Eth47.450 10.10.32.2/30 (next hop CORE de MGMT_HW)
+

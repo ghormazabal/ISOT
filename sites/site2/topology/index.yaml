@@ -1,0 +1,50 @@
+# [AI-Context]: Sitio SITE2 (edge). Inventario lógico de ejemplo, más pequeño que SITE1.
+#              Reutiliza VLANs 2002/2003 (espacio de direcciones distinto).
+#              El enlace DCI vive en el espacio compartido dci-overlay.
+site:
+  id: site2
+  operator: Operador-Ejemplo
+  description: "Sitio edge de ejemplo: un clúster RKE2 y DCI hacia SITE1"
+  infra_range: 10.80.0.0/20
+  vlan_range: "2000-2199"
+  dns_servers: [10.20.1.53]
+  ntp_servers: [10.30.0.10]
+
+subnets:
+  - name: MGMT_HW
+    cidr: 10.80.0.0/24
+    vlan: 2002
+    gateway: 10.80.0.1
+    vrf: ""
+    description: "OOB (VLAN 2002 reutilizada; CIDR distinto al de SITE1)"
+  - name: MGMT_SW
+    cidr: 10.80.1.0/24
+    vlan: 2003
+    gateway: 10.80.1.1
+    vrf: VRF_OAM
+    description: Gestión in-band de baremetal
+  - name: EDGE_SVC
+    cidr: 10.80.2.0/24
+    vlan: 2100
+    gateway: 10.80.2.1
+    vrf: VRF_OAM
+    description: Publicación de servicios del clúster edge
+  - name: DCI
+    cidr: 192.0.2.0/24
+    vlan: 4094
+    gateway: ""
+    vrf: VRF_DCI
+    description: "Enlace DCI a SITE1 (espacio compartido dci-overlay)"
+
+vlans:
+  - {id: 2002, name: MGMT_HW, subnet: MGMT_HW}
+  - {id: 2003, name: MGMT_SW, subnet: MGMT_SW}
+  - {id: 2100, name: EDGE_SVC, subnet: EDGE_SVC}
+  - {id: 4094, name: DCI, subnet: DCI}
+
+clusters:
+  - {name: site2-edge, kind: kubernetes, path: sites/site2/clusters/site2-edge.yaml}
+
+undocumented_peers: []
+gaps:
+  - "SITE2 es un ejemplo reducido; no hay spines ni storage local documentados."

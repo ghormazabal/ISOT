@@ -1,0 +1,8 @@
+# Dependencias de runtime del prototipo ISoT.
+# Para desarrollo: pip install -e ".[dev]"
+pyyaml>=6.0
+fastapi>=0.115
+uvicorn[standard]>=0.32
+pytest>=8.0
+pre-commit>=3.7
+httpx>=0.27

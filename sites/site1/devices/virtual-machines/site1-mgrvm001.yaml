@@ -1,0 +1,23 @@
+hostname: site1-mgrvm001
+role: platform-manager
+k8s_roles: [control-plane]
+kind: vm
+cluster_ref: site1-manager
+os: Ubuntu 24.04.2 LTS
+# [AI-Context]: VM Manager HA, 1 por CTRL. eth0 sobre overlay del platform (IP desconocida).
+hypervisor:
+  cluster: site1-platform
+  namespace: platform-manager
+  device: SITE1-CTRL001
+resources: {vcpu: 8, memory: 16Gi, disk: 80Gi, storage_class: storage-class-ceph-rwo}
+networking:
+  - interface: eth0
+    network: pod network platform (Calico)
+    ip: ""
+    default_route: true
+  - interface: eth1
+    network: MNGR_CTRL
+    vlan: 2009
+    nad: platform-manager/mngr-ctrl
+    ip: 10.10.22.66/27
+    connected_to: {device: SITE1-CTRL001, port: br-mngr2009}

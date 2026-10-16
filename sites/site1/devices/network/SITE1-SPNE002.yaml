@@ -1,0 +1,15 @@
+hostname: SITE1-SPNE002
+role: spine
+kind: network
+vendor: generic
+model: leaf-32x100g
+os: nos
+# [AI-Context]: Spine 2. ASN y router_id desconocidos.
+networking:
+  - interface: Management0
+    vlan: 2002
+    ip: 10.10.16.249/24
+  - interface: Loopback0
+    ip: 10.10.21.2/32
+bgp: {asn: "", router_id: ""}
+

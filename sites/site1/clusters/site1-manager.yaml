@@ -1,0 +1,62 @@
+cluster_name: site1-manager
+kind: kubernetes
+# [AI-Context]: Platform Manager HA (Rancher) sobre 3 VMs KubeVirt. Sin template.
+#              Provisiona/importa site1-platform e site1-apps.
+product: Platform Manager HA (Rancher v2.13.3)
+chart: platform-manager-7.1-rc1.0
+image: manager-ha
+rancher_version: v2.13.3
+template_ref: null
+template_note: ninguno (kubespray dentro de 3 VMs KubeVirt)
+distro: kubeadm (kubespray)
+version: v1.33.5
+os: Ubuntu 24.04.2 LTS
+cni:
+  primary: calico (kubespray, sobre MNGR_CTRL)
+  secondary: ""
+pod_cidr: 10.233.64.0/18
+service_cidr: 10.233.0.0/18
+nodes:
+  - hostname: site1-mgrvm001
+    k8s_name: site1-mgrvm001
+    roles: [control-plane]
+    internal_ip: 10.10.22.66
+  - hostname: site1-mgrvm002
+    k8s_name: site1-mgrvm002
+    roles: [control-plane]
+    internal_ip: 10.10.22.67
+  - hostname: site1-mgrvm003
+    k8s_name: site1-mgrvm003
+    roles: [control-plane]
+    internal_ip: 10.10.22.68
+nads: []
+metallb:
+  mode: L2
+  pools:
+    - name: defaultpool
+      namespace: metallb-system
+      subnet: MNGR_CTRL
+      addresses: ["10.10.22.90/32", "10.10.22.91/32"]
+      l2advertisement: l2advertisement
+  services:
+    ingress-nginx/ingress-nginx-controller: 10.10.22.90
+  vips:
+    rancher_api_ingress: 10.10.22.90
+    bmo_servicedns: 10.10.22.91
+  fqdn: manager.site1.example.net
+storage_classes:
+  - {name: default-local-sg, default: true, provisioner: openebs.io/local}
+managed_clusters:
+  - {name: site1-platform, id: c-m-plat001, kind: imported}
+  - {name: site1-apps, id: c-m-apps001, kind: "provisioned (custom RKE2 vía template hybrid)"}
+clusterrepos:
+  - cluster-templates-oci
+  - platform-apps
+  - rancher-charts
+  - rancher-partner-charts
+  - rancher-rke2-charts
+  - ui-extension-kubevirt
+  - platform-clustertemplates (obsoleto)
+infra:
+  hypervisor_cluster: site1-platform
+  vlans: [2009]

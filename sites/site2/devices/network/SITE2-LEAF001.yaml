@@ -1,0 +1,24 @@
+hostname: SITE2-LEAF001
+role: server-leaf
+kind: network
+vendor: generic
+model: leaf-32x100g
+os: nos
+# [AI-Context]: Único leaf del sitio edge. VLANs 2002/2003 coinciden en id con SITE1.
+networking:
+  - interface: Management0
+    vlan: 2002
+    ip: 10.80.0.10/24
+  - interface: Loopback0
+    ip: 10.80.15.1/32
+  - interface: PortChannel10
+    connected_to: {device: SITE2-CTRL001, port: bondC}
+  - interface: PortChannel11
+    connected_to: {device: SITE2-CTRL002, port: bondC}
+  - interface: Ethernet48
+    connected_to: {device: SITE2-DCGW001, port: Ethernet0}
+bgp:
+  asn: 4200000200
+  router_id: 10.80.15.1
+vlans: [2002, 2003, 2100]
+mtu: 9216

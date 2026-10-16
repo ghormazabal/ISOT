@@ -1,0 +1,10 @@
+template_name: rke2-openstack-calico
+# [AI-Context]: Familia del catálogo. No usada en SITE1 ni SITE2. Version vacía a propósito.
+version: ""
+distro: rke2
+cni:
+  primary: calico
+note: nodos OpenStack (CAPI) + Calico; no usado en SITE1
+used_in_inventory: false
+charts: []
+charts_note: ningún Helm release documentado en el inventario

@@ -1,0 +1,27 @@
+hostname: SITE1-DCGW001
+role: dcgw
+kind: network
+vendor: generic
+model: leaf-32x100g
+os: nos
+# [AI-Context]: Border/gateway VRF_OAM y VRF_SERVICES.
+networking:
+  - interface: Management0
+    vlan: 2002
+    ip: 10.10.16.246/24
+  - interface: Loopback0
+    ip: 10.10.21.5/32
+  - interface: PortChannel15.550
+    vlan: 550
+    ip: 10.10.32.10/30
+    description: WAN_OAM (Vrf_OAM)
+  - interface: Ethernet31
+    vlan: 4094
+    ip: 192.0.2.1/24
+    vrf: VRF_DCI
+    connected_to: {device: SITE2-DCGW001, site: site2, port: Ethernet31}
+bgp:
+  asn: 64601
+  vrfs: [Vrf_OAM, Vrf_SERVICES]
+  router_id: 10.10.21.5
+

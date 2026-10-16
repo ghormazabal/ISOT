@@ -1,0 +1,85 @@
+cluster_name: site1-platform
+kind: kubernetes
+# [AI-Context]: Cluster de infraestructura. RKE2 custom, sin cluster-template.
+#              Nodos = SITE1-CTRL001..003.
+rancher_id: c-m-plat001
+template_ref: null
+template_note: ninguno (RKE2 custom, sin cluster-template)
+distro: rke2
+version: v1.34.8+rke2r2
+os: Ubuntu 22.04 LTS
+virtualization: kubevirt
+cni:
+  primary: calico
+  secondary: multus+whereabouts
+pod_cidr: ""
+service_cidr: ""
+cidr_note: no documentado; ClusterIPs de ejemplo en 10.43.x (default RKE2)
+nodes:
+  - hostname: SITE1-CTRL001
+    k8s_name: site1-ctrl001
+    roles: [control-plane, etcd, worker]
+    internal_ip: 10.10.17.11
+  - hostname: SITE1-CTRL002
+    k8s_name: site1-ctrl002
+    roles: [control-plane, etcd, worker]
+    internal_ip: 10.10.17.12
+  - hostname: SITE1-CTRL003
+    k8s_name: site1-ctrl003
+    roles: [control-plane, etcd, worker]
+    internal_ip: 10.10.17.13
+nads:
+  - {namespace: apps-control-plane, name: app-ctrl, type: macvtap, master: br-app2005, mtu: 9000, vlan: 2005, subnet: APP_CTRL}
+  - {namespace: apps-control-plane, name: app-cni, type: macvtap, master: br-app2006, mtu: 9000, vlan: 2006, subnet: APP_DATA}
+  - {namespace: apps-control-plane, name: apps-plat-svc, type: macvtap, master: bondD0.2004, mtu: 1500, vlan: 2004, subnet: PLAT_SVC}
+  - {namespace: platform-manager, name: mngr-ctrl, type: bridge, bridge: br-mngr2009, mtu: 9000, vlan: 2009, subnet: MNGR_CTRL}
+  - {namespace: tinyproxy, name: tinyproxy-tinyproxy, type: vlan, master: bondD0, vlan: 2011, ipam: whereabouts, subnet: EGRESS}
+  - {namespace: egress-probe, name: vlan2011-egress-probe, type: vlan, master: bondD0, vlan: 2011, ipam: whereabouts, subnet: EGRESS}
+metallb:
+  version: 0.16.1
+  mode: L2
+  pools:
+    - name: mgmt-sw
+      subnet: CLOUD_MGMT_SW
+      addresses: ["10.10.17.200-10.10.17.215"]
+      autoAssign: false
+      l2_interfaces: [bondC.2003, MGMT_SW]
+    - name: plat-svc
+      subnet: PLAT_SVC
+      addresses: ["10.10.18.2-10.10.18.10", "10.10.18.14-10.10.18.99", "10.10.18.101-10.10.18.254"]
+      autoAssign: false
+      l2_interfaces: [bondD0.2004]
+  services:
+    kube-system/rke2-traefik: 10.10.18.200
+    kube-system/rke2-traefik-mgmt-sw: 10.10.17.200
+    tinyproxy/tinyproxy-tinyproxy: 10.10.18.201
+    idam/tacacs: 10.10.18.202
+    idam/idam-openldap: 10.10.18.203
+    monitoring/monitoring-gateways-prometheus-pushgateway: 10.10.18.205
+    monitoring/monitoring-gateways-fluentd-aggregator: 10.10.18.208
+storage_classes:
+  - {name: longhorn, default: true, provisioner: driver.longhorn.io}
+  - {name: longhorn-kubevirt}
+  - {name: longhorn-static}
+  - {name: storage-class-ceph-rwo, provisioner: rbd.csi.ceph.com, pool: platform-tools-rbd}
+  - {name: monitoring-storage-class-ceph-rwo, provisioner: rbd.csi.ceph.com}
+namespaces_relevant:
+  - kubevirt
+  - apps-control-plane
+  - platform-manager
+  - tinyproxy
+  - longhorn-system
+  - ceph-csi
+  - ceph-csi-cephfs
+  - idam
+  - monitoring
+  - registry
+  - registry-platform
+  - cicd
+  - inventory
+  - sdn-controller
+  - platform-tools
+  - orchestrator-system
+  - pg-operator
+infra:
+  vlans: [2003, 2004, 2008, 2000, 2005, 2006, 2009, 2011]

@@ -1,0 +1,42 @@
+[
+  {
+    "id": "site1",
+    "name": "SITE1",
+    "path": "sites/site1",
+    "description": "Nube privada de ejemplo (Platform Manager + apps + Ceph)",
+    "device_count": 22,
+    "cluster_count": 4,
+    "address_spaces": [
+      "dci-overlay"
+    ],
+    "inter_site_links": [
+      {
+        "device": "SITE1-DCGW001",
+        "peer_site": "site2",
+        "peer_device": "SITE2-DCGW001",
+        "vlan": 4094,
+        "port": "Ethernet31"
+      }
+    ]
+  },
+  {
+    "id": "site2",
+    "name": "SITE2",
+    "path": "sites/site2",
+    "description": "Sitio edge de ejemplo; comparte template hybrid-calico con SITE1",
+    "device_count": 4,
+    "cluster_count": 1,
+    "address_spaces": [
+      "dci-overlay"
+    ],
+    "inter_site_links": [
+      {
+        "device": "SITE2-DCGW001",
+        "peer_site": "site1",
+        "peer_device": "SITE1-DCGW001",
+        "vlan": 4094,
+        "port": "Ethernet31"
+      }
+    ]
+  }
+]

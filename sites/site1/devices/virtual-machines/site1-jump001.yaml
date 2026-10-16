@@ -1,0 +1,20 @@
+hostname: site1-jump001
+role: jumphost
+kind: vm
+cluster_ref: null
+os: ""
+# [AI-Context]: Jumphost. Sin cluster_ref. OS desconocido.
+hypervisor:
+  cluster: site1-platform
+  namespace: apps-control-plane
+  device: SITE1-CTRL001
+resources: {vcpu: 4, memory: 8Gi, disk: 318Gi}
+networking:
+  - interface: eth0
+    network: PLAT_SVC
+    vlan: 2004
+    nad: apps-control-plane/apps-plat-svc
+    ip: 10.10.18.100/24
+    gateway: 10.10.18.1
+    connected_to: {device: SITE1-CTRL001, port: bondD0.2004}
+

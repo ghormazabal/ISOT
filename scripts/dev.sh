@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Desarrollo: API en :8000 y Vite (proxy /api) en :5173
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+python3 -m pip install -e ".[dev]" -q
+if [ ! -d web/node_modules ]; then
+  (cd web && npm install)
+fi
+python3 -m uvicorn isot.web:app --host 127.0.0.1 --port 8000 --reload &
+API_PID=$!
+cleanup() { kill "$API_PID" 2>/dev/null || true; }
+trap cleanup EXIT INT TERM
+cd web
+npm run dev -- --host 127.0.0.1 --port 5173

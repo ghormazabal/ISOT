@@ -1,0 +1,24 @@
+template_name: rke2-edge-calico
+# [AI-Context]: Template específico de SITE2. Ningún clúster lo usa todavía.
+scope: site
+version: ""
+distro: rke2
+cni:
+  primary: calico
+note: familia edge local; version vacía a propósito
+node_pools:
+  controlPlaneNodes: [baremetal]
+  workerNodes: [baremetal]
+addons_default:
+  metallb: {enabled: true}
+charts:
+  - name: metallb
+    repo: ""
+    chart: metallb
+    version: ""
+    namespace: ""
+    order: 10
+    depends_on: []
+    values_inline:
+      enabled: true
+    note: addons_default.metallb.enabled; versión, repo y namespace faltantes

@@ -1,0 +1,68 @@
+hostname: SITE1-CTRL001
+role: platform-server
+k8s_roles: [control-plane, etcd, worker]
+kind: baremetal
+vendor: generic
+model: compute-2u
+cluster_ref: site1-platform
+os: Ubuntu 22.04 LTS
+# [AI-Context]: Nodo CTRL001. Datos de ejemplo.
+oob:
+  type: bmc
+  ip: 10.10.16.11/24
+  switch: SITE1-MGMT001
+  port: Ethernet0
+bonds:
+  - name: bondC
+    mode: 802.3ad
+    members: [ens1f1np1, ens3f0np0]
+    leaf_pc: {SITE1-LEAF001: PortChannel22, SITE1-LEAF002: PortChannel22}
+    allowed_vlans: [2003, 2007]
+  - name: bondD0
+    mode: 802.3ad
+    members: [ens1f0np0, ens3f1np1]
+    leaf_pc: {SITE1-LEAF001: PortChannel21, SITE1-LEAF002: PortChannel21}
+    allowed_vlans: [2004, 2008]
+    extra_host_vlans: [2009, 2011]
+  - name: bondD1
+    mode: 802.3ad
+    members: [ens4f1np1, ens6f0np0]
+    leaf_pc: {SITE1-LEAF001: PortChannel24, SITE1-LEAF002: PortChannel24}
+    allowed_vlans: [2005, 2006]
+  - name: bondS
+    mode: 802.3ad
+    members: [ens4f0np0, ens6f1np1]
+    leaf_pc: {SITE1-LEAF001: PortChannel23, SITE1-LEAF002: PortChannel23}
+    allowed_vlans: [2000]
+  - name: bond0
+    mode: 802.3ad
+    members: [ens2f0np0, ens5f0np0]
+    leaf_pc: {}
+    allowed_vlans: []
+networking:
+  - interface: MGMT_SW
+    parent: bondC
+    vlan: 2003
+    ip: 10.10.17.11/24
+    gateway: 10.10.17.1
+    connected_to: {device: SITE1-LEAF001, port: PortChannel22}
+  - interface: BM_PLAT_CTRL
+    parent: bondC
+    vlan: 2007
+    ip: 10.10.22.11/27
+    notes: datos de ejemplo
+  - interface: CLOUD_STOR
+    parent: bondS
+    vlan: 2000
+    ip: 10.10.0.11/21
+    connected_to: {device: SITE1-LEAF001, port: PortChannel23}
+  - interface: bondD0.2004
+    parent: bondD0
+    vlan: 2004
+    ip: 10.10.18.11/24
+    connected_to: {device: SITE1-LEAF001, port: PortChannel21}
+  - interface: BM_CALICO
+    parent: bondD0
+    vlan: 2008
+    ip: 10.10.22.47/27
+

@@ -1,0 +1,61 @@
+hostname: SITE1-NODE002
+role: apps-worker
+k8s_roles: [worker]
+kind: baremetal
+vendor: generic
+model: compute-2u
+cluster_ref: site1-apps
+os: Ubuntu 22.04 LTS
+# [AI-Context]: Worker de la app unido. SR-IOV capable. bondD11 VLANs dinámicas SDN.
+labels:
+  feature.node.kubernetes.io/network-sriov.capable: "true"
+oob:
+  type: bmc
+  ip: 10.10.16.19/24
+  switch: SITE1-MGMT001
+  port: Ethernet2
+bonds:
+  - name: bondC
+    leaf_pc: {SITE1-LEAF001: PortChannel43, SITE1-LEAF002: PortChannel43}
+    allowed_vlans: [2003, 2005]
+    mtu: 4470
+  - name: bondD00
+    leaf_pc: {SITE1-LEAF001: PortChannel41, SITE1-LEAF002: PortChannel41}
+    allowed_vlans: []
+    note: PortChannel mode on (datos de workload)
+  - name: bondD01
+    leaf_pc: {SITE1-LEAF001: PortChannel42, SITE1-LEAF002: PortChannel42}
+    allowed_vlans: [2006]
+  - name: bondD10
+    leaf_pc: {SITE1-LEAF001: PortChannel44, SITE1-LEAF002: PortChannel44}
+    allowed_vlans: []
+    note: PortChannel mode on (datos de workload)
+  - name: bondD11
+    leaf_pc: {SITE1-LEAF001: PortChannel45, SITE1-LEAF002: PortChannel45}
+    allowed_vlans: []
+    note: VLANs dinámicas vía SDN (VXLAN/EVPN)
+  - name: bondS
+    leaf_pc: {SITE1-LEAF001: PortChannel46, SITE1-LEAF002: PortChannel46}
+    allowed_vlans: [2000]
+networking:
+  - interface: MGMT_SW
+    parent: bondC
+    vlan: 2003
+    ip: 10.10.17.19/24
+    gateway: 10.10.17.1
+    connected_to: {device: SITE1-LEAF001, port: PortChannel43}
+  - interface: APP_CTRL
+    parent: bondC
+    vlan: 2005
+    ip: 10.10.19.19/24
+  - interface: APP_DATA
+    parent: bondD01
+    vlan: 2006
+    ip: 10.10.20.19/24
+    connected_to: {device: SITE1-LEAF001, port: PortChannel42}
+  - interface: CLOUD_STOR
+    parent: bondS
+    vlan: 2000
+    ip: 10.10.0.19/21
+    connected_to: {device: SITE1-LEAF001, port: PortChannel46}
+

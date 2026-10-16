@@ -1,0 +1,31 @@
+hostname: SITE2-CTRL001
+role: edge-server
+k8s_roles: [control-plane, etcd, worker]
+kind: baremetal
+vendor: generic
+model: compute-2u
+cluster_ref: site2-edge
+os: Ubuntu 22.04 LTS
+oob:
+  type: bmc
+  ip: 10.80.0.11/24
+  switch: SITE2-LEAF001
+  port: Ethernet1
+bonds:
+  - name: bondC
+    mode: 802.3ad
+    members: [ens1f0, ens1f1]
+    leaf_pc: {SITE2-LEAF001: PortChannel10}
+    allowed_vlans: [2003, 2100]
+networking:
+  - interface: MGMT_SW
+    parent: bondC
+    vlan: 2003
+    ip: 10.80.1.11/24
+    gateway: 10.80.1.1
+    connected_to: {device: SITE2-LEAF001, port: PortChannel10}
+  - interface: EDGE_SVC
+    parent: bondC
+    vlan: 2100
+    ip: 10.80.2.11/24
+    connected_to: {device: SITE2-LEAF001, port: PortChannel10}
