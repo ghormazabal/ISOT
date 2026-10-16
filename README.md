@@ -6,6 +6,10 @@ repositorio modela **varios sitios lógicos** (datacenters) y un catálogo de
 cluster-templates compartido. Los datos de ejemplo son ficticios y
 anonimizados (SITE1 / SITE2, rangos RFC1918 y de documentación).
 
+![Vista global: SITE1, SITE2 y el enlace DCI](docs/images/global-sites.png)
+
+*Vista global: dos sitios de ejemplo unidos por el enlace DCI (VLAN 4094).*
+
 ## Arquitectura
 
 ```
@@ -123,6 +127,44 @@ Demo con cambios ficticios (`demo/diff-example` vs el tip de esta rama):
 # Comparar → Base HEAD de esta rama → Head demo/diff-example
 # VLAN 2099 LAB / LAB_NET, se quita site1-jump001, cniConfig.mtu 1440 → 1500
 ```
+
+## Capturas
+
+### Topología de SITE1
+
+![Topología lógica de SITE1](docs/images/site1-topology.png)
+
+Grafo de dispositivos, VLANs y `connected_to` del sitio de nube privada.
+
+### Kubernetes
+
+![Pestaña Kubernetes con templates y clústeres](docs/images/kubernetes.png)
+
+Templates globales y de sitio, clústeres y nodos a partir de los índices.
+
+### Explorador de template
+
+![Explorador de values de un cluster-template](docs/images/template-explorer.png)
+
+Árbol de un template con búsqueda por ruta (`cniConfig.mtu`) y values cargados al expandir el chart.
+
+### Diff de values
+
+![Comparación de values del clúster contra su template](docs/images/values-diff.png)
+
+Clúster vs template: heredado, sobrescrito y efectivo, filtrado por `cniConfig`.
+
+### Comparar (grafo)
+
+![Modo Comparar en el grafo SITE1 vs demo](docs/images/compare-graph.png)
+
+Diff gráfico entre el tip de esta rama y `demo/diff-example`: SITE1 en amarillo con badge `+2 −1`.
+
+### Comparar (values)
+
+![Values lado a lado entre dos refs](docs/images/compare-values.png)
+
+`cniConfig.mtu` lado a lado: 1440 en la base, 1500 en el head de ejemplo.
 
 ## Cómo usarlo
 
