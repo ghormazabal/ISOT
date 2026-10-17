@@ -4,6 +4,7 @@ Los listados y el grafo salen de los índices. El YAML se parsea solo
 cuando se pide el detalle de un dispositivo, clúster o template.
 Los values de un chart se leen bajo demanda (values_ref / values_inline).
 Los POST /api/wizard/* solo existen si ISOT_EDIT=1 (o create_app(edit=True)).
+La sección Renders (/api/renders/...) está en isot.web_renders.
 """
 
 from __future__ import annotations
@@ -1166,6 +1167,17 @@ def create_app(
         if not isinstance(tdoc, dict):
             tdoc = {}
         return cluster_values_diff(base, cluster, found, tdoc)
+
+    from isot import web_renders
+
+    web_renders.register(
+        app,
+        registry=registry,
+        resolved_root=resolved_root,
+        edit_for=edit_for,
+        edit_globally=edit_globally,
+        maybe_push=maybe_push,
+    )
 
     if FRONTEND_DIST.is_dir():
         assets = FRONTEND_DIST / "assets"

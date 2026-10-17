@@ -1,0 +1,44 @@
+# Renders del repositorio de datos: qué template de render se aplica a qué
+# sitio/clúster y dónde se compara/escribe la salida. Se edita desde la web
+# (Renders → Resumen / Plantillas / Diff). Ver docs/renders/GUIDE.md.
+version: 1
+# Carpeta destino por defecto, dentro de este mismo repo de datos.
+target_dir: rendered
+default_target: local
+# Destinos adicionales: otra carpeta, u otro repositorio declarado en
+# target_repos de isot.yaml (p.ej. un repo GitOps). Ejemplo:
+# targets:
+#   - id: gitops
+#     repo: gitops-demo
+#     dir: clusters
+instances:
+  - id: site1-apps-netplan
+    template: netplan-node
+    site: site1
+    cluster: site1-apps
+    description: Netplan de los workers baremetal del clúster apps (por nodo y combinado)
+  - id: site1-platform-netplan
+    template: netplan-node
+    site: site1
+    cluster: site1-platform
+    params:
+      default_mtu: 9000
+  - id: site1-platform-nads
+    template: multus-nad
+    site: site1
+    cluster: site1-platform
+  - id: site1-platform-metallb
+    template: metallb-pools
+    site: site1
+    cluster: site1-platform
+  - id: site1-platform-namespaces
+    template: core-namespaces
+    site: site1
+    cluster: site1-platform
+  - id: site1-chrony
+    template: chrony-conf
+    site: site1
+  - id: site2-edge-netplan-iface
+    template: netplan-per-interface
+    site: site2
+    cluster: site2-edge

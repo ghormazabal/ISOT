@@ -1,0 +1,13 @@
+# Template propio del repo de datos (no viene con ISoT): chrony.conf del sitio.
+# Muestra que la salida no tiene por qué ser YAML.
+id: chrony-conf
+version: 1
+description: chrony.conf con los NTP del sitio
+scope: site
+tags: [ntp, nodos]
+params:
+  minsources: 2
+outputs:
+  - template: chrony.conf.j2
+    mode: single
+    path: chrony.conf

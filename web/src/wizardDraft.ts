@@ -196,7 +196,7 @@ export function isDraftInProgress(draft: WizardDraft | null | undefined): boolea
 
 /** Editar es un toggle: si ya estás en wizards, vuelves a Sitios/Kubernetes/Comparar. */
 export function applyEditToggle(
-  view: "network" | "kubernetes" | "wizards",
+  view: "network" | "kubernetes" | "wizards" | "renders",
   lastBrowse: BrowseSnapshot,
 ): { view: "network" | "kubernetes" | "wizards"; compare: boolean; siteFilter: string } {
   if (view === "wizards") {

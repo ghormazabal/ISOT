@@ -1,0 +1,3 @@
+{% import 'macros.j2' as np %}
+# Netplan de {{ item.hostname }} ({{ item.role }}) · sitio {{ site.name }}
+{{ np.netplan(item, site, params) }}

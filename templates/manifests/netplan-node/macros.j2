@@ -1,0 +1,46 @@
+{#- Netplan de un nodo. `node` es un elemento de `devices` (ver docs/llm/RENDERS.md). -#}
+{% macro netplan(node, site, params) -%}
+network:
+  version: 2
+  renderer: {{ params.renderer }}
+{% set vlan_ifaces = node.interfaces | selectattr('parent') | selectattr('vlan') | list %}
+{% set used_bonds = vlan_ifaces | map(attribute='parent') | unique | list %}
+{% if used_bonds %}
+  bonds:
+{% for bond in node.bonds if bond.name in used_bonds %}
+    {{ bond.name }}:
+{% if bond.members %}
+      interfaces: {{ bond.members | to_json }}
+{% else %}
+      interfaces: []  # NICs del bond no documentadas en el inventario
+{% endif %}
+      mtu: {{ bond.mtu or params.default_mtu }}
+      parameters:
+        mode: {{ bond.mode or params.bond_mode }}
+        mii-monitor-interval: 100
+{% endfor %}
+{% endif %}
+{% if vlan_ifaces %}
+  vlans:
+{% for iface in vlan_ifaces %}
+    {{ iface.parent }}.{{ iface.vlan }}:
+      id: {{ iface.vlan }}
+      link: {{ iface.parent }}
+{% if iface.mtu %}
+      mtu: {{ iface.mtu }}
+{% endif %}
+{% if iface.address %}
+      addresses: [{{ iface.address }}/{{ iface.prefix or 24 }}]
+{% endif %}
+{% if iface.gateway %}
+      routes:
+        - to: default
+          via: {{ iface.gateway }}
+{% if params.dns and site.dns_servers %}
+      nameservers:
+        addresses: {{ site.dns_servers | to_json }}
+{% endif %}
+{% endif %}
+{% endfor %}
+{% endif %}
+{%- endmacro %}

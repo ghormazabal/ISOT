@@ -1,0 +1,33 @@
+{# Un documento por NAD. La config CNI se arma como dict y se serializa con to_json. #}
+{% for nad in cluster.nads %}
+{% set cfg = {"cniVersion": params.cni_version, "name": nad.name, "type": nad.type or "macvlan"} %}
+{% if nad.type == "bridge" %}
+{% set cfg = dict(cfg, bridge=nad.bridge or nad.master, vlan=nad.vlan) %}
+{% elif nad.type == "vlan" %}
+{% set cfg = dict(cfg, master=nad.master, vlanId=nad.vlan) %}
+{% elif nad.master %}
+{% set cfg = dict(cfg, master=nad.master) %}
+{% endif %}
+{% if nad.mtu %}
+{% set cfg = dict(cfg, mtu=nad.mtu) %}
+{% endif %}
+{% if nad.ipam == "whereabouts" and nad.cidr %}
+{% set cfg = dict(cfg, ipam={"type": "whereabouts", "range": nad.cidr}) %}
+{% else %}
+{% set cfg = dict(cfg, ipam={}) %}
+{% endif %}
+---
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: {{ nad.name }}
+  namespace: {{ nad.namespace }}
+  labels:
+    isot.io/vlan: "{{ nad.vlan }}"
+{% if nad.subnet %}
+    isot.io/subnet: {{ nad.subnet }}
+{% endif %}
+spec:
+  config: |
+    {{ cfg | to_json(2) | indent(4) }}
+{% endfor %}

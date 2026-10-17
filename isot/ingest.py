@@ -74,7 +74,7 @@ SECRET_KEYS: frozenset[str] = frozenset(
 # Valores aceptados en una clave secreta: referencias o marcadores, nunca el secreto.
 SECRET_PLACEHOLDER_RE = re.compile(r"^(?:\$\{[^}]+\}|<[^>]+>|\*+|REDACTED|redacted|vault:.+|ref\+.+|secretRef:.+)$")
 PEM_RE = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")
-SECRET_SCAN_DIRS = ("sites", "cluster-templates", "site-templates", INGEST_DIR)
+SECRET_SCAN_DIRS = ("sites", "cluster-templates", "site-templates", "manifest-templates", INGEST_DIR)
 YAML_SUFFIXES = {".yaml", ".yml"}
 
 

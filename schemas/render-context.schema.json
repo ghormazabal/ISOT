@@ -1,0 +1,973 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "isot:schemas/render-context",
+  "title": "Contexto de render ISoT (context_version 1)",
+  "description": "Variables que ve un template de render. Además: funciones subnet(name), subnet_by_vlan(vlan), device(hostname) y, en outputs per_item, `item` e `index`; en single con for_each, `items`. Ver docs/llm/RENDERS.md.",
+  "type": "object",
+  "required": [
+    "context_version",
+    "site",
+    "subnets",
+    "vlans",
+    "devices",
+    "site_devices",
+    "clusters",
+    "cluster",
+    "params"
+  ],
+  "properties": {
+    "context_version": {
+      "const": 1
+    },
+    "site": {
+      "$ref": "#/$defs/site"
+    },
+    "subnets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/subnet"
+      },
+      "description": "= site.subnets"
+    },
+    "vlans": {
+      "type": "array",
+      "description": "= site.vlans"
+    },
+    "devices": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/device"
+      },
+      "description": "Devices del ámbito: los del clúster de la instancia o, sin clúster, todos los del sitio."
+    },
+    "site_devices": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/device"
+      },
+      "description": "Todos los devices del sitio."
+    },
+    "clusters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/cluster"
+      },
+      "description": "Clústeres del sitio."
+    },
+    "cluster": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/cluster"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Clúster de la instancia (scope cluster) o null."
+    },
+    "vms": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/device"
+      },
+      "description": "VMs (del clúster si hay, si no del sitio)."
+    },
+    "params": {
+      "type": "object",
+      "description": "template.params con los params de la instancia encima."
+    },
+    "instance": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Id."
+        },
+        "site": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Sitio."
+        },
+        "cluster": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Clúster."
+        }
+      }
+    },
+    "template": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Id."
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Versión."
+        },
+        "scope": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Scope."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "site": {
+      "type": "object",
+      "description": "Sitio (sites.yaml + topology/index.yaml).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Id."
+        },
+        "name": {
+          "type": "string",
+          "description": "Nombre."
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Descripción."
+        },
+        "operator": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Operador."
+        },
+        "domain": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Dominio."
+        },
+        "infra_range": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Rango de infraestructura."
+        },
+        "vlan_range": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Rango de VLANs."
+        },
+        "dns_servers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "DNS."
+        },
+        "dns_search": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Dominios de búsqueda."
+        },
+        "ntp_servers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "NTP."
+        },
+        "http_proxy": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Proxy HTTP."
+        },
+        "https_proxy": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Proxy HTTPS (o el HTTP)."
+        },
+        "no_proxy": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "NO_PROXY."
+        },
+        "subnets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/subnet"
+          },
+          "description": "Subredes."
+        },
+        "vlans": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "VLAN.",
+            "properties": {
+              "id": {
+                "type": [
+                  "integer",
+                  "string",
+                  "null"
+                ],
+                "description": "Id de VLAN (entero si se puede)."
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Nombre."
+              },
+              "subnet": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Subred."
+              }
+            }
+          },
+          "description": "VLANs."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "subnets",
+        "vlans"
+      ]
+    },
+    "subnet": {
+      "type": "object",
+      "description": "Subred del sitio.",
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Nombre de la subred (topology/index.yaml subnets[].name)."
+        },
+        "cidr": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "CIDR, p.ej. 10.0.0.0/24."
+        },
+        "prefix": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Longitud de prefijo del CIDR."
+        },
+        "netmask": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Máscara del CIDR."
+        },
+        "vlan": {
+          "type": [
+            "integer",
+            "string",
+            "null"
+          ],
+          "description": "Id de VLAN (entero si se puede)."
+        },
+        "gateway": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Gateway."
+        },
+        "vrf": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "VRF."
+        },
+        "mtu": {
+          "type": [
+            "integer",
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Descripción."
+        }
+      }
+    },
+    "device": {
+      "type": "object",
+      "description": "Dispositivo (YAML bajo sites/<id>/devices/).",
+      "properties": {
+        "hostname": {
+          "type": "string",
+          "description": "Hostname tal cual."
+        },
+        "name": {
+          "type": "string",
+          "description": "Hostname en minúsculas (útil para nombres de archivo)."
+        },
+        "site": {
+          "type": "string",
+          "description": "Sitio."
+        },
+        "role": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Rol."
+        },
+        "kind": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "baremetal | vm | network | …"
+        },
+        "k8s_roles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Roles Kubernetes."
+        },
+        "cluster": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "cluster_ref."
+        },
+        "os": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "SO."
+        },
+        "vendor": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Fabricante."
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Modelo."
+        },
+        "labels": {
+          "type": "object",
+          "description": "labels del YAML."
+        },
+        "bonds": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "Bond del dispositivo.",
+            "properties": {
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Nombre del bond."
+              },
+              "mode": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Modo (si está documentado)."
+              },
+              "mtu": {
+                "type": [
+                  "integer",
+                  "string",
+                  "null"
+                ]
+              },
+              "members": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "NICs miembro (members/interfaces)."
+              },
+              "allowed_vlans": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                },
+                "description": "VLANs permitidas (rangos expandidos)."
+              },
+              "extra_host_vlans": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                },
+                "description": "VLANs extra del host."
+              },
+              "leaf_pc": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "description": "leaf → PortChannel."
+              },
+              "note": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Nota."
+              }
+            }
+          },
+          "description": "Bonds."
+        },
+        "interfaces": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "Interfaz (devices[].networking[] normalizada).",
+            "properties": {
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Nombre lógico (networking[].interface)."
+              },
+              "parent": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Bond/NIC padre (VLAN sobre parent)."
+              },
+              "vlan": {
+                "type": [
+                  "integer",
+                  "string",
+                  "null"
+                ],
+                "description": "Id de VLAN (entero si se puede)."
+              },
+              "ip": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "IP con prefijo tal como está en el inventario."
+              },
+              "address": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "IP sin prefijo."
+              },
+              "prefix": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Prefijo de la IP o, si falta, el de la subred de su VLAN."
+              },
+              "gateway": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Gateway declarado en la interfaz."
+              },
+              "network": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Red lógica (VMs)."
+              },
+              "subnet": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Nombre de la subred de su VLAN."
+              },
+              "subnet_cidr": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "CIDR de la subred de su VLAN."
+              },
+              "nad": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "NAD (namespace/nombre) para VMs KubeVirt."
+              },
+              "mtu": {
+                "type": [
+                  "integer",
+                  "string",
+                  "null"
+                ]
+              },
+              "mac": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "MAC."
+              },
+              "connected_to": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "device": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "Peer."
+                  },
+                  "port": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "Puerto del peer."
+                  }
+                }
+              }
+            }
+          },
+          "description": "Interfaces."
+        },
+        "oob": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "type": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "bmc…"
+            },
+            "ip": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "IP OOB."
+            }
+          }
+        },
+        "primary_ip": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Primera IP declarada."
+        },
+        "hypervisor": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "VMs: cluster/namespace/device del hypervisor."
+        },
+        "resources": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "VMs: vcpu, memory, disk…"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Ruta del YAML en el repo de datos."
+        },
+        "raw": {
+          "type": "object",
+          "description": "YAML original con secretos reemplazados por <redacted>."
+        }
+      },
+      "required": [
+        "hostname",
+        "name",
+        "site",
+        "kind",
+        "bonds",
+        "interfaces"
+      ]
+    },
+    "cluster": {
+      "type": "object",
+      "description": "Clúster (sites/<id>/clusters/*.yaml).",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Nombre."
+        },
+        "site": {
+          "type": "string",
+          "description": "Sitio."
+        },
+        "kind": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "kubernetes | ceph | …"
+        },
+        "distro": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Distribución."
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Versión."
+        },
+        "template_ref": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "cluster-template."
+        },
+        "pod_cidr": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "CIDR de pods."
+        },
+        "service_cidr": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "CIDR de servicios."
+        },
+        "cni": {
+          "description": "Bloque cni tal cual (string u objeto)."
+        },
+        "nads": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "NetworkAttachmentDefinition documentado en el clúster.",
+            "properties": {
+              "namespace": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Namespace."
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Nombre."
+              },
+              "type": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "macvlan | macvtap | bridge | vlan | …"
+              },
+              "master": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Interfaz master."
+              },
+              "bridge": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Bridge (type bridge)."
+              },
+              "vlan": {
+                "type": [
+                  "integer",
+                  "string",
+                  "null"
+                ],
+                "description": "Id de VLAN (entero si se puede)."
+              },
+              "mtu": {
+                "type": [
+                  "integer",
+                  "string",
+                  "null"
+                ]
+              },
+              "ipam": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "IPAM (p.ej. whereabouts)."
+              },
+              "subnet": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Subred referida."
+              },
+              "cidr": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "CIDR de esa subred."
+              },
+              "gateway": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Gateway de esa subred."
+              }
+            }
+          },
+          "description": "NADs."
+        },
+        "metallb": {
+          "type": "object",
+          "description": "MetalLB.",
+          "properties": {
+            "version": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Versión."
+            },
+            "mode": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "L2 | BGP."
+            },
+            "pools": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "description": "Pool MetalLB.",
+                "properties": {
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "Nombre del pool."
+                  },
+                  "addresses": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Rangos o CIDRs."
+                  },
+                  "auto_assign": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "subnet": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "Subred."
+                  },
+                  "l2_interfaces": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Interfaces L2."
+                  }
+                }
+              },
+              "description": "Pools."
+            },
+            "services": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "servicio → IP."
+            }
+          }
+        },
+        "vips": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "VIPs (metallb.vips + IPs de metallb.services)."
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "Nodo.",
+            "properties": {
+              "hostname": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Hostname."
+              },
+              "k8s_name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Nombre del nodo en Kubernetes."
+              },
+              "roles": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Roles."
+              },
+              "internal_ip": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "InternalIP."
+              }
+            }
+          },
+          "description": "Nodos (cluster.nodes)."
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Hostnames de los devices del clúster."
+        },
+        "namespaces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Namespaces conocidos."
+        },
+        "helm_values": {
+          "type": "object",
+          "description": "Values efectivos (template + values_overrides), sin secretos."
+        },
+        "vms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/device"
+          },
+          "description": "VMs KubeVirt alojadas en este clúster."
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Ruta del YAML."
+        },
+        "raw": {
+          "type": "object",
+          "description": "YAML original (sin secretos)."
+        }
+      },
+      "required": [
+        "name",
+        "site",
+        "nads",
+        "metallb",
+        "nodes",
+        "members"
+      ]
+    }
+  }
+}

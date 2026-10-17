@@ -13,6 +13,8 @@ import { TemplateExplorer } from "./components/TemplateExplorer";
 import { TopologyGraph } from "./components/TopologyGraph";
 import { ValuesDiffView } from "./components/ValuesDiff";
 import { WizardsView } from "./components/WizardsView";
+import { RendersView } from "./components/renders/RendersView";
+import { rendersFromUrl, withRendersParam, type RenderSubTab } from "./renders";
 import { api } from "./api";
 import { countFindings, scopeFindings, selectionFromFinding } from "./findings";
 import { appPanelSpecs, clampSize, layoutKey } from "./resize";
@@ -74,7 +76,11 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
   // Sesión (borrador del wizard, sitio y vista) propia de cada repositorio.
   const repoKey = config?.active_repo ?? null;
   const [savedSession] = useState(() => loadSession(undefined, repoKey));
-  const [view, setView] = useState<AppView>(() => (savedSession?.editing ? "wizards" : savedSession?.lastBrowse.view ?? "network"));
+  const [view, setView] = useState<AppView>(() =>
+    rendersFromUrl(window.location.href).renders ? "renders" : savedSession?.editing ? "wizards" : savedSession?.lastBrowse.view ?? "network",
+  );
+  // Sub-pestaña de Renders, enlazable: ?tab=renders&sub=resumen|plantillas|diff|guia
+  const [renderSub, setRenderSub] = useState<RenderSubTab>(() => rendersFromUrl(window.location.href).sub);
   const [siteFilter, setSiteFilter] = useState<SiteFilter>(() => savedSession?.lastBrowse.siteFilter ?? "all");
   const [lastBrowse, setLastBrowse] = useState<BrowseSnapshot>(() => savedSession?.lastBrowse ?? defaultBrowse());
   const [wizardDraft, setWizardDraft] = useState<WizardDraft>(() => savedSession?.draft ?? emptyWizardDraft());
@@ -128,7 +134,25 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
   }, []);
 
   useEffect(() => {
-    if (view === "wizards") return;
+    const next = withRendersParam(window.location.href, view === "renders" ? renderSub : null);
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (next !== current) window.history.replaceState(window.history.state, "", next);
+  }, [view, renderSub]);
+
+  useEffect(() => {
+    const onPop = () => {
+      const state = rendersFromUrl(window.location.href);
+      if (state.renders) {
+        setView("renders");
+        setRenderSub(state.sub);
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  useEffect(() => {
+    if (view === "wizards" || view === "renders") return;
     setLastBrowse({
       view: view === "kubernetes" ? "kubernetes" : "network",
       compare,
@@ -633,6 +657,7 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
       className={[
         "app",
         view === "wizards" ? "app-wizards" : "",
+        view === "renders" ? "app-wizards app-renders" : "",
         sidebar.size === 0 ? "sidebar-collapsed" : "",
         !narrow && detail.size === 0 ? "detail-collapsed" : "",
       ]
@@ -691,6 +716,17 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
           >
             Kubernetes
           </button>
+          <button
+            type="button"
+            id="renders-tab"
+            className={view === "renders" ? "is-active" : ""}
+            onClick={() => {
+              setCompare(false);
+              setView("renders");
+            }}
+          >
+            Renders
+          </button>
         </nav>
         <nav className="view-tabs">
           <button
@@ -699,7 +735,7 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
             onClick={() => {
               setCanvas("graph");
               setDiffEntity(null);
-              if (view === "wizards") {
+              if (view === "wizards" || view === "renders") {
                 setView(lastBrowse.view);
                 setCompare(true);
                 setSiteFilter(lastBrowse.siteFilter);
@@ -818,7 +854,10 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
           }}
         />
       ) : null}
-      {view !== "wizards" ? (
+      {view === "renders" ? (
+        <RendersView sub={renderSub} onSub={setRenderSub} sites={sites} editEnabled={editEnabled} onAfterCommit={() => onRefreshConfig?.()} />
+      ) : null}
+      {view !== "wizards" && view !== "renders" ? (
         <>
       {compare && diffError ? <p className="boot-error">Diff: {diffError}</p> : null}
       {compare && diffLoading ? <p className="boot-error">Calculando diff…</p> : null}

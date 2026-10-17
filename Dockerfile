@@ -13,6 +13,7 @@ COPY isot ./isot
 RUN pip install --no-cache-dir .
 COPY templates ./templates
 COPY examples ./examples
+COPY docs ./docs
 COPY isot.example.yaml ./
 COPY --from=frontend /web/dist ./web/dist
 # Plantillas y demo de la herramienta. El repositorio de datos se monta en /data

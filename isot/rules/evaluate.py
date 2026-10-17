@@ -21,6 +21,7 @@ from isot.rules.remediation import fill_default_remediations
 import isot.rules.ingest  # noqa: F401
 import isot.rules.inventory  # noqa: F401
 import isot.rules.k8s  # noqa: F401
+import isot.rules.renders  # noqa: F401
 
 
 class FindingList(list):

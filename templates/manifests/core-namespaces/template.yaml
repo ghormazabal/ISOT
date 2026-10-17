@@ -1,0 +1,12 @@
+# Namespace por cada namespace conocido del clúster (cluster.namespaces + los de sus NADs).
+id: core-namespaces
+version: 1
+description: Namespaces del clúster
+scope: cluster
+tags: [kubernetes, core]
+params:
+  labels: {}
+outputs:
+  - template: namespaces.yaml.j2
+    mode: single
+    path: namespaces.yaml

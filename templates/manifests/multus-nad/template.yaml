@@ -1,0 +1,12 @@
+# NetworkAttachmentDefinition (Multus) por cada NAD del clúster (cluster.nads).
+id: multus-nad
+version: 1
+description: NetworkAttachmentDefinitions de Multus desde cluster.nads
+scope: cluster
+tags: [kubernetes, multus, red]
+params:
+  cni_version: 0.3.1
+outputs:
+  - template: nads.yaml.j2
+    mode: single
+    path: network-attachment-definitions.yaml

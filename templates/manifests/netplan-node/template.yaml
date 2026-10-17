@@ -1,0 +1,25 @@
+# Netplan por nodo a partir de bonds + networking del inventario.
+# Una misma configuración de red, dos salidas:
+#   1) per_item → un archivo por nodo   (<hostname>.yaml)
+#   2) single   → un único YAML con todos los nodos (multi-documento, ---)
+# Ambas usan la misma macro de macros.j2, así que nunca divergen.
+id: netplan-node
+version: 1
+description: Netplan (bonds + VLANs + rutas) por nodo y combinado
+scope: site            # con instance.cluster, `devices` son solo los nodos del clúster
+tags: [netplan, red, nodos]
+# Qué nodos: baremetal con al menos una interfaz VLAN sobre un bond.
+for_each: "devices | selectattr('kind', 'equalto', 'baremetal') | list"
+where: "item.interfaces | selectattr('parent') | list | length > 0"
+params:
+  renderer: networkd
+  bond_mode: 802.3ad
+  default_mtu: 1500
+  dns: true
+outputs:
+  - template: node.yaml.j2
+    mode: per_item
+    path: "nodes/{{ item.name }}.yaml"
+  - template: combined.yaml.j2
+    mode: single
+    path: "all-nodes.yaml"

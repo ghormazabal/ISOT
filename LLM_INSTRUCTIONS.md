@@ -8,7 +8,15 @@ Alcance de este archivo:
 Para **construir o actualizar** un repositorio de datos a partir de fuentes
 desordenadas (planillas, CSV, notas, configs), la guía es
 [docs/llm/INGEST.md](docs/llm/INGEST.md): formato esperado, procedimiento,
-convenciones de `_ingest/` y prompt. Índice de guías: [AGENTS.md](AGENTS.md).
+convenciones de `_ingest/` y prompt. Para **templates de render**
+(`manifest-templates/`, `renders.yaml`: Netplan, manifiestos…) la guía es
+[docs/llm/RENDERS.md](docs/llm/RENDERS.md) (para personas:
+[docs/renders/GUIDE.md](docs/renders/GUIDE.md)). Índice de guías: [AGENTS.md](AGENTS.md).
+
+Límite: el repo de ISoT solo trae templates de render genéricos
+(`templates/manifests/`, solo lectura) y ejemplos; los templates de un
+cliente y toda salida renderizada van al repo de datos o a un repo destino,
+nunca dentro de ISoT.
 
 ISoT es un visualizador/editor local: el inventario vive en uno o varios
 **repositorios de datos** aparte, clonados por el usuario (lista `repos` en

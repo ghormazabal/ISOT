@@ -1,0 +1,15 @@
+# Un archivo netplan por interfaz VLAN de cada nodo (p.ej. para cloud-init por NIC).
+# `explode('interfaces')` convierte [nodo, nodo…] en [{parent: nodo, value: interfaz}, …].
+id: netplan-per-interface
+version: 1
+description: Un netplan por interfaz VLAN (nodo × interfaz)
+scope: site
+tags: [netplan, red, interfaces]
+for_each: "devices | selectattr('kind', 'equalto', 'baremetal') | list | explode('interfaces')"
+where: "item.value.parent and item.value.vlan"
+params:
+  renderer: networkd
+outputs:
+  - template: iface.yaml.j2
+    mode: per_item
+    path: "{{ item.parent.name }}/60-{{ item.value.parent }}.{{ item.value.vlan }}.yaml"

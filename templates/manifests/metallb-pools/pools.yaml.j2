@@ -1,0 +1,27 @@
+{% for pool in cluster.metallb.pools %}
+---
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: {{ pool.name }}
+  namespace: {{ params.namespace }}
+spec:
+  addresses:
+{% for block in pool.addresses %}
+    - {{ block }}
+{% endfor %}
+  autoAssign: {{ (pool.auto_assign if pool.auto_assign is not none else true) | lower }}
+{% if (cluster.metallb.mode or "L2") | upper == "L2" %}
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: {{ pool.name }}
+  namespace: {{ params.namespace }}
+spec:
+  ipAddressPools: [{{ pool.name }}]
+{% if pool.l2_interfaces %}
+  interfaces: {{ pool.l2_interfaces | to_json }}
+{% endif %}
+{% endif %}
+{% endfor %}

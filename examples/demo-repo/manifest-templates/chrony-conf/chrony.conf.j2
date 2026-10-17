@@ -1,0 +1,8 @@
+# chrony.conf · sitio {{ site.name }}
+{% for server in site.ntp_servers %}
+server {{ server }} iburst
+{% endfor %}
+minsources {{ params.minsources }}
+driftfile /var/lib/chrony/drift
+makestep 1.0 3
+rtcsync

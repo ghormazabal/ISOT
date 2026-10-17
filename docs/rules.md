@@ -87,7 +87,7 @@ remediation:
 | K8S-WK-001 | `add_device`: workers hasta el mínimo (2, o 3 con Ceph/Longhorn). Rol de los workers puros, si no de los CP+worker; sin workers, rol `worker` (patrón por convenio del allocator) con el tipo de device de los CP. |
 | K8S-ST-001 | `add_device`: nodos (rol de los workers) hasta igualar las réplicas. |
 | K8S-CP-002 (mismo par de leafs) | `add_device` de un leaf (`device_kind: network`, rol de los leafs actuales) + `followup`: reconectar un control plane o hacer dual-home. El leaf nace sin servidores, con IP de gestión y loopback nuevas. |
-| K8S-CP-002 (mismo hypervisor), K8S-VER-*, K8S-NET-001, K8S-LB-001, K8S-NAD-001, K8S-TPL-001 | `open_entity` del clúster. |
+| K8S-CP-002 (mismo hypervisor), K8S-VER-*, K8S-NET-001, K8S-LB-001, K8S-NAD-001, K8S-NAD-002, K8S-TPL-001 | `open_entity` del clúster. |
 | K8S-CNI-001 | `open_entity` con `target: values`. |
 | K8S-VER-003, INV-HELM-001 (templates) | `open_entity` del template. |
 | INV-* de device / sitio | `open_entity` del device o del sitio. |
@@ -116,6 +116,7 @@ conserva al salir de Editar y al recargar.
 | K8S-LB-001 | error | Pool MetalLB y VIP del API fuera de subred o chocan con device/gateway/VRRP. | override o recorta el pool |
 | K8S-CNI-001 | warning | MTU CNI &gt; MTU interfaz − overhead (VXLAN 50, IPIP 20, nativo 0). | override o baja `cniConfig.mtu` |
 | K8S-NAD-001 | error | NAD con VLAN ausente en topología o no presente en bond/interfaz de los nodos. | override o alinea VLAN |
+| K8S-NAD-002 | warning | VLAN del NAD no permitida en el trunk (`allowed_vlans` / `trunk_vlans` / `vlans`) de los leafs a los que llegan los nodos del clúster (VMs: vía su hypervisor). Leafs sin lista de VLANs no se evalúan. | override o agrega la VLAN al trunk |
 | K8S-WK-001 | warning | &lt;2 workers; &lt;3 si hay Ceph/Longhorn. | override en clúster o sitio |
 | K8S-ST-001 | error | Réplicas Longhorn/Ceph (values o ficha) &gt; nodos elegibles. | override o baja réplicas |
 | K8S-VER-001 | warning | Kubernetes EOL (`isot/rules/k8s_eol.yaml`, fácil de actualizar). | override o upgrade |
@@ -134,6 +135,9 @@ conserva al salir de Editar y al recargar.
 | ING-REF-001 | warning | `_ingest/` cita una entidad o una fuente que no existe. | corrige la clave `<tipo>:<sitio>/<nombre>` |
 | ING-GAP-001 | info / warning | Hueco abierto (info) o pendiente de una persona (`needs-human`, warning) en `_ingest/gaps.yaml`. | resuelve el hueco (`status: resolved` + `resolution`) |
 | ING-SEC-001 | error | Posible secreto (password, community, token, clave privada) en el repo de datos. | — (quítalo; usa `${VAR}`, `<secreto>`, `vault:`) |
+| REN-001 | error | Instancia de render que no se puede generar: template inexistente, `template.yaml` inválido, variable indefinida (StrictUndefined), error de sintaxis Jinja, ruta de salida inválida o `renders.yaml` mal formado. El mensaje trae archivo:línea. | corrige el template o la instancia (Renders → Plantillas) |
+| REN-002 | warning | La salida de un render parece contener un secreto (password, token, community, clave privada). | usa una referencia (`${VAR}`, `<secreto>`, `vault:`) |
 
 Las reglas `ING-*` y el formato de `_ingest/` se describen en
-[docs/llm/INGEST.md](llm/INGEST.md).
+[docs/llm/INGEST.md](llm/INGEST.md); las `REN-*` y el formato de los renders en
+[docs/renders/GUIDE.md](renders/GUIDE.md) y [docs/llm/RENDERS.md](llm/RENDERS.md).

@@ -1,0 +1,12 @@
+# IPAddressPool por cada pool de cluster.metallb.pools (+ L2Advertisement en modo L2).
+id: metallb-pools
+version: 1
+description: MetalLB IPAddressPool + L2Advertisement
+scope: cluster
+tags: [kubernetes, metallb]
+params:
+  namespace: metallb-system
+outputs:
+  - template: pools.yaml.j2
+    mode: single
+    path: metallb-pools.yaml

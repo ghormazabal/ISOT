@@ -584,6 +584,9 @@ def build_schemas() -> dict[str, dict[str, Any]]:
         "cluster-template.schema.json": _template_schema(),
     }
     out.update(_ingest_schemas())
+    from isot.render_schemas import render_schemas
+
+    out.update(render_schemas())
     return out
 
 
@@ -642,6 +645,13 @@ def repo_documents(repo: Path) -> Iterator[tuple[str, Path]]:
             topo = child / "topology" / "index.yaml"
             if topo.is_file():
                 yield "topology.schema.json", topo
+    if (repo / "renders.yaml").is_file():
+        yield "renders.schema.json", repo / "renders.yaml"
+    manifests = repo / "manifest-templates"
+    if manifests.is_dir():
+        for child in sorted(manifests.iterdir()):
+            if (child / "template.yaml").is_file():
+                yield "render-template.schema.json", child / "template.yaml"
     for name in (ingest.STATE_FILE, ingest.GAPS_FILE, ingest.PROVENANCE_FILE):
         path = repo / ingest.INGEST_DIR / name
         if path.is_file():

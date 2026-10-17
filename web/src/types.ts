@@ -393,7 +393,7 @@ export type Selection =
   | { type: "site"; id: string };
 
 export type GroupBy = "cluster" | "kind" | "vlan" | "pair";
-export type AppView = "network" | "kubernetes" | "wizards";
+export type AppView = "network" | "kubernetes" | "wizards" | "renders";
 
 export type WizardField = {
   path: string;

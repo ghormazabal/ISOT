@@ -12,6 +12,8 @@ dependencies = [
     "pyyaml>=6.0",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
+    # Renders (sandbox + StrictUndefined); la sección Renders de la UI depende de él.
+    "jinja2>=3.1",
 ]
 
 [project.optional-dependencies]

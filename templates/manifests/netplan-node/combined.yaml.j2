@@ -1,0 +1,8 @@
+{% import 'macros.j2' as np %}
+# Netplan de {{ items | length }} nodos · sitio {{ site.name }}{% if cluster %} · clúster {{ cluster.name }}{% endif %}
+
+{% for node in items %}
+---
+# {{ node.hostname }} ({{ node.role }})
+{{ np.netplan(node, site, params) }}
+{% endfor %}

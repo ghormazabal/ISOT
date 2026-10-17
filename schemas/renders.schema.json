@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "isot:schemas/renders",
+  "title": "renders.yaml del repositorio de datos",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "target_dir": {
+      "type": "string",
+      "description": "Carpeta destino por defecto en este repo (rendered)."
+    },
+    "default_target": {
+      "type": "string"
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "description": "Destino de renders.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,62}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "repo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id de repos[] o target_repos[] de isot.yaml; vacío = este repo de datos."
+          },
+          "dir": {
+            "type": "string",
+            "description": "Carpeta dentro de ese repo."
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "instances": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "description": "Instancia de render.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,62}$"
+          },
+          "template": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,62}$",
+            "description": "Id del template de render."
+          },
+          "site": {
+            "type": "string",
+            "description": "Sitio (en sites/<id>/renders.yaml es implícito)."
+          },
+          "cluster": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "target": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id de targets[] (por defecto default_target)."
+          },
+          "dir": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Carpeta relativa al dir del destino (por defecto <site>/<cluster|site>/<template>)."
+          },
+          "params": {
+            "type": "object"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "template"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

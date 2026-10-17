@@ -1,0 +1,13 @@
+{% set names = (cluster.namespaces + (cluster.nads | map(attribute='namespace') | list)) | reject('none') | unique | sort %}
+{% for name in names %}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ name }}
+  labels:
+    isot.io/cluster: {{ cluster.name }}
+{% for key, value in params.labels | dictsort %}
+    {{ key }}: "{{ value }}"
+{% endfor %}
+{% endfor %}

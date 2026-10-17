@@ -1,0 +1,18 @@
+{% set node = item.parent %}
+{% set iface = item.value %}
+# {{ node.hostname }} · {{ iface.name }} (VLAN {{ iface.vlan }}{% if iface.subnet %}, {{ iface.subnet }}{% endif %})
+network:
+  version: 2
+  renderer: {{ params.renderer }}
+  vlans:
+    {{ iface.parent }}.{{ iface.vlan }}:
+      id: {{ iface.vlan }}
+      link: {{ iface.parent }}
+{% if iface.address %}
+      addresses: [{{ iface.address }}/{{ iface.prefix or 24 }}]
+{% endif %}
+{% if iface.gateway %}
+      routes:
+        - to: default
+          via: {{ iface.gateway }}
+{% endif %}
