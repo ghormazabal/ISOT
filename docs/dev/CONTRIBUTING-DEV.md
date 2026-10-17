@@ -100,6 +100,9 @@ def rule_foo(ctx: RuleContext) -> list[Finding]:
   escribe solo vía ramas `wizard/…` (`wizard.py` o `renders.commit_files`).
 - Valida todo lo que llegue a git o al disco (`validate_ref`, ids con regex,
   rutas con `safe_rel_dir`/`check_target_path`).
+- Renders: todo ocurre dentro del mismo repo de datos. No añadas destinos en
+  otros repositorios ni código que copie o escriba de un repo a otro;
+  `commit_files` solo acepta rutas dentro de las carpetas destino de ese repo.
 - Test con `fastapi.testclient.TestClient(create_app(repo, edit=True))` sobre
   una copia de la demo con `git init` en `tmp_path`.
 - Documenta la ruta en la sección API del README.

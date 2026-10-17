@@ -21,13 +21,13 @@ principales (no exhaustivo); los módulos privados (`_x`) se omiten.
 |---|---|---|
 | `__main__.py` | CLI `isot <comando>`: web, validate, index, init, demo, demo-diff, config, leakcheck, ingest, schemas | `main` |
 | `paths.py` | Rutas de la herramienta (`ISOT_HOME`) y detección de repos de datos | `tool_root`, `bundled_templates_dir`, `demo_repo_dir`, `is_data_repo`, `find_repo_root` |
-| `config.py` | `isot.yaml`: repos, `target_repos`, edición, UI; búsqueda y validación | `Config`, `DataRepoConfig`, `TargetRepoConfig`, `EditConfig`, `parse_config`, `load_config`, `resolve_repos`, `repo_status` |
+| `config.py` | `isot.yaml`: repos, edición, UI; búsqueda y validación | `Config`, `DataRepoConfig`, `EditConfig`, `parse_config`, `load_config`, `resolve_repos`, `repo_status` |
 | `inventory.py` | Carga perezosa del inventario y de la biblioteca de templates | `Site`, `Device`, `Interface`, `AddressSpace`, `iter_yaml_files`, `find_template_file`, `template_library`, `parse_ref` |
 | `indexer.py` | Índices deterministas `_*_index.json` (y `--check`) | `build_sites_index`, `build_device_index`, `build_cluster_index`, `build_template_index`, `write_indexes`, `check_index`, `main` |
 | `validator.py` | Validación (IPAM, refs, cableado, reglas, schemas) y salida texto/JSON/anotaciones GitHub | `validate`, `collect_issues`, `collect_warnings`, `format_report`, `github_annotations`, `main` |
 | `schemas.py` | JSON Schema del repo de datos generados desde el código; validación de documentos | `build_schemas`, `write_schemas`, `check_schemas`, `repo_documents`, `validate_document`, `main` |
 | `render_schemas.py` | Schemas del contexto de render, `template.yaml` y `renders.yaml` | `render_context_schema`, `render_template_schema`, `renders_config_schema`, `render_schemas` |
-| `renders.py` | Motor de renders: filtros, sandbox, contexto, templates, instancias, destinos, diff, apply | `make_env`, `redact`, `scan_secrets`, `ContextBuilder`, `TemplateDef`, `parse_template`, `list_templates`, `find_template`, `load_render_config`, `check_target_path`, `resolve_targets`, `render_template`, `RenderService`, `diff_files`, `commit_files`, `file_diffs` |
+| `renders.py` | Motor de renders: filtros, sandbox, contexto, templates, instancias, carpeta destino (mismo repo), diff, apply | `make_env`, `redact`, `scan_secrets`, `ContextBuilder`, `TemplateDef`, `parse_template`, `list_templates`, `find_template`, `load_render_config`, `check_target_path`, `target_folder`, `render_template`, `RenderService`, `diff_files`, `commit_files`, `file_diffs` |
 | `web.py` | App FastAPI: índices, grafos, detalle, values, refs/diff, hallazgos, wizards, multi-repo, estáticos | `create_app`, `RepoRegistry`, `RepoPrefixMiddleware`, `graph_from_index`, `kubernetes_graph`, `global_sites_graph`, `main` |
 | `web_renders.py` | Rutas `/api/renders/*` (lectura siempre; escritura con edición, en ramas) | `register`, `validate_renders_text` |
 | `wizard.py` | Wizards: preview en memoria, commit en `wizard/<slug>`, push opcional | `device_preview`, `site_preview`, `commit_preview`, `unique_wizard_branch`, `current_branch`, `push_branch`, `WizardError` |

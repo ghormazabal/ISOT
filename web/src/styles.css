@@ -2585,10 +2585,8 @@ label.checkbox {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-.render-targets {
-  margin: 8px 0;
-  padding-left: 18px;
-  font-size: 13px;
+.render-row-error {
+  font-size: 12px;
 }
 
 /* Plantillas: biblioteca | editor | preview */

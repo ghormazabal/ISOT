@@ -50,11 +50,9 @@ export type PreviewBody = {
 
 export type ConfigBody = {
   text?: string;
-  settings?: { target_dir?: string; default_target?: string };
+  settings?: { target_dir?: string };
   upsert_instance?: Partial<RenderInstance> & { id: string; template: string; site: string };
   remove_instance?: string;
-  upsert_target?: { id: string; repo?: string; dir?: string; name?: string };
-  remove_target?: string;
   branch?: string | null;
   description?: string;
 };
@@ -67,7 +65,7 @@ export type TemplateSaveBody = {
   branch?: string | null;
 };
 
-export type ApplyBody = { target: string; instances?: string[]; prune?: boolean; branch?: string | null };
+export type ApplyBody = { instances?: string[]; prune?: boolean; branch?: string | null };
 
 export const rendersApi = {
   dashboard: (ref?: string | null) => request<RendersDashboard>(`/api/renders${query({ ref })}`),
@@ -81,7 +79,7 @@ export const rendersApi = {
   context: (site: string, cluster?: string | null, ref?: string | null) =>
     request<Record<string, unknown>>(`/api/renders/context${query({ site, cluster, ref })}`),
   preview: (body: PreviewBody) => post<RenderPreview>("/api/renders/preview", body),
-  diff: (params: { target?: string; instance?: string | null; target_ref?: string | null; ref?: string | null }) =>
+  diff: (params: { instance?: string | null; target_ref?: string | null; ref?: string | null }) =>
     request<RendersDiff>(`/api/renders/diff${query(params)}`),
   guide: (doc: "human" | "llm" = "human") => request<{ path: string; markdown: string }>(`/api/renders/guide${query({ doc })}`),
   config: (ref?: string | null) =>

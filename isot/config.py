@@ -46,8 +46,7 @@ HINTS = [
 ]
 CONFIG_FILENAME = "isot.yaml"
 USER_CONFIG = Path("~/.config/isot/config.yaml")
-TOP_KEYS = {"version", "data_repo", "repos", "default_repo", "templates", "edit", "ui", "target_repos"}
-TARGET_REPO_KEYS = {"id", "name", "path", "remote", "edit"}
+TOP_KEYS = {"version", "data_repo", "repos", "default_repo", "templates", "edit", "ui"}
 DATA_REPO_KEYS = {"path", "remote", "branch"}
 REPO_KEYS = {"id", "name", "path", "remote", "branch", "edit"}
 SAFE_REPO_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,62}$")
@@ -91,28 +90,6 @@ class DataRepoConfig:
 
 
 @dataclass
-class TargetRepoConfig:
-    """Repositorio destino de renders (p.ej. un repo GitOps). No es un repo de datos:
-    solo se lee para el diff y se escribe en ramas wizard/… al aplicar un render."""
-
-    id: str
-    path: Path
-    name: str | None = None
-    remote: str = "origin"
-    # None: hereda edit.enabled; False: solo diff, nunca se escribe.
-    edit: bool | None = None
-
-    @property
-    def label(self) -> str:
-        return self.name or self.path.name
-
-    def error(self) -> str | None:
-        if not self.path.is_dir():
-            return f"{self.id}: path={display_path(self.path)} no existe o no es un directorio"
-        return None
-
-
-@dataclass
 class EditConfig:
     enabled: bool = False
     push: bool = False
@@ -136,7 +113,6 @@ class Config:
     templates: list[Path] = field(default_factory=list)
     edit: EditConfig = field(default_factory=EditConfig)
     ui: UiConfig = field(default_factory=UiConfig)
-    target_repos: list[TargetRepoConfig] = field(default_factory=list)
 
     def repo(self, repo_id: str | None = None) -> DataRepoConfig | None:
         if not self.repos:
@@ -302,48 +278,7 @@ def parse_config(data: Any, source: Path | None) -> Config:
         _check_keys(raw_ui, UI_KEYS, f"{where}: ui")
         ui.title = _optional_text(raw_ui.get("title"), "ui.title")
 
-    target_repos: list[TargetRepoConfig] = []
-    raw_targets = data.get("target_repos")
-    if raw_targets is not None:
-        if not isinstance(raw_targets, list):
-            raise ConfigError(f"{where}: target_repos debe ser una lista de {{id, path, …}}")
-        for index, item in enumerate(raw_targets):
-            label = f"target_repos[{index}]"
-            if not isinstance(item, dict):
-                raise ConfigError(f"{where}: {label} debe ser un mapa (id, name, path, remote, edit)")
-            _check_keys(item, TARGET_REPO_KEYS, f"{where}: {label}")
-            target_id = _optional_text(item.get("id"), f"{label}.id")
-            if not target_id or not SAFE_REPO_ID.fullmatch(target_id):
-                raise ConfigError(f"{where}: {label}.id inválido o ausente (minúsculas, números, . _ -)")
-            raw_path = _optional_text(item.get("path"), f"{label}.path")
-            if not raw_path:
-                raise ConfigError(f"{where}: falta {label}.path")
-            remote = _optional_text(item.get("remote"), f"{label}.remote") or "origin"
-            if not SAFE_REMOTE.fullmatch(remote):
-                raise ConfigError(f"{label}.remote debe ser el nombre de un remote git")
-            target_repos.append(
-                TargetRepoConfig(
-                    id=target_id,
-                    path=_expand(raw_path, base),
-                    name=_optional_text(item.get("name"), f"{label}.name"),
-                    remote=remote,
-                    edit=_bool(item["edit"], f"{label}.edit") if "edit" in item else None,
-                )
-            )
-        known = [r.id for r in repos] + [t.id for t in target_repos]
-        dupes = sorted({item for item in known if known.count(item) > 1})
-        if dupes:
-            raise ConfigError(f"{where}: ids repetidos entre repos y target_repos: {', '.join(dupes)}")
-
-    return Config(
-        source=source,
-        repos=repos,
-        default_repo=default_repo,
-        templates=templates,
-        edit=edit,
-        ui=ui,
-        target_repos=target_repos,
-    )
+    return Config(source=source, repos=repos, default_repo=default_repo, templates=templates, edit=edit, ui=ui)
 
 
 def _parse_repo(raw: dict[str, Any], base: Path, where: str, label: str) -> DataRepoConfig:

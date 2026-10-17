@@ -14,8 +14,13 @@ Guía para personas: [docs/renders/GUIDE.md](../renders/GUIDE.md). Esquemas:
 - El repo de ISoT solo contiene el motor, templates genéricos
   (`templates/manifests/`, **solo lectura**) y ejemplos ficticios.
 - Datos reales, templates de un cliente y **toda salida renderizada** van al
-  repo de datos (`manifest-templates/`, `renders.yaml`, `rendered/`) o a un
-  repo destino. Nunca escribas salidas ni templates de cliente dentro de ISoT.
+  repo de datos (`manifest-templates/`, `renders.yaml`, `rendered/`). Nunca
+  escribas salidas ni templates de cliente dentro de ISoT.
+- **Un solo repositorio**: un render funciona enteramente dentro del mismo
+  repo de datos. El destino es solo una carpeta de ese repo; ISoT nunca mueve
+  ni escribe nada de un repositorio a otro (no existen `targets`,
+  `default_target` ni `target_repos`; si los ves en un `renders.yaml`, son un
+  error).
 - Para personalizar un template incluido, cópialo a
   `manifest-templates/<nuevo-id>/` del repo de datos con otro `id`.
 - No inventes datos: si algo no está en el contexto, no existe. No pongas
@@ -30,7 +35,7 @@ Guía para personas: [docs/renders/GUIDE.md](../renders/GUIDE.md). Esquemas:
   manifest-templates/<id>/
     template.yaml                   # spec
     *.j2                            # Jinja2 (salidas y macros)
-  rendered/…                        # salida (destino «local»), con .isot-render.json
+  rendered/…                        # salida (mismo repo), con .isot-render.json
 ```
 
 ## 2. `template.yaml`
@@ -104,18 +109,13 @@ uses claves con esos nombres; por eso los values de Helm son
 
 ```yaml
 version: 1
-target_dir: rendered          # carpeta destino por defecto (repo de datos)
-default_target: local         # local = este repo de datos
-targets:                      # opcional
-  - id: gitops
-    repo: gitops              # id en repos o target_repos de isot.yaml
-    dir: clusters
+target_dir: rendered          # carpeta destino por defecto, en este mismo repo
 instances:
   - id: site1-netplan         # único
     template: netplan-node
     site: site1
     cluster: site1-apps       # opcional
-    target: gitops            # opcional
+    target_dir: gitops/clusters  # opcional; otra carpeta de este mismo repo
     dir: a/b                  # opcional; por defecto <sitio>/<clúster o "site">/<template>
     params: {default_mtu: 9000}
     enabled: true
@@ -124,10 +124,10 @@ instances:
 
 ## 6. Diff y aplicar
 
-ISoT renderiza en memoria y compara con `<destino>/<dir>/<carpeta de la
-instancia>`: `new`, `modified`, `unchanged`, `orphaned`. «Aplicar» (solo en
+ISoT renderiza en memoria y compara con `<target_dir>/<dir>` del mismo repo
+de datos: `new`, `modified`, `unchanged`, `orphaned`. «Aplicar» (solo en
 modo edición, con confirmación del diff) escribe los archivos y el
-`.isot-render.json` en una rama `wizard/…` del repo destino. Se rechazan
+`.isot-render.json` en una rama `wizard/…` de ese mismo repo. Se rechazan
 destinos con `..`, absolutos, por `.git`, enlaces simbólicos que escapan del
 repo y cualquier ruta dentro de la instalación de ISoT. No intentes
 saltarte estas comprobaciones.

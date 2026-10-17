@@ -22,14 +22,14 @@ type InstanceDraft = {
   template: string;
   site: string;
   cluster: string;
-  target: string;
+  target_dir: string;
   dir: string;
   params: string;
   enabled: boolean;
   description: string;
 };
 
-const EMPTY_DRAFT: InstanceDraft = { id: "", template: "", site: "", cluster: "", target: "", dir: "", params: "{}", enabled: true, description: "" };
+const EMPTY_DRAFT: InstanceDraft = { id: "", template: "", site: "", cluster: "", target_dir: "", dir: "", params: "{}", enabled: true, description: "" };
 
 function draftFrom(row: RenderInstance): InstanceDraft {
   return {
@@ -37,7 +37,7 @@ function draftFrom(row: RenderInstance): InstanceDraft {
     template: row.template,
     site: row.site,
     cluster: row.cluster ?? "",
-    target: row.target ?? "",
+    target_dir: row.target_dir ?? "",
     dir: row.dir_explicit ? row.dir : "",
     params: JSON.stringify(row.params ?? {}, null, 2),
     enabled: row.enabled,
@@ -71,7 +71,7 @@ export function RendersSummaryTab({ refName, version, sites, write, onAfterCommi
   const [clusters, setClusters] = useState<ClusterIndexEntry[]>([]);
   const [flow, setFlow] = useState<WriteFlow | null>(null);
   const [textMode, setTextMode] = useState<{ text: string; errors: string[] } | null>(null);
-  const [settings, setSettings] = useState<{ target_dir: string; default_target: string } | null>(null);
+  const [settings, setSettings] = useState<{ target_dir: string } | null>(null);
   const [siteFilter, setSiteFilter] = useState("all");
 
   useEffect(() => {
@@ -83,7 +83,7 @@ export function RendersSummaryTab({ refName, version, sites, write, onAfterCommi
         if (cancelled) return;
         setData(dash);
         setTemplates(list);
-        setSettings({ target_dir: dash.config.target_dir, default_target: dash.config.default_target });
+        setSettings({ target_dir: dash.config.target_dir });
       })
       .catch((err: unknown) => !cancelled && setError(errorMessage(err)))
       .finally(() => !cancelled && setLoading(false));
@@ -131,7 +131,7 @@ export function RendersSummaryTab({ refName, version, sites, write, onAfterCommi
         template: draft.template,
         site: draft.site,
         cluster: draft.cluster || null,
-        target: draft.target || null,
+        target_dir: draft.target_dir || null,
         dir: draft.dir || undefined,
         params,
         enabled: draft.enabled,
@@ -181,15 +181,11 @@ export function RendersSummaryTab({ refName, version, sites, write, onAfterCommi
           onClick={() => onOpenDiff(null)}
         />
       </div>
-      {Object.entries(data.drift.by_target).some(([, item]) => item.error) ? (
+      {data.drift.error ? (
         <ul className="render-errors">
-          {Object.entries(data.drift.by_target)
-            .filter(([, item]) => item.error)
-            .map(([id, item]) => (
-              <li key={id} className="is-warning">
-                <strong>destino {id}</strong> {item.error}
-              </li>
-            ))}
+          <li className="is-warning">
+            <strong>carpeta destino</strong> {data.drift.error}
+          </li>
         </ul>
       ) : null}
 
@@ -306,8 +302,8 @@ export function RendersSummaryTab({ refName, version, sites, write, onAfterCommi
                     {row.cluster ? ` / ${row.cluster}` : ""}
                   </td>
                   <td>
-                    <code>{row.target_dir ?? "—"}</code>
-                    {row.target ? <span className="muted"> ({row.target})</span> : null}
+                    <code>{row.folder ?? "—"}</code>
+                    {row.folder_error ? <div className="error render-row-error">{row.folder_error}</div> : null}
                   </td>
                   <td>{row.files}</td>
                   <td>
@@ -385,19 +381,12 @@ export function RendersSummaryTab({ refName, version, sites, write, onAfterCommi
               </select>
             </label>
             <label>
-              <span>destino</span>
-              <select value={draft.target} onChange={(event) => setDraft({ ...draft, target: event.target.value })}>
-                <option value="">(por defecto: {data.config.default_target})</option>
-                {data.targets.map((target) => (
-                  <option key={target.id} value={target.id}>
-                    {target.id} · {target.name}/{target.dir}
-                  </option>
-                ))}
-              </select>
+              <span>carpeta destino (opcional, en este repo)</span>
+              <input value={draft.target_dir} placeholder={data.config.target_dir} onChange={(event) => setDraft({ ...draft, target_dir: event.target.value })} />
             </label>
             <label>
-              <span>carpeta (opcional)</span>
-              <input value={draft.dir} placeholder="<sitio>/<cluster|sitio>/<template>" onChange={(event) => setDraft({ ...draft, dir: event.target.value })} />
+              <span>subcarpeta (opcional)</span>
+              <input value={draft.dir} placeholder="<sitio>/<cluster o site>/<template>" onChange={(event) => setDraft({ ...draft, dir: event.target.value })} />
             </label>
             <label className="span-2">
               <span>descripción</span>
@@ -425,42 +414,23 @@ export function RendersSummaryTab({ refName, version, sites, write, onAfterCommi
 
       {settings ? (
         <section className="render-card render-form">
-          <h3>Destino por defecto</h3>
+          <h3>Carpeta destino</h3>
           <p className="muted">
-            Los renders se comparan (y se aplican) contra <code>{"<destino>/<target_dir>/<carpeta de la instancia>"}</code>. El destino «local» es este mismo repo de datos; otros destinos
-            se declaran en <code>renders.yaml → targets</code> (repos de <code>isot.yaml</code>). Nunca dentro de la instalación de ISoT.
+            Los renders se comparan (y se aplican) contra <code>{"<target_dir>/<sitio>/<clúster o site>/<template>"}</code> de <strong>este mismo repo de datos</strong>;
+            cada instancia puede usar otra carpeta con su propio <code>target_dir</code>. ISoT nunca mueve ni escribe nada de un repositorio a otro, ni dentro de su instalación.
           </p>
           <div className="render-form-grid">
             <label>
               <span>target_dir</span>
               <input value={settings.target_dir} onChange={(event) => setSettings({ ...settings, target_dir: event.target.value })} />
             </label>
-            <label>
-              <span>default_target</span>
-              <select value={settings.default_target} onChange={(event) => setSettings({ ...settings, default_target: event.target.value })}>
-                {data.targets.map((target) => (
-                  <option key={target.id} value={target.id}>
-                    {target.id}
-                  </option>
-                ))}
-              </select>
-            </label>
           </div>
-          <ul className="render-targets">
-            {data.targets.map((target) => (
-              <li key={target.id}>
-                <code>{target.id}</code> → {target.name} / <code>{target.dir}</code>
-                {target.external ? <span className="muted"> (repo destino aparte)</span> : null}
-                {target.error ? <span className="error"> {target.error}</span> : null}
-              </li>
-            ))}
-          </ul>
           <div className="wizard-actions">
             <button
               type="button"
-              disabled={!write.canWrite || (settings.target_dir === data.config.target_dir && settings.default_target === data.config.default_target)}
+              disabled={!write.canWrite || settings.target_dir === data.config.target_dir}
               title={write.reason}
-              onClick={() => startConfig("Destino por defecto", { settings, description: "destino de renders" })}
+              onClick={() => startConfig("Carpeta destino", { settings, description: "carpeta destino de renders" })}
             >
               Ver cambios…
             </button>

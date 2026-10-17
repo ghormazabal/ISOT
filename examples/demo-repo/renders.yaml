@@ -2,15 +2,11 @@
 # sitio/clúster y dónde se compara/escribe la salida. Se edita desde la web
 # (Renders → Resumen / Plantillas / Diff). Ver docs/renders/GUIDE.md.
 version: 1
-# Carpeta destino por defecto, dentro de este mismo repo de datos.
+# Carpeta destino por defecto, dentro de este mismo repo de datos. Todo render
+# vive en este repositorio: ISoT nunca mueve ni escribe nada en otro repo.
+# Una instancia puede usar otra carpeta de este mismo repo con su propio
+# `target_dir` (p.ej. `target_dir: gitops/clusters`).
 target_dir: rendered
-default_target: local
-# Destinos adicionales: otra carpeta, u otro repositorio declarado en
-# target_repos de isot.yaml (p.ej. un repo GitOps). Ejemplo:
-# targets:
-#   - id: gitops
-#     repo: gitops-demo
-#     dir: clusters
 instances:
   - id: site1-apps-netplan
     template: netplan-node

@@ -30,7 +30,11 @@ Reglas comunes:
   genéricos (`templates/manifests/`, solo lectura) y ejemplos ficticios. Los
   datos reales, los templates personalizados de un cliente y **toda salida
   renderizada** viven siempre en el repositorio de datos (`manifest-templates/`,
-  `renders.yaml`, `rendered/`) o en repositorios destino (`target_repos` en
-  `isot.yaml`), nunca en el repo de ISoT ni en su carpeta de instalación: ISoT
-  rechaza cualquier destino que resuelva dentro de ella y no guarda cachés ni
-  salidas propias.
+  `renders.yaml`, `rendered/`), nunca en el repo de ISoT ni en su carpeta de
+  instalación: ISoT rechaza cualquier destino que resuelva dentro de ella y no
+  guarda cachés ni salidas propias.
+- **Un solo repositorio por render**: los renders funcionan enteramente dentro
+  del mismo repo de datos. La carpeta destino es siempre una carpeta de ese
+  repo (`rendered/` por defecto, o el `target_dir` de la instancia) y
+  «Aplicar» hace commit en una rama `wizard/…` de ese mismo repo. ISoT nunca
+  mueve ni escribe nada de un repositorio a otro: no hay repos destino.

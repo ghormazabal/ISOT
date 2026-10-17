@@ -39,17 +39,6 @@ data_repo:
 templates: []
 #  - ~/repos/plantillas-k8s
 
-# Opcional: repositorios DESTINO de renders (p.ej. un repo GitOps). No son repos
-# de datos: la sección Renders compara su contenido con lo renderizado y, en modo
-# edición, escribe el render en una rama wizard/… de ese repo. Se referencian
-# desde renders.yaml del repo de datos (targets: [{id, repo: <id>, dir}]).
-# Nunca pueden estar dentro de la instalación de ISoT.
-target_repos: []
-#  - id: gitops
-#    name: GitOps clusters
-#    path: ~/repos/gitops
-#    edit: false                   # opcional: solo diff, nunca escribir
-
 edit:
   # Wizards de alta (devices y sitios). También: `isot web --edit` o ISOT_EDIT=1.
   enabled: false

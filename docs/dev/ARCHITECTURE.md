@@ -23,12 +23,9 @@ flowchart LR
   subgraph data["Repos de datos (Git del usuario)"]
     repo[("sites/, cluster-templates/,<br/>manifest-templates/, renders.yaml,<br/>_ingest/, rendered/")]
   end
-  subgraph target["Repos destino (opcional)"]
-    gitops[("salida de renders")]
-  end
   core -->|lee working tree o refs| repo
   core -->|commits en ramas wizard/…| repo
-  core -->|apply de renders en ramas wizard/…| gitops
+  core -->|apply de renders en ramas wizard/… del mismo repo| repo
 ```
 
 ## Piezas
@@ -61,10 +58,12 @@ Catálogo: [docs/rules.md](../rules.md).
 Templates Jinja2 (`template.yaml` + `*.j2`) sobre un **contexto versionado**
 derivado del inventario (`ContextBuilder`, `context_version: 1`, esquema en
 `schemas/render-context.schema.json`). `RenderService` resuelve instancias
-(`renders.yaml`), destinos (`targets`, `target_repos`), renderiza en memoria,
+(`renders.yaml`) y su carpeta destino (`target_dir`), renderiza en memoria,
 compara contra la carpeta destino (`target_diff`) y prepara el «apply»
 (`apply_plan` + `commit_files`). Guías: [docs/renders/GUIDE.md](../renders/GUIDE.md),
-[docs/llm/RENDERS.md](../llm/RENDERS.md).
+[docs/llm/RENDERS.md](../llm/RENDERS.md). Principio: **un render vive en un
+solo repo**; la carpeta destino es siempre una carpeta del mismo repo de datos
+y ISoT nunca escribe de un repositorio a otro.
 
 ### Edición (`isot/wizard.py`)
 Los wizards (nuevo equipo, nuevo sitio, arreglar un hallazgo) y las
@@ -82,7 +81,7 @@ de pasarlas a git.
 
 ### Configuración y multi-repo (`isot/config.py`, `isot/web.py`)
 `isot.yaml` declara `repos` (id, path, branch, edit…), `default_repo`,
-`target_repos` (destinos de renders), `edit` y `ui`. En la API,
+`edit` y `ui`. En la API,
 `RepoRegistry` mantiene los repos y `RepoPrefixMiddleware` reescribe
 `/api/repos/{id}/…` a `/api/…` con el repo elegido; sin prefijo se usa el
 repo por defecto. Cada repo es una fuente de verdad independiente.
@@ -114,7 +113,8 @@ añaden el prefijo `/api/repos/{id}`.
    hallazgos nuevos → `POST …/commit` → rama `wizard/…` → revisión y merge
    en el repo de datos (PR/MR, CI con el workflow reutilizable).
 4. **Renders**: template + instancia + contexto → archivos en memoria →
-   diff contra el destino → «aplicar» en una rama del repo destino.
+   diff contra la carpeta destino del mismo repo → «aplicar» en una rama
+   `wizard/…` de ese mismo repo.
 
 ## Por qué está diseñado así
 
@@ -125,8 +125,8 @@ añaden el prefijo `/api/repos/{id}`.
   CODEOWNERS, CI).
 - **Solo plantillas genéricas en ISoT.** `templates/` (sitios,
   cluster-templates, renders) es una biblioteca de solo lectura; personalizar
-  = clonar al repo de datos. Toda salida renderizada va al repo de datos o a
-  un repo destino, nunca a la instalación de ISoT (se rechaza por código y
+  = clonar al repo de datos. Toda salida renderizada va al mismo repo de
+  datos, nunca a otro repositorio ni a la instalación de ISoT (se rechaza por código y
   hay tests de ello). Esto evita mezclar datos de clientes con la
   herramienta.
 - **Edición vía ramas.** Nada escribe en `main`: los wizards y renders

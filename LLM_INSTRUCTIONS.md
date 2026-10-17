@@ -15,8 +15,10 @@ convenciones de `_ingest/` y prompt. Para **templates de render**
 
 Límite: el repo de ISoT solo trae templates de render genéricos
 (`templates/manifests/`, solo lectura) y ejemplos; los templates de un
-cliente y toda salida renderizada van al repo de datos o a un repo destino,
-nunca dentro de ISoT.
+cliente y toda salida renderizada van al repo de datos, nunca dentro de ISoT.
+Los renders funcionan enteramente dentro del mismo repo de datos (carpeta
+`rendered/` o el `target_dir` de la instancia, commit en una rama `wizard/…`
+de ese repo): ISoT nunca mueve ni escribe nada de un repositorio a otro.
 
 ISoT es un visualizador/editor local: el inventario vive en uno o varios
 **repositorios de datos** aparte, clonados por el usuario (lista `repos` en

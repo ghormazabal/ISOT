@@ -130,9 +130,9 @@ Repositorio de datos (uno por inventario, en su propio remoto; `examples/demo-re
 │   └── _template_index.json            # (en cluster-templates/)
 ├── site-templates/<nombre>/            # Opcional: plantillas de sitio propias
 ├── _ingest/                            # Opcional: state, provenance y gaps de la ingesta con LLM
-├── renders.yaml                        # Opcional: instancias de render, target_dir y targets
+├── renders.yaml                        # Opcional: instancias de render y su carpeta destino (target_dir)
 ├── manifest-templates/<id>/            # Opcional: templates de render propios (template.yaml + *.j2)
-├── rendered/                           # Opcional: salida aplicada de los renders (destino «local»)
+├── rendered/                           # Opcional: salida aplicada de los renders (mismo repo)
 └── .github/workflows/isot-validate.yml # CI con el workflow reutilizable de ISoT
 ```
 
@@ -566,16 +566,16 @@ lo que quieras) **sin salir de la web**. Tiene cuatro sub-pestañas enlazables
 (`?tab=renders&sub=resumen|plantillas|diff|guia`):
 
 - **Resumen**: conteos por sitio/clúster y estado, instancias (crear, editar,
-  quitar), destino por defecto y `renders.yaml` como texto; el contador de
+  quitar), carpeta destino (`target_dir`, del mismo repo) y `renders.yaml` como texto; el contador de
   drift enlaza al Diff.
 - **Plantillas**: biblioteca (templates del repo de datos + incluidos en ISoT,
   de solo lectura y clonables), editor por archivo con errores por línea,
   **preview en vivo** por sitio/clúster/instancia y explorador del contexto.
-- **Diff**: render fresco contra la carpeta destino (`rendered/` por defecto,
-  configurable con `target_dir`, por instancia o hacia otro repo con
-  `targets`): árbol con *nuevo / modificado / igual / huérfano* y diff
+- **Diff**: render fresco contra la carpeta destino **de este mismo repo de
+  datos** (`rendered/` por defecto, configurable con `target_dir` global o por
+  instancia): árbol con *nuevo / modificado / igual / huérfano* y diff
   unificado o lado a lado. **Aplicar** (solo con edición) muestra el diff y
-  hace commit en una rama `wizard/…` del repo destino.
+  hace commit en una rama `wizard/…` del mismo repo de datos.
 - **Guía**: [docs/renders/GUIDE.md](docs/renders/GUIDE.md) (personas) y
   [docs/llm/RENDERS.md](docs/llm/RENDERS.md) (LLMs) dentro de la UI.
 
@@ -589,10 +589,15 @@ symlinks que escapen). Reglas: `REN-001`, `REN-002` y `K8S-NAD-002`.
 genéricos (`templates/manifests/`, solo lectura) y ejemplos ficticios. Los
 datos reales, los templates personalizados de un cliente y **toda salida
 renderizada** viven siempre en el repositorio de datos (`manifest-templates/`,
-`renders.yaml`, `rendered/`) o en repositorios destino (`target_repos` en
-`isot.yaml`), nunca en el repo de ISoT ni en su carpeta de instalación: ISoT
-rechaza cualquier destino que resuelva dentro de ella y no guarda cachés ni
-salidas propias.
+`renders.yaml`, `rendered/`), nunca en el repo de ISoT ni en su carpeta de
+instalación: ISoT rechaza cualquier destino que resuelva dentro de ella y no
+guarda cachés ni salidas propias.
+
+**Un solo repositorio por render**: los renders funcionan enteramente dentro
+del mismo repo de datos. La carpeta destino es siempre una carpeta de ese
+repo (`rendered/` por defecto, o el `target_dir` de la instancia) y
+«Aplicar» hace commit en una rama `wizard/…` de ese mismo repo. ISoT nunca
+mueve ni escribe nada de un repositorio a otro: no hay repos destino.
 
 ![Renders: resumen con conteos y drift](docs/images/renders-summary.png)
 
@@ -676,8 +681,8 @@ rutas separadas por `:`) fuerza los repositorios sin archivo de
 configuración; el id de cada uno es el nombre de su carpeta.
 
 Forma general: `repos: [{id, name?, path, remote?, branch?, edit?}]` más
-`default_repo` y, opcional, `target_repos: [{id, path, name?, remote?, edit?}]`
-(repos que solo reciben salidas de [renders](#renders), p. ej. un repo GitOps). Para un solo repositorio, `data_repo` es la abreviatura de
+`default_repo`. Cada repo es independiente: los [renders](#renders) de un repo
+se escriben solo en ese repo. Para un solo repositorio, `data_repo` es la abreviatura de
 una lista de un elemento (id = nombre de la carpeta):
 
 ```yaml
@@ -828,7 +833,7 @@ Con edición: `GET /api/wizard/status`, `GET /api/wizard/cabling-defaults`,
 `POST /api/wizard/device/preview|commit`, `POST /api/wizard/site/preview|commit`.
 Renders: `GET /api/renders[?ref=]`, `/api/renders/templates[/{id}[?source=repo|bundled]]`,
 `/api/renders/templates/{id}/clone?new_id=`, `/api/renders/context?site=&cluster=`,
-`POST /api/renders/preview`, `/api/renders/diff?target=&instance=&target_ref=`,
+`POST /api/renders/preview`, `/api/renders/diff?instance=&target_ref=`,
 `/api/renders/config`, `/api/renders/guide?doc=human|llm`; con edición
 `POST /api/renders/templates/save|config|apply/preview|commit` (siempre en una
 rama `wizard/…`).

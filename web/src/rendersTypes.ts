@@ -25,7 +25,8 @@ export type RenderInstance = {
   template: string;
   site: string;
   cluster: string | null;
-  target: string | null;
+  /** Carpeta destino propia (mismo repo de datos); null = la global. */
+  target_dir: string | null;
   dir: string;
   dir_explicit: boolean;
   params: Record<string, unknown>;
@@ -40,18 +41,10 @@ export type RenderTemplateDetail = RenderTemplateSummary & {
   used_by: RenderInstance[];
 };
 
-export type RenderTarget = {
-  id: string;
-  name: string;
-  repo: string | null;
-  external: boolean;
-  dir: string;
-  error: string | null;
-};
-
 export type DashboardRow = RenderInstance & {
-  target: string | null;
-  target_dir: string | null;
+  /** Carpeta completa de la salida dentro del repo de datos. */
+  folder: string | null;
+  folder_error: string | null;
   template_source: string | null;
   version: string;
   files: number;
@@ -76,11 +69,11 @@ export type RendersDashboard = {
     in_sync: number;
     drift: number;
     stale: number;
-    by_target: Record<string, { in_sync?: number; drift?: number; stale?: number; counts?: StatusCounts; error?: string }>;
+    counts: StatusCounts;
+    error: string | null;
   };
   rows: DashboardRow[];
-  config: { path: string; exists: boolean; target_dir: string; default_target: string; errors: string[] };
-  targets: RenderTarget[];
+  config: { path: string; exists: boolean; target_dir: string; errors: string[] };
   edit: boolean;
   ref: string | null;
 };
@@ -117,7 +110,7 @@ export type DiffInstance = {
   version: string;
   site: string;
   cluster: string | null;
-  dir: string;
+  dir: string | null;
   errors: RenderError[];
   warnings: RenderWarning[];
   files: DiffFile[];
@@ -130,19 +123,19 @@ export type DiffInstance = {
 };
 
 export type RendersDiff = {
-  target: RenderTarget;
+  target_dir: string;
+  error: string | null;
   ref: string | null;
   instances: DiffInstance[];
   counts: StatusCounts;
   in_sync: number;
   drift: number;
-  targets: RenderTarget[];
   edit: boolean;
 };
 
 export type ProposedFile = { path: string; status: string; diff: string; content: string | null };
 
-export type WritePreview = { files: ProposedFile[]; errors?: Array<RenderError | string>; text?: string; target?: RenderTarget; skipped?: string[] };
+export type WritePreview = { files: ProposedFile[]; errors?: Array<RenderError | string>; text?: string; skipped?: string[]; folders?: string[] };
 
 export type WriteResult = {
   ok: boolean;
@@ -154,5 +147,4 @@ export type WriteResult = {
   message: string;
   files: string[];
   push?: { ok: boolean; message: string };
-  target?: RenderTarget;
 };

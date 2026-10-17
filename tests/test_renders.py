@@ -175,9 +175,11 @@ def test_target_inside_isot_installation_is_rejected(tmp_path: Path) -> None:
         check_target_path(tool_root(), "rendered")
     with pytest.raises(RenderError, match="instalación de ISoT"):
         check_target_path(demo_repo_dir(), "rendered")
-    # La demo empaquetada se puede previsualizar, pero su destino local queda inutilizable.
+    # La demo empaquetada se puede previsualizar, pero nunca se escribe en ella.
     service = RenderService(demo_repo_dir())
-    assert "instalación de ISoT" in (service.targets["local"].error or "")
+    assert "instalación de ISoT" in (service.repo_error or "")
+    with pytest.raises(RenderError, match="instalación de ISoT"):
+        service.apply_plan()
 
 
 def test_target_path_traversal_and_symlink_escape(data_repo: Path, tmp_path: Path) -> None:
@@ -211,7 +213,7 @@ def test_service_diff_against_hand_made_target(data_repo: Path) -> None:
     out.mkdir(parents=True)
     (out / "chrony.conf").write_text("server 192.0.2.1 iburst\n")
     (out / "legacy.conf").write_text("hand made\n")
-    diff = RenderService(data_repo).target_diff("local", instance_id="site1-chrony")
+    diff = RenderService(data_repo).target_diff(instance_id="site1-chrony")
     files = {f["path"]: f["status"] for f in diff["instances"][0]["files"]}
     assert files == {"chrony.conf": "modified", "legacy.conf": "orphaned"}
     assert diff["drift"] == 1 and diff["in_sync"] == 0
@@ -247,7 +249,8 @@ def test_api_dashboard_templates_and_context(data_repo: Path) -> None:
     assert dashboard["instances"]["error"] == 0
     assert dashboard["files"] > 10
     assert dashboard["per_site"]["site1"]["instances"] == 6
-    assert dashboard["drift"]["by_target"]["local"]["drift"] == 7
+    assert dashboard["drift"]["drift"] == 7 and dashboard["config"]["target_dir"] == "rendered"
+    assert "targets" not in dashboard
     assert dashboard["edit"] is False
     templates = {t["id"]: t for t in client.get("/api/renders/templates").json()}
     assert templates["chrony-conf"]["source"] == "repo"
@@ -267,15 +270,15 @@ def test_api_dashboard_templates_and_context(data_repo: Path) -> None:
 def test_api_read_only_refuses_writes(data_repo: Path) -> None:
     client = TestClient(create_app(data_repo))
     for url in ("/api/renders/templates/save/commit", "/api/renders/config/commit", "/api/renders/apply/commit"):
-        assert client.post(url, json={"id": "x", "target": "local"}).status_code == 403
+        assert client.post(url, json={"id": "x"}).status_code == 403
 
 
 def test_api_apply_writes_branch_and_then_in_sync(data_repo: Path) -> None:
     client = TestClient(create_app(data_repo, edit=True))
-    preview = client.post("/api/renders/apply/preview", json={"target": "local"}).json()
+    preview = client.post("/api/renders/apply/preview", json={}).json()
     assert any(f["path"].endswith(SIDECAR) for f in preview["files"])
     assert all(f["path"].startswith("rendered/") for f in preview["files"])
-    result = client.post("/api/renders/apply/commit", json={"target": "local"})
+    result = client.post("/api/renders/apply/commit", json={})
     assert result.status_code == 200, result.text
     branch = result.json()["branch"]
     assert branch.startswith("wizard/")
@@ -287,42 +290,45 @@ def test_api_apply_writes_branch_and_then_in_sync(data_repo: Path) -> None:
     assert sidecar["generated_by"] == "ISoT" and sidecar["source_commit"]
 
 
-def test_api_external_target_repo(data_repo: Path, tmp_path: Path) -> None:
-    gitops = git_repo(_mkdir(tmp_path / "gitops"))
-    (gitops / "clusters" / "site1" / "site" / "chrony-conf").mkdir(parents=True)
-    (gitops / "clusters" / "site1" / "site" / "chrony-conf" / "old.conf").write_text("x\n")
-    git(gitops, "add", "-A")
-    git(gitops, "commit", "-qm", "seed")
-    config = tmp_path / "isot.yaml"
-    config.write_text(
-        yaml.safe_dump(
-            {
-                "version": 1,
-                "repos": [{"id": "data", "path": str(data_repo)}],
-                "target_repos": [{"id": "gitops", "path": str(gitops)}],
-                "edit": {"enabled": True},
-            }
-        )
-    )
+def test_per_instance_target_dir_stays_in_the_same_repo(data_repo: Path) -> None:
+    """Cada instancia puede usar otra carpeta, siempre dentro del mismo repo de datos."""
     renders = yaml.safe_load((data_repo / "renders.yaml").read_text())
-    renders["targets"] = [{"id": "ext", "repo": "gitops", "dir": "clusters"}]
     for item in renders["instances"]:
         if item["id"] == "site1-chrony":
-            item["target"] = "ext"
+            item["target_dir"] = "gitops/clusters"
     (data_repo / "renders.yaml").write_text(yaml.safe_dump(renders))
-    git(data_repo, "commit", "-qam", "target externo")
-    client = TestClient(create_app(config_path=config))
-    diff = client.get("/api/renders/diff", params={"target": "ext"}).json()
-    assert diff["target"]["external"] is True
-    files = {f["path"]: f["status"] for f in diff["instances"][0]["files"]}
-    assert files == {"chrony.conf": "new", "old.conf": "orphaned"}
-    result = client.post("/api/renders/apply/commit", json={"target": "ext", "prune": True})
+    old = data_repo / "gitops" / "clusters" / "site1" / "site" / "chrony-conf"
+    old.mkdir(parents=True)
+    (old / "old.conf").write_text("x\n")
+    git(data_repo, "add", "-A")
+    git(data_repo, "commit", "-qm", "carpeta destino propia")
+    client = TestClient(create_app(data_repo, edit=True))
+    diff = client.get("/api/renders/diff", params={"instance": "site1-chrony"}).json()
+    entry = diff["instances"][0]
+    assert entry["dir"] == "gitops/clusters/site1/site/chrony-conf"
+    assert {f["path"]: f["status"] for f in entry["files"]} == {"chrony.conf": "new", "old.conf": "orphaned"}
+    result = client.post("/api/renders/apply/commit", json={"instances": ["site1-chrony"], "prune": True})
     assert result.status_code == 200, result.text
-    branch = result.json()["branch"]
-    listed = git(gitops, "ls-tree", "-r", "--name-only", branch)
-    assert "clusters/site1/site/chrony-conf/chrony.conf" in listed
-    assert "old.conf" not in listed
-    assert not (data_repo / "clusters").exists()
+    listed = git(data_repo, "ls-tree", "-r", "--name-only", result.json()["branch"])
+    assert "gitops/clusters/site1/site/chrony-conf/chrony.conf" in listed
+    assert "gitops/clusters/site1/site/chrony-conf/old.conf" not in listed
+    bad = client.post("/api/renders/config/preview", json={"upsert_instance": {"id": "x", "template": "chrony-conf", "site": "site1", "target_dir": "../otro-repo"}}).json()
+    assert bad["errors"]
+
+
+def test_no_cross_repo_targets(data_repo: Path, tmp_path: Path) -> None:
+    """ISoT nunca escribe de un repo a otro: targets/default_target/target y target_repos no existen."""
+    client = TestClient(create_app(data_repo, edit=True))
+    errors = client.post("/api/renders/config/preview", json={"text": "version: 1\ntargets: [{id: x, repo: otro, dir: d}]\ndefault_target: x\n"}).json()["errors"]
+    assert any("ya no existe" in e for e in errors)
+    inst = client.post("/api/renders/config/preview", json={"text": "instances: [{id: a, template: chrony-conf, site: site1, target: x}]\n"}).json()["errors"]
+    assert any("target_dir" in e for e in inst)
+    from isot.config import ConfigError, parse_config
+
+    with pytest.raises(ConfigError):
+        parse_config({"version": 1, "repos": [{"id": "d", "path": str(data_repo)}], "target_repos": [{"id": "t", "path": str(tmp_path)}]}, tmp_path / "isot.yaml")
+    with pytest.raises(TypeError):
+        RenderService(data_repo, repo_paths={})  # type: ignore[call-arg]
 
 
 def test_api_template_save_and_config_upsert(data_repo: Path) -> None:

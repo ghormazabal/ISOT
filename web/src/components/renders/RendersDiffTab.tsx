@@ -21,7 +21,6 @@ const STATUS_ORDER = ["new", "modified", "orphaned", "unchanged"] as const;
 
 /** Render fresco vs carpeta destino: árbol con estados + diff unificado o lado a lado + aplicar. */
 export function RendersDiffTab({ refName, version, branches, write, instance, onInstance, onAfterCommit }: Props) {
-  const [target, setTarget] = useState("local");
   const [targetRef, setTargetRef] = useState("");
   const [data, setData] = useState<RendersDiff | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +37,7 @@ export function RendersDiffTab({ refName, version, branches, write, instance, on
     setLoading(true);
     setError(null);
     rendersApi
-      .diff({ target, target_ref: targetRef || null, ref: refName })
+      .diff({ target_ref: targetRef || null, ref: refName })
       .then((value) => {
         if (cancelled) return;
         setData(value);
@@ -48,7 +47,7 @@ export function RendersDiffTab({ refName, version, branches, write, instance, on
     return () => {
       cancelled = true;
     };
-  }, [target, targetRef, refName, version, reload]);
+  }, [targetRef, refName, version, reload]);
 
   const instances: DiffInstance[] = useMemo(() => (data?.instances ?? []).filter((item) => !instance || item.id === instance), [data, instance]);
   const files: FileRef[] = useMemo(
@@ -71,7 +70,6 @@ export function RendersDiffTab({ refName, version, branches, write, instance, on
   }, [files, selected]);
 
   const current = files.find((file) => file.path === selected) ?? null;
-  const currentTarget = data?.targets.find((item) => item.id === target) ?? data?.target ?? null;
   const drifting = instances.filter((item) => !item.in_sync).map((item) => item.id);
 
   const applyBlocked = !write.canWrite
@@ -79,18 +77,18 @@ export function RendersDiffTab({ refName, version, branches, write, instance, on
     : refName
       ? "Aplicar usa el working tree del repo de datos: vuelve a «working tree» para aplicar."
       : targetRef
-        ? "Estás comparando contra una rama del destino; aplica contra el working tree (deja la rama vacía)."
-        : currentTarget?.error
-          ? currentTarget.error
+        ? "Estás comparando contra otra rama; aplica contra el working tree (elige «working tree»)."
+        : data?.error
+          ? data.error
           : !drifting.length
             ? "El destino ya está al día."
             : null;
 
   const apply = () => {
-    const body = { target, instances: instance ? [instance] : undefined, prune };
+    const body = { instances: instance ? [instance] : undefined, prune };
     setFlow({
-      title: `Aplicar renders en «${currentTarget?.name ?? target}»`,
-      description: `Escribe ${instance ? `la instancia ${instance}` : "todas las instancias con drift"} en ${currentTarget?.dir ?? "rendered"}/ de una rama wizard/… nueva${currentTarget?.external ? " del repo destino" : ""}${prune ? " y borra los huérfanos" : ""}. Cada carpeta lleva su .isot-render.json.`,
+      title: "Aplicar renders en este repo de datos",
+      description: `Escribe ${instance ? `la instancia ${instance}` : "todas las instancias con drift"} en su carpeta destino (${data?.target_dir ?? "rendered"}/ o la propia de la instancia) en una rama wizard/… nueva de este mismo repo${prune ? " y borra los huérfanos" : ""}. Cada carpeta lleva su .isot-render.json.`,
       preview: () => rendersApi.applyPreview(body),
       commit: () => rendersApi.applyCommit(body),
     });
@@ -100,19 +98,16 @@ export function RendersDiffTab({ refName, version, branches, write, instance, on
     <div className="renders-body renders-diff">
       <div className="render-diff-controls">
         <label className="site-picker">
-          <span>Destino</span>
-          <select value={target} onChange={(event) => setTarget(event.target.value)}>
-            {(data?.targets ?? [{ id: "local", name: "local", dir: "rendered", external: false, repo: null, error: null }]).map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.id} · {item.name}/{item.dir}
+          <span>Comparar con</span>
+          <select id="render-target-ref" value={targetRef} onChange={(event) => setTargetRef(event.target.value)}>
+            <option value="">working tree</option>
+            {branches.map((name) => (
+              <option key={name} value={name}>
+                {name}
               </option>
             ))}
+            {targetRef && !branches.includes(targetRef) ? <option value={targetRef}>{targetRef}</option> : null}
           </select>
-        </label>
-        <label className="site-picker">
-          <span>Rama del destino</span>
-          <input list="render-target-refs" value={targetRef} placeholder="working tree" onChange={(event) => setTargetRef(event.target.value.trim())} />
-          <datalist id="render-target-refs">{currentTarget?.external ? null : branches.map((name) => <option key={name} value={name} />)}</datalist>
         </label>
         <label className="site-picker">
           <span>Instancia</span>
@@ -142,6 +137,7 @@ export function RendersDiffTab({ refName, version, branches, write, instance, on
         </button>
       </div>
       {error ? <p className="error">{error}</p> : null}
+      {data?.error ? <p className="error">{data.error}</p> : null}
       {loading && !data ? <p className="muted">Renderizando y comparando…</p> : null}
       {data ? (
         <>
@@ -153,7 +149,8 @@ export function RendersDiffTab({ refName, version, branches, write, instance, on
             ))}
             <span className="muted">
               {instances.filter((item) => item.in_sync).length} instancia(s) en sync · {drifting.length} con drift
-              {targetRef ? ` · destino en ${targetRef}` : " · destino: working tree"}
+              {` · carpeta destino ${data.target_dir}/`}
+              {targetRef ? ` · en la rama ${targetRef}` : " · working tree"}
             </span>
           </div>
           <div className="render-diff-layout">
@@ -211,7 +208,7 @@ export function RendersDiffTab({ refName, version, branches, write, instance, on
           flow={flow}
           onClose={() => setFlow(null)}
           onDone={(result) => {
-            if (!currentTarget?.external) setTargetRef(result.branch);
+            setTargetRef(result.branch);
             onAfterCommit();
           }}
         />

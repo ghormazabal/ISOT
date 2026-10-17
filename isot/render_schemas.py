@@ -267,26 +267,14 @@ def renders_config_schema() -> dict[str, Any]:
             "template": {"type": "string", "pattern": ID_PATTERN, "description": "Id del template de render."},
             "site": {"type": "string", "description": "Sitio (en sites/<id>/renders.yaml es implícito)."},
             "cluster": {"type": ["string", "null"]},
-            "target": {"type": ["string", "null"], "description": "Id de targets[] (por defecto default_target)."},
-            "dir": {"type": ["string", "null"], "description": "Carpeta relativa al dir del destino (por defecto <site>/<cluster|site>/<template>)."},
+            "target_dir": {"type": ["string", "null"], "description": "Carpeta destino propia, dentro de este mismo repo de datos (por defecto la target_dir global)."},
+            "dir": {"type": ["string", "null"], "description": "Subcarpeta dentro de la carpeta destino (por defecto <site>/<cluster o site>/<template>)."},
             "params": {"type": "object"},
             "enabled": {"type": "boolean"},
             "description": {"type": "string"},
         },
         "Instancia de render.",
         required=["template"],
-        extra=False,
-    )
-    target = _obj(
-        {
-            "id": {"type": "string", "pattern": ID_PATTERN},
-            "name": {"type": "string"},
-            "repo": {"type": ["string", "null"], "description": "Id de repos[] o target_repos[] de isot.yaml; vacío = este repo de datos."},
-            "dir": {"type": "string", "description": "Carpeta dentro de ese repo."},
-            "description": {"type": "string"},
-        },
-        "Destino de renders.",
-        required=["id"],
         extra=False,
     )
     return {
@@ -297,9 +285,7 @@ def renders_config_schema() -> dict[str, Any]:
         "additionalProperties": False,
         "properties": {
             "version": {"const": 1},
-            "target_dir": {"type": "string", "description": "Carpeta destino por defecto en este repo (rendered)."},
-            "default_target": {"type": "string"},
-            "targets": {"type": "array", "items": target},
+            "target_dir": {"type": "string", "description": "Carpeta destino por defecto, dentro de este mismo repo de datos (rendered). ISoT nunca escribe en otro repositorio."},
             "instances": {"type": "array", "items": instance},
         },
     }

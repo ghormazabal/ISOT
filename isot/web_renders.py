@@ -19,12 +19,10 @@ from isot.gitdiff import RefError, _materialize, clear_caches, resolve_sha, vali
 from isot.paths import tool_root
 from isot.renders import (
     INSTANCE_KEYS,
-    LOCAL_TARGET,
     MAX_SOURCE_BYTES,
     RENDERS_FILE,
     SAFE_FILE,
     SAFE_ID,
-    TARGET_KEYS,
     TEMPLATE_DIRNAME,
     TEMPLATE_FILE,
     RenderError,
@@ -54,15 +52,6 @@ def register(
     edit_globally: Callable[[], bool],
     maybe_push: Callable[[dict[str, Any]], dict[str, Any]],
 ) -> None:
-    def repo_maps() -> tuple[dict[str, Path], dict[str, str]]:
-        paths: dict[str, Path] = {}
-        names: dict[str, str] = {}
-        for item in registry.repos:
-            paths[item.id], names[item.id] = item.path, item.label
-        for item in getattr(registry.config, "target_repos", []) or []:
-            paths[item.id], names[item.id] = item.path, item.label
-        return paths, names
-
     @contextlib.contextmanager
     def render_root(ref: str | None) -> Iterator[Path]:
         root = resolved_root()
@@ -78,8 +67,7 @@ def register(
             return
 
     def service(root: Path) -> RenderService:
-        paths, names = repo_maps()
-        return RenderService(root, repo_paths=paths, repo_names=names)
+        return RenderService(root)
 
     def can_edit() -> bool:
         return bool(registry.configured and edit_for(registry.entry()))
@@ -89,18 +77,6 @@ def register(
             raise HTTPException(status_code=403, detail="edición deshabilitada (ISOT_EDIT=1 o --edit)")
         if not can_edit():
             raise HTTPException(status_code=403, detail="repositorio en solo lectura (repos[].edit: false)")
-
-    def target_writable(target_id: str, svc: RenderService) -> None:
-        target = svc.targets.get(target_id)
-        if target is None:
-            raise HTTPException(status_code=404, detail=f"destino desconocido: {target_id}")
-        if target.error:
-            raise HTTPException(status_code=400, detail=target.error)
-        if target.repo_id:
-            extra = next((t for t in getattr(registry.config, "target_repos", []) or [] if t.id == target.repo_id), None)
-            data = next((r for r in registry.repos if r.id == target.repo_id), None)
-            if (extra is not None and extra.edit is False) or (data is not None and not edit_for(data)):
-                raise HTTPException(status_code=403, detail=f"el repo destino {target.repo_id} es de solo lectura")
 
     # ----------------------------------------------------------------- lectura
 
@@ -197,7 +173,6 @@ def register(
 
     @app.get("/api/renders/diff")
     def renders_diff(
-        target: str = Query(default=LOCAL_TARGET),
         instance: str | None = Query(default=None),
         target_ref: str | None = Query(default=None),
         ref: str | None = Query(default=None),
@@ -205,10 +180,9 @@ def register(
         with render_root(ref) as root:
             svc = service(root)
             try:
-                payload = svc.target_diff(target, instance_id=instance, ref=target_ref or None)
+                payload = svc.target_diff(instance_id=instance, ref=target_ref or None)
             except (RenderError, RefError) as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
-            payload["targets"] = [t.to_dict() for t in svc.targets.values()]
             payload["edit"] = can_edit() and not ref
             return payload
 
@@ -304,7 +278,7 @@ def register(
             data.setdefault("version", 1)
             settings = body.get("settings")
             if isinstance(settings, dict):
-                for key in ("target_dir", "default_target"):
+                for key in ("target_dir",):
                     if key in settings:
                         if settings[key] in (None, ""):
                             data.pop(key, None)
@@ -327,16 +301,6 @@ def register(
             remove = body.get("remove_instance")
             if remove:
                 data["instances"] = [i for i in data.get("instances") or [] if not (isinstance(i, dict) and i.get("id") == remove)]
-            target = body.get("upsert_target")
-            if isinstance(target, dict):
-                clean_t = {k: v for k, v in target.items() if k in TARGET_KEYS and v not in (None, "")}
-                items = [t for t in data.get("targets") or [] if isinstance(t, dict) and t.get("id") != clean_t.get("id")]
-                data["targets"] = [*items, clean_t]
-            remove_t = body.get("remove_target")
-            if remove_t:
-                data["targets"] = [t for t in data.get("targets") or [] if not (isinstance(t, dict) and t.get("id") == remove_t)]
-                if not data["targets"]:
-                    data.pop("targets")
             text = yaml.safe_dump(data, sort_keys=False, allow_unicode=True, default_flow_style=False)
             # Se conserva el bloque de comentarios inicial del archivo.
             header_lines = []
@@ -378,13 +342,11 @@ def register(
     def apply_plan(body: dict[str, Any]) -> tuple[RenderService, dict[str, Any]]:
         root = resolved_root()
         svc = service(root)
-        target_id = str(body.get("target") or LOCAL_TARGET)
-        target_writable(target_id, svc)
         instances = body.get("instances") or None
         if instances is not None and not isinstance(instances, list):
             raise HTTPException(status_code=400, detail="instances debe ser una lista de ids")
         try:
-            plan = svc.apply_plan(target_id, instances, prune=bool(body.get("prune")), source_commit=head_sha(root))
+            plan = svc.apply_plan(instances, prune=bool(body.get("prune")), source_commit=head_sha(root))
         except RenderError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return svc, plan
@@ -393,35 +355,31 @@ def register(
     def renders_apply_preview(body: dict[str, Any]) -> dict[str, Any]:
         require_edit()
         _svc, plan = apply_plan(body)
-        target = plan["target"]
-        diffs = [d for d in file_diffs(target.root, plan["writes"], plan["deletes"]) if d["status"] != "unchanged"]
-        return {"target": target.to_dict(), "files": diffs, "skipped": plan["skipped"], "prune": bool(body.get("prune"))}
+        diffs = [d for d in file_diffs(resolved_root(), plan["writes"], plan["deletes"]) if d["status"] != "unchanged"]
+        return {"files": diffs, "skipped": plan["skipped"], "folders": plan["folders"], "prune": bool(body.get("prune"))}
 
     @app.post("/api/renders/apply/commit")
     def renders_apply_commit(body: dict[str, Any]) -> dict[str, Any]:
         require_edit()
         _svc, plan = apply_plan(body)
-        target = plan["target"]
+        root = resolved_root()
         if not plan["writes"] and not plan["deletes"]:
-            raise HTTPException(status_code=400, detail="el destino ya está al día")
+            raise HTTPException(status_code=400, detail="la carpeta destino ya está al día")
         try:
             from isot.renders import commit_files
 
             result = commit_files(
-                target.root,
+                root,
                 plan["writes"],
                 plan["deletes"],
-                f"renders {target.id}",
-                allowed_prefix=target.dir,
+                "renders",
+                allowed_prefix=plan["folders"],
                 branch=_branch(body),
             )
         except WizardError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        clear_caches(target.root)
-        result["target"] = target.to_dict()
-        if not target.external and result.get("created"):
-            return maybe_push(result)
-        return result
+        clear_caches(root)
+        return maybe_push(result) if result.get("created") else result
 
 
 def validate_renders_text(text: str) -> list[str]:
@@ -435,33 +393,22 @@ def validate_renders_text(text: str) -> list[str]:
     if not isinstance(data, dict):
         return [f"{RENDERS_FILE} debe ser un mapa YAML"]
     errors: list[str] = []
-    from isot.renders import RENDERS_KEYS
+    from isot.renders import REMOVED_KEYS, RENDERS_KEYS
 
-    unknown = sorted(set(data) - RENDERS_KEYS)
+    removed = sorted(set(data) & REMOVED_KEYS)
+    if removed:
+        errors.append(
+            f"{', '.join(removed)} ya no existe(n): los renders solo se escriben en carpetas de este "
+            "mismo repositorio (target_dir global o por instancia)"
+        )
+    unknown = sorted(set(data) - RENDERS_KEYS - REMOVED_KEYS)
     if unknown:
         errors.append(f"claves desconocidas: {', '.join(unknown)}")
     try:
         safe_rel_dir(data.get("target_dir") or "rendered", "target_dir")
     except RenderError as exc:
         errors.append(str(exc))
-    targets = data.get("targets") or []
-    if not isinstance(targets, list):
-        errors.append("targets debe ser una lista")
-        targets = []
-    for index, raw in enumerate(targets):
-        if not isinstance(raw, dict) or not SAFE_ID.fullmatch(str(raw.get("id") or "")):
-            errors.append(f"targets[{index}]: falta id válido")
-            continue
-        if raw.get("dir"):
-            try:
-                safe_rel_dir(raw.get("dir"), f"targets[{index}].dir")
-            except RenderError as exc:
-                errors.append(str(exc))
     instances = _parse_instances(data.get("instances"), RENDERS_FILE, None, errors)
     ids = [i.id for i in instances]
     errors.extend(f"instancia duplicada: {dup}" for dup in sorted({i for i in ids if ids.count(i) > 1}))
-    target_ids = {str(t.get("id")) for t in targets if isinstance(t, dict)} | {LOCAL_TARGET}
-    for inst in instances:
-        if inst.target and inst.target not in target_ids:
-            errors.append(f"instancia {inst.id}: target desconocido {inst.target}")
     return errors

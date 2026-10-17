@@ -283,8 +283,8 @@ export function WriteDialog({
           <>
             {preview.files.length ? (
               <p className="muted">
-                {preview.files.length} archivo(s) cambian. Se hará commit en una rama <code>wizard/…</code>
-                {preview.target ? ` del repo destino «${preview.target.name}»` : ""}; nunca en main.
+                {preview.files.length} archivo(s) cambian. Se hará commit en una rama <code>wizard/…</code> de este mismo
+                repo de datos; nunca en main ni en otro repositorio.
               </p>
             ) : (
               <p className="muted">No hay cambios que escribir.</p>
@@ -316,7 +316,7 @@ export function WriteDialog({
         <div className="wizard-actions">
           {result ? (
             <>
-              {onViewBranch && !result.target?.external ? (
+              {onViewBranch ? (
                 <button type="button" className="primary" onClick={() => onViewBranch(result.branch)}>
                   Ver rama {result.branch}
                 </button>
