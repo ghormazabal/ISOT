@@ -14,6 +14,8 @@ import type {
   WizardPreview,
 } from "../types";
 import {
+  DEFAULT_DOCK_WIDTH,
+  clampDockWidth,
   emptyWizardDraft,
   isDraftInProgress,
   type DeviceDraftState,
@@ -21,7 +23,7 @@ import {
   type WizardDraft,
   type WizardMode,
 } from "../wizardDraft";
-import { fixSummary, wizardCanCommit } from "../findings";
+import { wizardCanCommit, wizardStatus } from "../findings";
 import { TopologyGraph } from "./TopologyGraph";
 import type { Finding, FixContext } from "../types";
 
@@ -179,7 +181,7 @@ function WizardForms({
           </button>
         </div>
       ) : null}
-      <div hidden={mode !== "device"}>
+      <div className="wizard-mode" hidden={mode !== "device"}>
         <DeviceWizard
           sites={sites}
           clustersBySite={clustersBySite}
@@ -189,7 +191,7 @@ function WizardForms({
           onCommitted={onCommitted}
         />
       </div>
-      <div hidden={mode !== "site"}>
+      <div className="wizard-mode" hidden={mode !== "site"}>
         <SiteWizard
           sites={sites}
           templates={templates}
@@ -233,6 +235,8 @@ function DeviceWizard({
   const [saveRules, setSaveRules] = useState(initial.saveRules);
   const [acceptWarnings, setAcceptWarnings] = useState(false);
   const [fix, setFix] = useState<FixContext | null>(initial.fix ?? null);
+  const [graphHidden, setGraphHidden] = useState(Boolean(initial.graphHidden));
+  const [dockWidth, setDockWidth] = useState(initial.dockWidth ?? DEFAULT_DOCK_WIDTH);
   const skipPreview = useRef(Boolean(initial.preview));
   const clusters = clustersBySite[site] ?? [];
 
@@ -249,8 +253,10 @@ function DeviceWizard({
       neighborhood,
       tab,
       fix,
+      graphHidden,
+      dockWidth,
     });
-  }, [site, kind, cluster, role, count, edits, saveRules, preview, neighborhood, tab, fix, onChange]);
+  }, [site, kind, cluster, role, count, edits, saveRules, preview, neighborhood, tab, fix, graphHidden, dockWidth, onChange]);
 
   const body = useMemo(
     () => ({
@@ -308,30 +314,11 @@ function DeviceWizard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const summary = fixSummary(preview);
-
   return (
     <div className={preview ? "wizard-workspace" : "wizard-form"}>
       <div className="wizard-form">
         <h3>Agregar device</h3>
-        {fix ? (
-          <div className="fix-banner" id="wizard-fix-banner">
-            <header>
-              <span className={`sev-pill sev-${fix.finding.severity}`}>{fix.finding.severity}</span>
-              <strong>Corrigiendo {fix.finding.id}</strong>
-              <span className="mono">{fix.finding.entity_id}</span>
-              <button type="button" className="text-link" style={{ marginLeft: "auto" }} onClick={() => setFix(null)}>
-                quitar
-              </button>
-            </header>
-            <span>{fix.finding.message}</span>
-            <span>
-              Propuesta: <strong>{fix.remediation.label}</strong> ({fix.remediation.reason})
-              {fix.remediation.count > 1 ? ` · se agregan los ${fix.remediation.count} en este mismo alta` : ""}
-            </span>
-            {fix.remediation.followup ? <span className="fix-followup">{fix.remediation.followup}</span> : null}
-          </div>
-        ) : null}
+        <WizardStatusBar preview={preview} fix={fix} onClearFix={() => setFix(null)} />
         <div className="wizard-grid">
           <label>
             Sitio
@@ -389,7 +376,7 @@ function DeviceWizard({
           </label>
         </div>
         {preview?.rules_source === "inferred" ? (
-          <label className="diff-filter">
+          <label className="check-row">
             <input
               id="wizard-save-inferred"
               type="checkbox"
@@ -415,21 +402,8 @@ function DeviceWizard({
           >
             Confirmar en rama wizard/…
           </button>
+          <AcceptWarnings preview={preview} checked={acceptWarnings} onChange={setAcceptWarnings} />
         </div>
-        {fix && summary ? (
-          <p className={`fix-result ${summary.ok ? "ok" : "pending"}`} id="wizard-fix-result">
-            {summary.ok ? "✔ " : "… "}
-            {summary.text}
-            {!summary.ok && fix.remediation.followup ? (
-              <span className="fix-followup"> — {fix.remediation.followup}</span>
-            ) : null}
-          </p>
-        ) : null}
-        <WizardFindingsBox
-          preview={preview}
-          acceptWarnings={acceptWarnings}
-          onAccept={setAcceptWarnings}
-        />
         {error ? <p className="boot-error">{error}</p> : null}
         <CommitBanner commit={commit} onOpenCompare={onOpenCompare} />
       </div>
@@ -450,6 +424,10 @@ function DeviceWizard({
             });
           }}
           graphView="network"
+          graphHidden={graphHidden}
+          onGraphHidden={setGraphHidden}
+          dockWidth={dockWidth}
+          onDockWidth={setDockWidth}
         />
       ) : null}
     </div>
@@ -510,6 +488,8 @@ function SiteWizard({
   const [neighborhood, setNeighborhood] = useState(initial.neighborhood);
   const [tab, setTab] = useState<DockTab>(initial.tab);
   const [graphView, setGraphView] = useState<"network" | "global">(initial.graphView);
+  const [graphHidden, setGraphHidden] = useState(Boolean(initial.graphHidden));
+  const [dockWidth, setDockWidth] = useState(initial.dockWidth ?? DEFAULT_DOCK_WIDTH);
   const [acceptWarnings, setAcceptWarnings] = useState(false);
   const skipDefaults = useRef((initial.rules?.length ?? 0) > 0);
 
@@ -573,6 +553,8 @@ function SiteWizard({
       neighborhood,
       tab,
       graphView,
+      graphHidden,
+      dockWidth,
     });
   }, [
     step,
@@ -599,6 +581,8 @@ function SiteWizard({
     neighborhood,
     tab,
     graphView,
+    graphHidden,
+    dockWidth,
     onChange,
   ]);
 
@@ -666,6 +650,7 @@ function SiteWizard({
     <div className={preview ? "wizard-workspace" : "wizard-form"}>
       <div className="wizard-form">
         <h3>Nuevo sitio · paso {step} / 5</h3>
+        <WizardStatusBar preview={preview} fix={null} />
         {step === 1 ? (
           <div id="wizard-site-architecture">
             <p className="muted">Arquitectura de red del sitio. Las cantidades alimentan el fabric y los nodos.</p>
@@ -958,7 +943,7 @@ function SiteWizard({
           </div>
         ) : null}
         {step === 5 ? (
-          <label className="diff-filter">
+          <label className="check-row">
             <input type="checkbox" checked={dci} onChange={(event) => setDci(event.target.checked)} /> Enlace DCI
             (address_space dci-overlay)
           </label>
@@ -985,10 +970,10 @@ function SiteWizard({
               >
                 Confirmar en rama wizard/…
               </button>
+              <AcceptWarnings preview={preview} checked={acceptWarnings} onChange={setAcceptWarnings} />
             </>
           )}
         </div>
-        <WizardFindingsBox preview={preview} acceptWarnings={acceptWarnings} onAccept={setAcceptWarnings} />
         {error ? <p className="boot-error">{error}</p> : null}
         <CommitBanner commit={commit} onOpenCompare={onOpenCompare} />
       </div>
@@ -1002,6 +987,10 @@ function SiteWizard({
           graphView={graphView}
           onGraphView={setGraphView}
           defaultGroupBy="pair"
+          graphHidden={graphHidden}
+          onGraphHidden={setGraphHidden}
+          dockWidth={dockWidth}
+          onDockWidth={setDockWidth}
         />
       ) : null}
     </div>
@@ -1019,6 +1008,10 @@ function PreviewStage({
   graphView,
   onGraphView,
   defaultGroupBy = "cluster",
+  graphHidden = false,
+  onGraphHidden,
+  dockWidth = DEFAULT_DOCK_WIDTH,
+  onDockWidth,
 }: {
   preview: WizardPreview;
   neighborhood: boolean;
@@ -1030,14 +1023,36 @@ function PreviewStage({
   graphView: "network" | "global";
   onGraphView?: (value: "network" | "global") => void;
   defaultGroupBy?: GroupBy;
+  graphHidden?: boolean;
+  onGraphHidden?: (value: boolean) => void;
+  dockWidth?: number;
+  onDockWidth?: (value: number) => void;
 }) {
   const [groupBy, setGroupBy] = useState<GroupBy>(defaultGroupBy);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const dragging = useRef(false);
+  const resize = (clientX: number) => {
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect || !onDockWidth) return;
+    onDockWidth(clampDockWidth(rect.right - clientX, rect.width));
+  };
+  const nudge = (delta: number) => {
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect || !onDockWidth) return;
+    onDockWidth(clampDockWidth(dockWidth + delta, rect.width));
+  };
   const graph = graphView === "global" ? preview.graphs?.global ?? null : preview.graphs?.network ?? null;
   const siteFilter = graphView === "global" ? "all" : (preview.site ?? "all");
   const focusIds = graphView === "global" && preview.site ? [`site:${preview.site}`] : (preview.focus_ids ?? []);
 
   return (
-    <div className="wizard-stage" id="wizard-graph">
+    <div
+      ref={stageRef}
+      className={`wizard-stage${graphHidden ? " graph-hidden" : ""}`}
+      id="wizard-graph"
+      style={graphHidden ? undefined : { gridTemplateColumns: `minmax(0, 1fr) 8px min(${dockWidth}px, 70%)` }}
+    >
+      {graphHidden ? null : (
       <div className="wizard-graph-wrap">
         {preview.kind === "site" && onGraphView ? (
           <nav className="view-tabs">
@@ -1071,8 +1086,35 @@ function PreviewStage({
           findings={preview.findings?.added ?? preview.findings?.current ?? []}
         />
       </div>
+      )}
+      {graphHidden ? null : (
+        <div
+          className="wizard-divider"
+          id="wizard-divider"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Ancho del panel Campos / YAML"
+          tabIndex={0}
+          title="Arrastra para cambiar el ancho (o usa ← →)"
+          onPointerDown={(event) => {
+            dragging.current = true;
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }}
+          onPointerMove={(event) => {
+            if (dragging.current) resize(event.clientX);
+          }}
+          onPointerUp={(event) => {
+            dragging.current = false;
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowLeft") nudge(24);
+            if (event.key === "ArrowRight") nudge(-24);
+          }}
+        />
+      )}
       <aside className="wizard-dock">
-        <nav className="view-tabs">
+        <nav className="view-tabs dock-tabs">
           <button
             type="button"
             id="wizard-preview-tab-fields"
@@ -1089,6 +1131,17 @@ function PreviewStage({
           >
             YAML
           </button>
+          {onGraphHidden ? (
+            <button
+              type="button"
+              id="wizard-toggle-graph"
+              className="graph-toggle"
+              aria-pressed={graphHidden}
+              onClick={() => onGraphHidden(!graphHidden)}
+            >
+              {graphHidden ? "Mostrar grafo" : "Ocultar grafo"}
+            </button>
+          ) : null}
         </nav>
         {tab === "fields" ? (
           <FieldsTable preview={preview} edits={edits} onEdit={onEdit} />
@@ -1209,46 +1262,110 @@ function YamlDiff({ preview }: { preview: WizardPreview }) {
   );
 }
 
-function WizardFindingsBox({
+function AcceptWarnings({
   preview,
-  acceptWarnings,
-  onAccept,
+  checked,
+  onChange,
 }: {
   preview: WizardPreview | null;
-  acceptWarnings: boolean;
-  onAccept: (value: boolean) => void;
+  checked: boolean;
+  onChange: (value: boolean) => void;
 }) {
-  const added = preview?.findings?.added ?? [];
-  if (!preview || !added.length) return null;
-  const errors = added.filter((item) => item.severity === "error");
-  const warnings = added.filter((item) => item.severity === "warning");
-  const infos = added.filter((item) => item.severity === "info");
+  const warnings = (preview?.findings?.added ?? []).filter((item) => item.severity === "warning").length;
+  if (!warnings) return null;
   return (
-    <div className="wizard-findings" id="wizard-findings">
-      {errors.length ? (
-        <p className="boot-error" id="wizard-findings-block">
-          {errors.length} error(es) de reglas bloquean Confirmar.
-        </p>
+    <label className="check-row accept-warnings" htmlFor="wizard-accept-warnings">
+      <input
+        id="wizard-accept-warnings"
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      Acepto {warnings} {warnings === 1 ? "aviso nuevo" : "avisos nuevos"}
+    </label>
+  );
+}
+
+/** Una línea: corrección + resultado + avisos nuevos; los detalles se despliegan con un clic. */
+function WizardStatusBar({
+  preview,
+  fix,
+  onClearFix,
+}: {
+  preview: WizardPreview | null;
+  fix: FixContext | null;
+  onClearFix?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const status = wizardStatus(preview, fix);
+  if (!status) return null;
+  const errors = status.added.filter((item) => item.severity === "error");
+  const warnings = status.added.filter((item) => item.severity === "warning");
+  const infos = status.added.filter((item) => item.severity === "info");
+  return (
+    <div className="wizard-status" id="wizard-status">
+      <button
+        type="button"
+        className="wizard-status-line"
+        id="wizard-status-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        title={open ? "Ocultar detalles" : "Ver detalles"}
+      >
+        {status.fix && fix ? (
+          <span className="ws-part ws-fix" id="wizard-fix-banner" title={status.fix}>
+            <span className={`sev-pill sev-${fix.finding.severity}`}>{fix.finding.severity}</span>
+            <span className="ws-text">{status.fix}</span>
+          </span>
+        ) : null}
+        {status.resolve ? (
+          <span className={`ws-part ${status.resolve.ok ? "ws-ok" : "ws-pending"}`} id="wizard-fix-result">
+            {status.resolve.text}
+          </span>
+        ) : null}
+        {status.errors ? (
+          <span className="ws-part ws-error" id="wizard-findings-block">
+            ✖ {status.errors} {status.errors === 1 ? "error bloquea" : "errores bloquean"} Confirmar
+          </span>
+        ) : null}
+        {status.warnings ? (
+          <span className="ws-part ws-warn">
+            ⚠ {status.warnings} {status.warnings === 1 ? "aviso nuevo" : "avisos nuevos"}
+          </span>
+        ) : null}
+        <span className="ws-more">{open ? "▴" : "▾ detalles"}</span>
+      </button>
+      {open ? (
+        <div className="wizard-status-details" id="wizard-status-details">
+          {fix ? (
+            <div className="ws-detail-fix">
+              <p>
+                <strong>{fix.finding.id}</strong> <span className="mono">{fix.finding.entity_id}</span> — {fix.finding.message}
+              </p>
+              <p className="muted">
+                Propuesta: {fix.remediation.label} ({fix.remediation.reason})
+                {fix.remediation.count > 1 ? ` · se agregan los ${fix.remediation.count} en este mismo alta` : ""}
+              </p>
+              {fix.remediation.followup ? <p className="muted">{fix.remediation.followup}</p> : null}
+              {onClearFix ? (
+                <button type="button" className="text-link" onClick={onClearFix}>
+                  Quitar corrección
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {status.added.length ? (
+            <ul className="findings-list compact" id="wizard-findings">
+              {[...errors, ...warnings, ...infos].map((item: Finding, index) => (
+                <li key={`${item.id}:${item.entity_id}:${index}`}>
+                  <span className={`sev-pill sev-${item.severity}`}>{item.severity}</span> <strong>{item.id}</strong>{" "}
+                  {item.message}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
       ) : null}
-      {warnings.length ? (
-        <label className="diff-filter">
-          <input
-            id="wizard-accept-warnings"
-            type="checkbox"
-            checked={acceptWarnings}
-            onChange={(event) => onAccept(event.target.checked)}
-          />{" "}
-          Acepto {warnings.length} aviso(s) nuevos
-        </label>
-      ) : null}
-      <ul className="findings-list compact">
-        {[...errors, ...warnings, ...infos].map((item: Finding, index) => (
-          <li key={`${item.id}:${item.entity_id}:${index}`}>
-            <span className={`sev-pill sev-${item.severity}`}>{item.severity}</span>{" "}
-            <strong>{item.id}</strong> {item.message}
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }

@@ -18,6 +18,10 @@ export type DeviceDraftState = {
   tab: DockTab;
   /** Hallazgo que se está corrigiendo (abierto con «Corregir»), o null. */
   fix?: FixContext | null;
+  /** Grafo de la vista previa oculto (Campos/YAML a todo el ancho). */
+  graphHidden?: boolean;
+  /** Ancho (px) del panel Campos/YAML junto al grafo. */
+  dockWidth?: number;
 };
 
 export type SiteDraftState = {
@@ -45,6 +49,8 @@ export type SiteDraftState = {
   neighborhood: boolean;
   tab: DockTab;
   graphView: "network" | "global";
+  graphHidden?: boolean;
+  dockWidth?: number;
 };
 
 export type WizardDraft = {
@@ -68,6 +74,16 @@ export type WizardSession = {
 
 export const STORAGE_KEY = "isot.wizard.session";
 
+export const DEFAULT_DOCK_WIDTH = 420;
+export const MIN_DOCK_WIDTH = 260;
+export const MIN_GRAPH_WIDTH = 240;
+
+/** Ancho del panel Campos/YAML acotado al espacio del escenario. */
+export function clampDockWidth(width: number, stageWidth: number): number {
+  const max = Math.max(MIN_DOCK_WIDTH, stageWidth - MIN_GRAPH_WIDTH);
+  return Math.round(Math.min(Math.max(width, MIN_DOCK_WIDTH), max));
+}
+
 export type StorageLike = {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
@@ -87,6 +103,8 @@ export function emptyDeviceDraft(site = "site1", cluster = "site1-apps"): Device
     neighborhood: false,
     tab: "fields",
     fix: null,
+    graphHidden: false,
+    dockWidth: DEFAULT_DOCK_WIDTH,
   };
 }
 
@@ -144,6 +162,8 @@ export function emptySiteDraft(templateSite = "site2"): SiteDraftState {
     neighborhood: false,
     tab: "fields",
     graphView: "network",
+    graphHidden: false,
+    dockWidth: DEFAULT_DOCK_WIDTH,
   };
 }
 
@@ -202,6 +222,16 @@ export function getDefaultStorage(): StorageLike {
   return memoryStorage();
 }
 
+/** Normaliza el estado de layout guardado (grafo oculto y ancho del panel). */
+function withLayout<T extends { graphHidden?: boolean; dockWidth?: number }>(state: T): T {
+  const width = Number(state.dockWidth);
+  return {
+    ...state,
+    graphHidden: Boolean(state.graphHidden),
+    dockWidth: Number.isFinite(width) && width > 0 ? Math.max(width, MIN_DOCK_WIDTH) : DEFAULT_DOCK_WIDTH,
+  };
+}
+
 export function loadSession(storage: StorageLike = getDefaultStorage()): WizardSession | null {
   try {
     const raw = storage.getItem(STORAGE_KEY);
@@ -219,8 +249,8 @@ export function loadSession(storage: StorageLike = getDefaultStorage()): WizardS
       },
       draft: {
         mode: parsed.draft.mode === "device" || parsed.draft.mode === "site" ? parsed.draft.mode : "pick",
-        device: { ...base.device, ...(parsed.draft.device || {}) },
-        site: { ...base.site, ...(parsed.draft.site || {}) },
+        device: withLayout({ ...base.device, ...(parsed.draft.device || {}) }),
+        site: withLayout({ ...base.site, ...(parsed.draft.site || {}) }),
       },
     };
   } catch {

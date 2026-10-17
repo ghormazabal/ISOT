@@ -830,11 +830,27 @@ td {
 
 .app-wizards .wizard-pane {
   grid-column: 1 / -1;
-  overflow: hidden;
-  padding-bottom: 0;
+  /* La página del wizard scrollea si el viewport es corto; nada se recorta. */
+  overflow: auto;
+  padding-bottom: 12px;
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+.wizard-mode {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.wizard-mode[hidden] {
+  display: none;
+}
+
+.wizard-mode > .wizard-form {
+  flex: none;
 }
 
 .wizard-pane {
@@ -849,7 +865,7 @@ td {
 .wizard-workspace {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  flex: 1 0 auto;
   min-height: 0;
   gap: 8px;
 }
@@ -864,10 +880,29 @@ td {
 
 .wizard-stage {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 420px);
-  flex: 1;
-  min-height: 0;
+  grid-template-columns: minmax(0, 1fr) 8px min(420px, 70%);
+  grid-template-rows: minmax(0, 1fr);
+  /* Llena el alto libre; con viewport corto queda en 360px y scrollea la página. */
+  flex: 1 0 0;
+  min-height: 360px;
   border-top: 1px solid var(--line);
+}
+
+.wizard-stage.graph-hidden {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.wizard-divider {
+  cursor: col-resize;
+  background: var(--line);
+  min-height: 0;
+  touch-action: none;
+}
+
+.wizard-divider:hover,
+.wizard-divider:focus-visible {
+  background: var(--accent);
+  outline: none;
 }
 
 .wizard-graph-wrap {
@@ -879,15 +914,131 @@ td {
 
 .wizard-graph-wrap .graph-pane {
   flex: 1;
-  min-height: 480px;
+  min-height: 0;
 }
 
 .wizard-dock {
-  border-left: 1px solid var(--line);
   background: var(--panel);
   overflow: auto;
   min-height: 0;
+  min-width: 0;
   padding: 8px 10px 16px;
+}
+
+.wizard-stage.graph-hidden .wizard-dock {
+  border-left: 0;
+}
+
+.dock-tabs {
+  position: sticky;
+  top: -8px;
+  z-index: 2;
+  background: var(--panel);
+  padding: 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.graph-toggle {
+  margin-left: auto;
+}
+
+.wizard-form .check-row,
+.check-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.wizard-form .check-row input[type="checkbox"],
+.check-row input[type="checkbox"] {
+  padding: 0;
+  margin: 0;
+  width: auto;
+  accent-color: var(--accent);
+}
+
+.accept-warnings {
+  align-self: center;
+}
+
+.wizard-status {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  font-size: 12px;
+}
+
+.wizard-status-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  padding: 5px 10px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ws-part {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.ws-part + .ws-part {
+  border-left: 1px solid var(--line);
+  padding-left: 10px;
+}
+
+.ws-fix {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.ws-fix .ws-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ws-ok {
+  color: #8ad4b0;
+  font-weight: 600;
+}
+
+.ws-pending,
+.ws-warn {
+  color: #e4c36a;
+}
+
+.ws-error {
+  color: #f0a8a8;
+  font-weight: 600;
+}
+
+.ws-more {
+  margin-left: auto;
+  color: var(--muted);
+  flex: none;
+}
+
+.wizard-status-details {
+  border-top: 1px solid var(--line);
+  padding: 6px 10px 8px;
+  display: grid;
+  gap: 4px;
+}
+
+.wizard-status-details p {
+  margin: 0;
 }
 
 .nuevo-badge {
@@ -1063,6 +1214,29 @@ td {
   text-align: left;
 }
 
+/* El dock angosto no debe cortar la columna Valor: las rutas largas envuelven. */
+.wizard-fields td {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.wizard-fields td:first-child {
+  width: 45%;
+}
+
+.wizard-fields td:last-child {
+  width: 1%;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.wizard-fields td input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
 .wizard-diff {
   background: #0c0f12;
   border: 1px solid var(--line);
@@ -1228,7 +1402,12 @@ td {
 @media (max-width: 1100px) {
   .app {
     grid-template-columns: 240px 1fr;
-    grid-template-rows: 56px 42vh 1fr;
+    /* La barra superior puede envolver en dos líneas: alto automático. */
+    grid-template-rows: auto 42vh minmax(0, 1fr);
+  }
+  .app.app-wizards {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
   }
   .detail {
     grid-column: 1 / -1;
@@ -1359,41 +1538,3 @@ td {
   font-size: 11px;
 }
 
-.fix-banner {
-  border: 1px solid var(--accent);
-  border-radius: 8px;
-  padding: 8px 10px;
-  margin-bottom: 10px;
-  background: var(--panel-2);
-  display: grid;
-  gap: 4px;
-  font-size: 13px;
-}
-
-.fix-banner header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.fix-banner .fix-followup {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.fix-result {
-  border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.fix-result.ok {
-  background: #1a2e24;
-  color: #8ad4b0;
-}
-
-.fix-result.pending {
-  background: #3d3010;
-  color: #e4c36a;
-}

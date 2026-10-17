@@ -174,6 +174,16 @@ o round-robin. El generador y **Agregar device** las respetan. En sitios
 viejos sin el bloque se infieren de los hermanos y se pueden guardar. El
 validador avisa (`[WARN]`, no error) si un device las viola.
 
+### Layout del wizard
+
+La página del wizard ocupa el viewport y scrollea entera si es corto. El
+grafo y el panel **Campos / YAML** scrollean cada uno por su cuenta, así que
+el panel siempre se alcanza. **Ocultar grafo** / **Mostrar grafo** deja el
+panel a todo el ancho; el divisor entre ambos se arrastra (o ← → con foco).
+Hallazgos y corrección van en una barra de estado de una línea (clic en
+**detalles** para desplegar) y «Acepto N aviso(s) nuevo(s)» queda junto a
+Confirmar. Grafo oculto y ancho del panel se guardan con el borrador.
+
 ### Borrador persistente
 
 Wizard activo, paso, campos, reglas y preview viven en el estado de la app y
@@ -278,6 +288,9 @@ contadores en cada nodo de sitio; clic en un grupo abre el sitio.*
 
 ![Wizard bloqueado por un error de reglas](docs/images/wizard-blocked.png)
 
+*Vista previa del wizard: un error nuevo deshabilita Confirmar; la barra de
+estado desplegada muestra el detalle.*
+
 **Corregir desde un hallazgo.** Los hallazgos que se arreglan agregando
 componentes (K8S-CP-001, K8S-WK-001, K8S-ST-001, y un leaf para
 K8S-CP-002) traen **Corregir** en el panel: abre Editar con el wizard
@@ -291,11 +304,10 @@ el botón queda deshabilitado. Detalle en
 
 ![Wizard abierto desde K8S-CP-001](docs/images/finding-fix-wizard.png)
 
-*Corregir K8S-CP-001 en site2-edge: propone SITE2-CTRL003 (verde) con la
-siguiente IP y PortChannel en SITE2-LEAF001; «Resuelve K8S-CP-001 ·
-también resuelve K8S-WK-001».*
-
-*Vista previa del wizard: un error nuevo deshabilita Confirmar.*
+*Corregir K8S-CP-001 en site2-edge (1280×800): propone SITE2-CTRL003
+(verde) con la siguiente IP y PortChannel en SITE2-LEAF001. Una sola barra
+de estado: «Corrigiendo K8S-CP-001 · site2-edge · Propuesta: +1 control
+plane (2→3) | ✔ Resuelve CP-001, WK-001 | ⚠ 1 aviso nuevo».*
 
 ## Capturas
 

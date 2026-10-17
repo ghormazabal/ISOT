@@ -1,4 +1,4 @@
-import type { Finding, FindingCounts, FindingsPayload, GraphPayload, WizardPreview } from "./types";
+import type { Finding, FindingCounts, FindingsPayload, FixContext, GraphPayload, WizardPreview } from "./types";
 
 const RANK: Record<string, number> = { error: 3, warning: 2, info: 1 };
 
@@ -182,4 +182,51 @@ export function fixSummary(preview: WizardPreview | null): { ok: boolean; text: 
   const also = fix.also_resolves.length ? ` · también resuelve ${fix.also_resolves.join(", ")}` : "";
   if (fix.resolved) return { ok: true, text: `Resuelve ${fix.id}${also}` };
   return { ok: false, text: `Aún no resuelve ${fix.id}${also}` };
+}
+
+/** "K8S-CP-001" → "CP-001" (para la barra de estado compacta). */
+export function shortRuleId(id: string): string {
+  return id.replace(/^K8S-/, "");
+}
+
+/** "Agregar 1 control plane" + "2 → 3" → "+1 control plane (2→3)". */
+export function fixHeadline(fix: FixContext): string {
+  const action = fix.remediation;
+  const rest = action.label.replace(/^Agregar\s+/i, "");
+  const head = /^\d/.test(rest) ? `+${rest}` : `+${action.count} ${rest}`;
+  const step = /(\d+)\s*→\s*(\d+)/.exec(action.reason);
+  return step ? `${head} (${step[1]}→${step[2]})` : head;
+}
+
+export type WizardStatus = {
+  fix: string | null;
+  resolve: { ok: boolean; text: string } | null;
+  warnings: number;
+  errors: number;
+  added: Finding[];
+};
+
+/** Partes de la barra de estado del wizard (corrección, resultado y avisos nuevos). */
+export function wizardStatus(preview: WizardPreview | null, fix: FixContext | null | undefined): WizardStatus | null {
+  const added = preview?.findings?.added ?? [];
+  const status = preview?.findings?.fix ?? null;
+  let resolve: WizardStatus["resolve"] = null;
+  if (fix && status) {
+    const ids = [status.id, ...status.also_resolves].map(shortRuleId).join(", ");
+    resolve = status.resolved
+      ? { ok: true, text: `✔ Resuelve ${ids}` }
+      : {
+          ok: false,
+          text: `… Aún no resuelve ${shortRuleId(status.id)}${status.also_resolves.length ? ` (sí ${status.also_resolves.map(shortRuleId).join(", ")})` : ""}`,
+        };
+  }
+  const result: WizardStatus = {
+    fix: fix ? `Corrigiendo ${fix.finding.id} · ${fix.finding.cluster ?? fix.finding.site ?? ""} · Propuesta: ${fixHeadline(fix)}` : null,
+    resolve,
+    warnings: added.filter((item) => item.severity === "warning").length,
+    errors: added.filter((item) => item.severity === "error").length,
+    added,
+  };
+  if (!result.fix && !result.resolve && !added.length) return null;
+  return result;
 }

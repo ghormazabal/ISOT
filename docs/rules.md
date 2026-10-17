@@ -47,7 +47,8 @@ API:
 Wizards: la vista previa y el commit comparan el inventario antes y después
 y solo **bloquean por errores nuevos del sitio del wizard** o nuevos sin
 sitio atribuible. Errores previos o de otros sitios no bloquean. Los
-warnings nuevos del sitio piden confirmar con el checkbox.
+warnings nuevos del sitio piden confirmar con «Acepto N aviso(s) nuevo(s)»,
+junto a Confirmar.
 
 UI: dentro de un sitio la campana y el panel muestran solo ese sitio; en la
 vista global el panel agrupa por sitio (más «Global / plantillas») y cada
@@ -94,12 +95,14 @@ remediation:
 En la UI cada tarjeta del panel muestra **Corregir · …** (`add_device`) o
 **Abrir …** (`open_entity`). «Corregir» entra en Editar con el wizard
 «Agregar device» precargado (sitio, clúster, rol, tipo y cantidad; el
-direccionamiento lo asigna el allocator), un banner con el hallazgo y la
-vista previa automática. El preview manda `fix` (id, sitio, entidad y
+direccionamiento lo asigna el allocator), una barra de estado con el
+hallazgo y la vista previa automática. El preview manda `fix` (id, sitio, entidad y
 clúster del hallazgo) y la respuesta trae `findings.fix`:
 `{resolved, remaining, also_resolves}`, comparando el estado antes/después
-por identidad (sin el mensaje). La UI muestra «Resuelve K8S-CP-001» o
-«Aún no resuelve …» con el `followup`. Sin modo edición el botón queda
+por identidad (sin el mensaje). La barra de estado (una línea) muestra
+«Corrigiendo K8S-CP-001 · site2-edge · Propuesta: +1 control plane (2→3) |
+✔ Resuelve CP-001, WK-001 | ⚠ 1 aviso nuevo»; clic en **detalles** despliega
+el mensaje, la propuesta, el `followup` y los hallazgos nuevos. Sin modo edición el botón queda
 deshabilitado con un tooltip. El borrador (incluida la corrección) se
 conserva al salir de Editar y al recargar.
 
