@@ -52,6 +52,9 @@ def build_device_index(repo_root: Path, site: Site) -> list[dict[str, Any]]:
                 "links": device.index_links(),
             }
         )
+        leaf_pair = device.data.get("leaf_pair")
+        if leaf_pair:
+            entries[-1]["leaf_pair"] = leaf_pair
     entries.sort(key=lambda item: (item["path"] or "", item["hostname"] or ""))
     return entries
 

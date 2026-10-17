@@ -37,6 +37,7 @@ function groupKey(node: GraphNode, groupBy: GroupBy): string {
   if (node.entity === "network") return "network";
   if (node.entity === "release") return "release";
   if (groupBy === "kind") return node.kind || "otros";
+  if (groupBy === "pair") return node.leaf_pair || "sin-par";
   return node.cluster_ref || "sin-cluster";
 }
 
@@ -52,8 +53,29 @@ function groupLabel(key: string, groupBy: GroupBy): string {
   if (key === "release") return "Releases Helm";
   if (groupBy === "kind") return KIND_LABELS[key] || key;
   if (groupBy === "cluster") return key === "sin-cluster" ? "Sin clúster" : key;
+  if (groupBy === "pair") {
+    if (key === "sin-par") return "Sin par";
+    if (key === "spines") return "Spines";
+    if (key === "mgmt") return "MGMT / OOB";
+    if (key === "border") return "Border / DCGW";
+    if (key === "unpaired") return "Leafs sueltos";
+    return key.startsWith("PAIR") ? `Par ${key.replace("PAIR", "")}` : key;
+  }
   if (key === "sin-vlan") return "Sin VLAN";
   return key.replace("vlan-", "VLAN ");
+}
+
+function pairRank(key: string): number {
+  if (key === "spines") return 0;
+  if (key.startsWith("PAIR")) {
+    const number = Number(key.replace("PAIR", ""));
+    return Number.isFinite(number) ? number : 10;
+  }
+  if (key === "unpaired") return 40;
+  if (key === "mgmt") return 50;
+  if (key === "border") return 51;
+  if (key === "sin-par") return 99;
+  return 20;
 }
 
 function flowNodeType(entity: GraphNode["entity"]): string {
@@ -86,7 +108,11 @@ export function buildFlow(graph: GraphPayload, groupBy: GroupBy): { nodes: Node[
   }
 
   const nodes: Node[] = [];
-  [...buckets.entries()].forEach(([key, members], col) => {
+  const ordered = [...buckets.entries()];
+  if (groupBy === "pair") {
+    ordered.sort((left, right) => pairRank(left[0]) - pairRank(right[0]) || left[0].localeCompare(right[0]));
+  }
+  ordered.forEach(([key, members], col) => {
     const height = GROUP_PAD_Y + members.length * (NODE_HEIGHT + 10) + 16;
     const label =
       graph.view === "global"

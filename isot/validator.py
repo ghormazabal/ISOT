@@ -1,7 +1,9 @@
 """Validador de integridad referencial e IPAM del inventario ISoT.
 
 Comprueba, por sitio:
-  * IPs duplicadas (dirección sin prefijo CIDR).
+  * IPs duplicadas (dirección sin prefijo CIDR, incluye oob).
+  * hostnames duplicados.
+  * puertos duplicados (connected_to, leaf_pc, oob) sobre el mismo peer.
   * cluster_ref → sites/<sitio>/clusters/<ref>.yaml
   * connected_to.device (+ site opcional) → hostname en ese sitio
   * template_ref → cluster-templates/ (global o del sitio)
@@ -24,6 +26,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from isot.cabling import collect_connection_warnings
 from isot.helm import collect_chart_issues
 from isot.inventory import (
     AddressSpace,
@@ -107,7 +110,45 @@ def collect_issues(repo_root: Path, devices: list[Device] | None = None) -> list
     }
 
     ip_owners: dict[tuple[str, str], list[str]] = defaultdict(list)
+    hostname_owners: dict[tuple[str, str], list[str]] = defaultdict(list)
+    port_owners: dict[tuple[str, str, str], dict[str, str]] = defaultdict(dict)
+
+    def add_port(device: Device, peer: str | None, port: str | None, peer_site: str | None, via: str) -> None:
+        if not peer or not port:
+            return
+        parsed = parse_ref(str(peer), device.site_id)
+        if parsed is None:
+            p_site, p_host = peer_site or device.site_id, str(peer)
+        else:
+            p_site, p_host = parsed
+        if peer_site:
+            p_site = peer_site
+        key = (p_site, p_host, str(port))
+        if device.hostname not in port_owners[key]:
+            port_owners[key][device.hostname] = (
+                f"{device.site_id}/{device.hostname} ({device.rel_path}) {via}"
+            )
+
     for device in devices:
+        hostname_owners[(device.site_id, device.hostname.lower())].append(
+            f"{device.site_id}/{device.hostname} ({device.rel_path})"
+        )
+        oob = device.data.get("oob") if isinstance(device.data.get("oob"), dict) else None
+        if oob:
+            oob_ip = _ip_only(str(oob.get("ip") or ""))
+            if oob_ip:
+                ip_owners[(device.site_id, oob_ip)].append(
+                    f"{device.site_id}/{device.hostname} ({device.rel_path}) oob"
+                )
+            add_port(device, oob.get("switch"), oob.get("port"), None, "oob")
+        for bond in device.data.get("bonds") or []:
+            if not isinstance(bond, dict):
+                continue
+            leaf_pc = bond.get("leaf_pc") or {}
+            if not isinstance(leaf_pc, dict):
+                continue
+            for switch, port in leaf_pc.items():
+                add_port(device, str(switch), None if port is None else str(port), None, f"bond {bond.get('name')}")
         for iface in device.interfaces:
             address = iface.ip_address
             if not address:
@@ -149,11 +190,22 @@ def collect_issues(repo_root: Path, devices: list[Device] | None = None) -> list
                     f"({device.rel_path}) → {peer_site}/{peer}:{port}. "
                     f"No hay ningún YAML de dispositivo con ese hostname en ese sitio"
                 )
+            add_port(device, peer, iface.connected_to_port, iface.connected_to_site, f"interfaz {iface.name or '?'}")
+
+    for (site_id, key), owners in sorted(hostname_owners.items()):
+        if len(owners) > 1:
+            lines = "\n".join(f"    - {owner}" for owner in owners)
+            issues.append(f"hostname duplicado en {site_id}: {key}\n{lines}")
 
     for (site_id, address), owners in sorted(ip_owners.items()):
         if len(owners) > 1:
             lines = "\n".join(f"    - {owner}" for owner in owners)
             issues.append(f"IP duplicada en {site_id}: {address}\n{lines}")
+
+    for (peer_site, peer, port), owners in sorted(port_owners.items()):
+        if len(owners) > 1:
+            lines = "\n".join(f"    - {label}" for label in owners.values())
+            issues.append(f"puerto duplicado en {peer_site}/{peer}:{port}\n{lines}")
 
     issues.extend(_shared_space_collisions(spaces, sites, topologies, devices))
 
@@ -266,6 +318,20 @@ def collect_issues(repo_root: Path, devices: list[Device] | None = None) -> list
     return issues
 
 
+def collect_warnings(repo_root: Path, devices: list[Device] | None = None) -> list[str]:
+    """Avisos opcionales (connection_rules). No fallan el validador."""
+    sites, _ = load_catalog(repo_root)
+    devices = devices if devices is not None else load_devices(repo_root, sites)
+    by_site: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for device in devices:
+        by_site[device.site_id].append(device.data)
+    topologies = {site.id: load_topology(site) for site in sites}
+    warnings: list[str] = []
+    for site in sites:
+        warnings.extend(collect_connection_warnings(by_site.get(site.id) or [], topologies.get(site.id)))
+    return warnings
+
+
 def _shared_space_collisions(
     spaces: list[AddressSpace],
     sites: list[Site],
@@ -315,7 +381,13 @@ def _shared_space_collisions(
     return issues
 
 
-def format_report(repo_root: Path, devices: list[Device], issues: list[str]) -> str:
+def format_report(
+    repo_root: Path,
+    devices: list[Device],
+    issues: list[str],
+    warnings: list[str] | None = None,
+) -> str:
+    warnings = warnings or []
     ip_count = sum(1 for d in devices for i in d.interfaces if i.ip_address)
     sites = sorted({device.site_id for device in devices})
     header = [
@@ -327,20 +399,26 @@ def format_report(repo_root: Path, devices: list[Device], issues: list[str]) -> 
         f"Interfaces con IP: {ip_count}",
         "",
     ]
-    if not issues:
-        header.append("Resultado: OK (sin colisiones de IP ni referencias rotas)")
-        return "\n".join(header) + "\n"
-
-    body = [f"[ERROR] {issue}" for issue in issues]
-    body.append("")
-    body.append(f"Resultado: FALLÓ ({len(issues)} error(es))")
-    return "\n".join(header + body) + "\n"
+    body: list[str] = [f"[WARN] {item}" for item in warnings]
+    if issues:
+        body.extend(f"[ERROR] {issue}" for issue in issues)
+        body.append("")
+        extra = f", {len(warnings)} aviso(s)" if warnings else ""
+        body.append(f"Resultado: FALLÓ ({len(issues)} error(es){extra})")
+        return "\n".join(header + body) + "\n"
+    if warnings:
+        body.append("")
+        body.append(f"Resultado: OK ({len(warnings)} aviso(s) de connection_rules)")
+        return "\n".join(header + body) + "\n"
+    header.append("Resultado: OK (sin colisiones de IP ni referencias rotas)")
+    return "\n".join(header) + "\n"
 
 
 def validate(repo_root: Path) -> int:
     devices = load_devices(repo_root)
     issues = collect_issues(repo_root, devices)
-    sys.stdout.write(format_report(repo_root, devices, issues))
+    warnings = collect_warnings(repo_root, devices)
+    sys.stdout.write(format_report(repo_root, devices, issues, warnings))
     return FAIL_EXIT if issues else OK_EXIT
 
 

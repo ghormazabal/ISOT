@@ -5,6 +5,7 @@ import {
   ReactFlow,
   useEdgesState,
   useNodesState,
+  useReactFlow,
   type NodeMouseHandler,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -43,6 +44,9 @@ type Props = {
   compare?: boolean;
   onlyChanges?: boolean;
   onOnlyChanges?: (value: boolean) => void;
+  focusIds?: string[];
+  neighborhood?: boolean;
+  onNeighborhood?: (value: boolean) => void;
 };
 
 export function TopologyGraph({
@@ -57,9 +61,17 @@ export function TopologyGraph({
   compare = false,
   onlyChanges = false,
   onOnlyChanges,
+  focusIds,
+  neighborhood = false,
+  onNeighborhood,
 }: Props) {
   const effectiveGroup: GroupBy = siteFilter === "all" && view === "network" ? "kind" : groupBy;
-  const visibleGraph = useMemo(() => (graph ? filterGraph(graph, onlyChanges && compare) : null), [graph, onlyChanges, compare]);
+  const visibleGraph = useMemo(() => {
+    if (!graph) return null;
+    const seeds = focusIds?.length ? focusIds : addedIds(graph);
+    const narrowed = neighborhood ? neighborhoodGraph(graph, seeds) : graph;
+    return filterGraph(narrowed, onlyChanges && compare && !neighborhood);
+  }, [graph, onlyChanges, compare, neighborhood, focusIds]);
   const laid = useMemo(
     () => (visibleGraph ? buildFlow(visibleGraph, effectiveGroup) : { nodes: [], edges: [] }),
     [visibleGraph, effectiveGroup],
@@ -112,6 +124,7 @@ export function TopologyGraph({
               <option value="cluster">clúster</option>
               <option value="kind">tipo</option>
               <option value="vlan">VLAN</option>
+              <option value="pair">par de leafs</option>
             </select>
           </label>
         ) : null}
@@ -134,6 +147,19 @@ export function TopologyGraph({
               solo cambios
             </label>
           </li>
+          {onNeighborhood ? (
+            <li>
+              <label className="diff-filter">
+                <input
+                  id="wizard-neighborhood"
+                  type="checkbox"
+                  checked={neighborhood}
+                  onChange={(event) => onNeighborhood(event.target.checked)}
+                />{" "}
+                solo vecindario
+              </label>
+            </li>
+          ) : null}
         </ul>
       ) : view === "network" && !isGlobal && vlans.length > 0 ? (
         <ul className="vlan-legend">
@@ -161,10 +187,45 @@ export function TopologyGraph({
         >
           <Background color="#2c3640" gap={18} />
           <Controls showInteractive={false} />
+          <FitFocus ids={neighborhood && visibleGraph ? visibleGraph.nodes.map((node) => node.id) : (focusIds ?? [])} />
         </ReactFlow>
       </div>
     </section>
   );
+}
+
+function FitFocus({ ids }: { ids: string[] }) {
+  const { fitView } = useReactFlow();
+  const key = ids.join("|");
+  useEffect(() => {
+    if (!key) return;
+    const list = key.split("|").filter(Boolean);
+    const handle = window.setTimeout(() => {
+      void fitView({ nodes: list.map((id) => ({ id })), padding: 0.45, duration: 280 });
+    }, 80);
+    return () => window.clearTimeout(handle);
+  }, [fitView, key]);
+  return null;
+}
+
+function addedIds(graph: GraphPayload): string[] {
+  return graph.nodes.filter((node) => node.diff_status === "added").map((node) => node.id);
+}
+
+function neighborhoodGraph(graph: GraphPayload, seeds: string[]): GraphPayload {
+  const keep = new Set(seeds);
+  if (!keep.size) return graph;
+  for (const edge of graph.edges) {
+    if (keep.has(edge.source) || keep.has(edge.target)) {
+      keep.add(edge.source);
+      keep.add(edge.target);
+    }
+  }
+  return {
+    ...graph,
+    nodes: graph.nodes.filter((node) => keep.has(node.id)),
+    edges: graph.edges.filter((edge) => keep.has(edge.source) && keep.has(edge.target)),
+  };
 }
 
 function statusLabel(status: DiffStatus): string {

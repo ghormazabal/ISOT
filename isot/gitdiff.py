@@ -791,21 +791,15 @@ def _union_graph(
     return {"nodes": list(nodes.values()), "edges": list(edges.values()), "view": view}
 
 
-def semantic_diff(repo: Path, base_ref: str, head_ref: str, site: str | None = None) -> dict[str, Any]:
-    base_name = validate_ref(base_ref)
-    head_name = validate_ref(head_ref)
-    site_key = site or ""
-    if site_key and not re.fullmatch(r"^[A-Za-z0-9._-]+$", site_key):
-        raise RefError("id de sitio inválido")
-    base_sha = resolve_sha(repo, base_name)
-    head_sha = resolve_sha(repo, head_name)
-    cache_key = (str(repo.resolve()), base_sha, head_sha, site_key)
-    cached = _diff_cache.get(cache_key)
-    if cached is not None:
-        _diff_cache.move_to_end(cache_key)
-        return cached
-    base_snap = snapshot_ref(repo, base_sha)
-    head_snap = snapshot_ref(repo, head_sha)
+def diff_from_snapshots(
+    base_snap: dict[str, Any],
+    head_snap: dict[str, Any],
+    site: str | None = None,
+    *,
+    base_meta: dict[str, Any] | None = None,
+    head_meta: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Compara dos snapshots ya materializados (git archive o overlay en memoria)."""
     entities = _compare_entities(base_snap["entities"], head_snap["entities"], site or None)
     summary = {
         "added": sum(1 for item in entities if item["status"] == "added"),
@@ -830,14 +824,38 @@ def semantic_diff(repo: Path, base_ref: str, head_ref: str, site: str | None = N
                 vlan_status,
                 view,
             )
-    payload = {
-        "base": {"ref": base_name, "sha": base_sha, "short": base_sha[:7]},
-        "head": {"ref": head_name, "sha": head_sha, "short": head_sha[:7]},
+    return {
+        "base": dict(base_meta or {"ref": "working", "sha": "", "short": "working"}),
+        "head": dict(head_meta or {"ref": "preview", "sha": "", "short": "preview"}),
         "site": site or None,
         "summary": summary,
         "entities": entities,
         "graphs": graphs,
     }
+
+
+def semantic_diff(repo: Path, base_ref: str, head_ref: str, site: str | None = None) -> dict[str, Any]:
+    base_name = validate_ref(base_ref)
+    head_name = validate_ref(head_ref)
+    site_key = site or ""
+    if site_key and not re.fullmatch(r"^[A-Za-z0-9._-]+$", site_key):
+        raise RefError("id de sitio inválido")
+    base_sha = resolve_sha(repo, base_name)
+    head_sha = resolve_sha(repo, head_name)
+    cache_key = (str(repo.resolve()), base_sha, head_sha, site_key)
+    cached = _diff_cache.get(cache_key)
+    if cached is not None:
+        _diff_cache.move_to_end(cache_key)
+        return cached
+    base_snap = snapshot_ref(repo, base_sha)
+    head_snap = snapshot_ref(repo, head_sha)
+    payload = diff_from_snapshots(
+        base_snap,
+        head_snap,
+        site,
+        base_meta={"ref": base_name, "sha": base_sha, "short": base_sha[:7]},
+        head_meta={"ref": head_name, "sha": head_sha, "short": head_sha[:7]},
+    )
     _diff_cache[cache_key] = payload
     while len(_diff_cache) > CACHE_SIZE:
         _diff_cache.popitem(last=False)

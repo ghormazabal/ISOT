@@ -76,6 +76,7 @@ campo `k8s_name` guarda el nombre k8s.
 2. `python -m isot.indexer`
 3. `python -m isot.leakcheck`
 4. No hagas commit si alguno falla o si un `_*_index.json` quedó desfasado.
+5. Altas por UI: wizard (rama `wizard/…`), no commits directos en main.
 
 ## 6. `[AI-Context]`
 
@@ -116,4 +117,49 @@ La UI tiene selector de sitio (Todos / SITE1 / SITE2). Vista **Sitios**
 **Comparar** pide `/api/refs`, `/api/commits?rev=` y `/api/diff` (árboles
 de git, sin checkout). Base y head pueden ser rama, tag, SHA o `HEAD~N`.
 El estado de un hijo se propaga al sitio/clúster/template/release padre
-(`inherited`, `child_counts`, `children`). Todo es de solo lectura.
+(`inherited`, `child_counts`, `children`). El default es **solo lectura**.
+
+## 8. Wizards (solo con `ISOT_EDIT=1`)
+
+No edites YAML a mano si el usuario pide un alta por UI. Endpoints
+`GET /api/wizard/cabling-defaults`, `POST /api/wizard/site/preview|commit` y
+`/api/wizard/device/preview|commit`.
+**Editar** es un toggle: si ya estás en el wizard, vuelve a Sitios /
+Kubernetes / Comparar con el mismo sitio. El avance (wizard, paso, campos,
+reglas, preview) vive en el estado de la app y en `sessionStorage`
+(`isot.wizard.session`); sobrevive recarga y cambio de pestaña. Badge
+**borrador** en el botón; **Descartar borrador** con confirmación. Tras un
+commit exitoso el borrador se limpia.
+El preview no escribe: devuelve YAML, campos auto y el **grafo propuesto**
+(mismo diff semántico que Comparar, overlay en memoria). El commit:
+
+1. crea `wizard/<slug>` desde HEAD
+2. escribe YAML + índices
+3. corre el validador; si falla, `git reset --hard` y borra la rama
+4. hace commit y vuelve a la rama original
+
+Arquitectura y cableado del sitio nuevo (`isot/cabling.py`): el wizard pregunta
+Spine-Leaf / collapsed-core / custom y las cantidades (spines, pares de leafs,
+MGMT, DCGW, nodos por rol). Las **reglas de conexión** viven en
+`sites/<id>/topology/index.yaml` → `connection_rules` (dual-home a 2 leafs del
+mismo par con bond LACP, leaf→todos los spines, bondS de storage, OOB al MGMT,
+fill-first o round-robin). El generador crea devices, `connected_to`,
+PortChannels y bonds a partir de esas reglas. **Agregar device** las respeta
+(siguiente par con puertos libres). Sitios existentes sin el bloque: infiere
+de los hermanos y ofrece guardarlas. El validador emite `[WARN]` (no error) si
+un device las viola.
+
+Autoasignación (`isot/allocator.py`): hostname del **mismo rol y tipo**
+(número más bajo libre de ese prefijo). Si no hay hermanos en el clúster,
+busca el rol en otros clústeres del sitio; si no existe en el sitio, el
+patrón sale de otro sitio o del convenio (apps-worker/worker→NODE,
+edge-server/platform-server→CTRL, storage→STOR, leaf→LEAF, spine→SPNE,
+mgmt→MGMT, dcgw→DCGW). Nunca reutilices el prefijo de otro rol. Specs
+(interfaces, bonds) salen de connection_rules o del device más parecido
+del clúster **sin** heredar hostname ni rol; la UI dice
+`sin hermanos del mismo rol: patrón nuevo`. Si el usuario escribe un
+hostname cuyo prefijo es de otro rol, warning. Siguiente IP libre en la
+subred del hermano (sin gateway ni VIPs MetalLB), siguiente PortChannel
+libre en el par de leafs. No inventes rangos. El usuario confirma campos
+`auto` (origen en tooltip). Tras el commit, abre Comparar base vs
+`wizard/…`.

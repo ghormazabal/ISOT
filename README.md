@@ -55,7 +55,8 @@ Punteros lógicos (se resuelven **en el sitio actual** salvo que se indique otro
 
 Campos vacíos (`""`, `[]`, `null`) son **desconocidos**. No se rellenan.
 
-La UI es **de solo lectura**. Git es la fuente de verdad.
+La UI es **de solo lectura** por defecto. Git es la fuente de verdad; la
+edición guiada se activa aparte (ver [Edición con wizards](#edición-con-wizards)).
 
 ### Stack
 
@@ -128,6 +129,102 @@ Demo con cambios ficticios (`demo/diff-example` vs el tip de esta rama):
 # VLAN 2099 LAB / LAB_NET, se quita site1-jump001, cniConfig.mtu 1440 → 1500
 ```
 
+## Edición con wizards
+
+La UI no escribe YAML hasta que confirmas. Para encender los wizards:
+
+```bash
+ISOT_EDIT=1 ./scripts/serve.sh --edit
+```
+
+Aparece el botón **Editar** (ausente en solo lectura). Es un toggle: entra al
+wizard y, si ya estás ahí, vuelve a Sitios / Kubernetes / Comparar **con el
+mismo sitio**.
+
+### Flujo Git
+
+El preview corre en memoria (nada se escribe). **Confirmar** crea una rama
+`wizard/<descripcion>` desde HEAD, escribe YAML + índices, corre el validador
+y hace commit. Si el validador falla: `git reset --hard`, se borra la rama y
+no queda rastro. Nunca escribe en `main` ni en la rama de trabajo. Después
+abre **Comparar** con base = la rama actual y head = `wizard/…` (verde
+agregado, amarillo afectado).
+
+### Autoasignación por rol
+
+Hostname, IPs y PortChannel salen de hermanos del **mismo rol y tipo**, no
+del clúster a secas. Orden: mismo rol en el clúster → mismo rol en el sitio →
+patrón de otro sitio o convenio (`apps-worker`/`worker` → `NODE`,
+`edge-server`/`platform-server` → `CTRL`, storage → `STOR`, leaf → `LEAF`,
+spine → `SPNE`, mgmt → `MGMT`, dcgw → `DCGW`). Nunca reutiliza el prefijo de
+otro rol. El número es el hueco más bajo de ese prefijo (SITE1-NODE003 si
+faltaba el 3). Specs (bonds, VLANs) vienen de `connection_rules` o del
+device más parecido **sin** copiar hostname ni rol. Si no hay hermanos, la UI
+avisa **sin hermanos del mismo rol: patrón nuevo**.
+
+### connection_rules
+
+**Nuevo sitio** empieza por la arquitectura (Spine-Leaf, collapsed core o
+personalizada) y sigue con las reglas de conexión, persistidas en
+`sites/<id>/topology/index.yaml` como `connection_rules`: dual-home a un par
+de leafs, uplinks a spines, bond de storage, OOB al MGMT, política fill-first
+o round-robin. El generador y **Agregar device** las respetan. En sitios
+viejos sin el bloque se infieren de los hermanos y se pueden guardar. El
+validador avisa (`[WARN]`, no error) si un device las viola.
+
+### Borrador persistente
+
+Wizard activo, paso, campos, reglas y preview viven en el estado de la app y
+en `sessionStorage` (`isot.wizard.session`). Cambiar de pestaña o recargar no
+tira el avance. Un badge **borrador** en Editar indica que hay un wizard en
+curso; **Descartar borrador** pide confirmación. Un commit exitoso limpia el
+borrador.
+
+![Wizard: elegir alta de sitio o device](docs/images/wizard-home.png)
+
+*Inicio del wizard: **Nuevo sitio** o **Agregar device**. Editar queda activo.*
+
+![Wizard sitio: paso Arquitectura](docs/images/wizard-site-architecture.png)
+
+*Nuevo sitio, paso 1/5 **Arquitectura**: Spine-Leaf por defecto, cantidades de
+spines, pares de leafs, MGMT, DCGW y nodos por rol.*
+
+![Wizard sitio: paso Reglas de conexión](docs/images/wizard-site-rules.png)
+
+*Paso 4/5: política fill-first / round-robin y reglas editables (compute-mlag,
+storage-bond, leaf-to-spine, oob-bmc). Se guardan como `connection_rules`.*
+
+![Wizard sitio: grafo spine-leaf](docs/images/wizard-site-graph.png)
+
+*Vista previa de un sitio spine-leaf (SITE3): capa de spines, pares de leafs y
+workers, agrupado por par. Nada se escribe hasta Confirmar.*
+
+![Wizard device: worker autoasignado con grafo](docs/images/wizard-device-preview.png)
+
+*Worker de `site1-apps`: el grafo enfoca `SITE1-NODE003` (badge **nuevo**),
+hermano `SITE1-NODE007`, campos marcados **auto**.*
+
+![Wizard device: solo vecindario](docs/images/wizard-device-neighborhood.png)
+
+*Toggle **solo vecindario**: el worker nuevo y los leafs del par (amarillo), a
+un salto.*
+
+![Wizard device: alta de tres workers](docs/images/wizard-device-add3.png)
+
+*Agregar N=3 en `site1-apps`: `SITE1-NODE003`, `NODE004` y `NODE005` en verde,
+conectados al par de leafs.*
+
+![Wizard device: patrón nuevo en SITE2](docs/images/wizard-device-new-role.png)
+
+*SITE2, clúster `site2-edge`, rol `apps-worker` (sin hermanos): hostname
+`SITE2-NODE001`, no un `CTRL` de `edge-server`. Nota **sin hermanos del mismo
+rol: patrón nuevo**.*
+
+![Editar con indicador de borrador](docs/images/edit-draft-badge.png)
+
+*Tras avanzar el wizard y volver a Sitios: **Editar** lleva el badge
+**borrador**. El grafo global no pierde el sitio.*
+
 ## Capturas
 
 ### Topología de SITE1
@@ -169,7 +266,8 @@ Diff gráfico entre el tip de esta rama y `demo/diff-example`: SITE1 en amarillo
 ## Cómo usarlo
 
 ```bash
-./scripts/serve.sh          # http://localhost:8000
+./scripts/serve.sh          # http://localhost:8000  (solo lectura)
+ISOT_EDIT=1 ./scripts/serve.sh --edit
 # o: docker compose up --build
 ```
 
@@ -181,7 +279,7 @@ python -m isot.indexer          # sitios + devices + clusters + templates
 python -m isot.indexer --check
 python -m isot.leakcheck
 pytest
-cd web && npm ci && npm run build
+cd web && npm ci && npm test && npm run build
 ```
 
 API de solo lectura: `/api/sites`, `/api/sites/{id}/devices`,
@@ -191,5 +289,7 @@ API de solo lectura: `/api/sites`, `/api/sites/{id}/devices`,
 `/api/sites/{id}/clusters/{name}/values-diff`,
 `/api/refs`, `/api/commits?rev=<ref>`, y
 `/api/diff?base=<ref>&head=<ref>[&site=<id>]`.
+Con edición: `GET /api/wizard/status`, `GET /api/wizard/cabling-defaults`,
+`POST /api/wizard/device/preview|commit`, `POST /api/wizard/site/preview|commit`.
 
 Convenciones para agentes: [LLM_INSTRUCTIONS.md](LLM_INSTRUCTIONS.md).

@@ -2,6 +2,7 @@ import type {
   ChartValues,
   ClusterDetail,
   ClusterIndexEntry,
+  ConnectionPolicy,
   DeviceDetail,
   DeviceIndexEntry,
   GraphPayload,
@@ -13,10 +14,12 @@ import type {
   TemplateIndexEntry,
   Topology,
   ValuesDiff,
+  WizardCommit,
+  WizardPreview,
 } from "./types";
 
-async function fetchJSON<T>(url: string): Promise<T> {
-  const response = await fetch(url);
+async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init);
   if (!response.ok) {
     let detail = response.statusText;
     try {
@@ -28,6 +31,14 @@ async function fetchJSON<T>(url: string): Promise<T> {
     throw new Error(detail);
   }
   return response.json() as Promise<T>;
+}
+
+function postJSON<T>(url: string, body: unknown): Promise<T> {
+  return fetchJSON<T>(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }
 
 export const api = {
@@ -78,4 +89,18 @@ export const api = {
     if (site && site !== "all") params.set("site", site);
     return fetchJSON<SemanticDiff>(`/api/diff?${params.toString()}`);
   },
+  wizardStatus: () => fetchJSON<{ edit: boolean }>("/api/wizard/status"),
+  wizardCablingDefaults: (architecture: string, extra?: Record<string, string | number>) => {
+    const params = new URLSearchParams({ architecture });
+    if (extra) {
+      for (const [key, value] of Object.entries(extra)) {
+        params.set(key, String(value));
+      }
+    }
+    return fetchJSON<ConnectionPolicy>(`/api/wizard/cabling-defaults?${params.toString()}`);
+  },
+  wizardDevicePreview: (body: unknown) => postJSON<WizardPreview>("/api/wizard/device/preview", body),
+  wizardDeviceCommit: (body: unknown) => postJSON<WizardCommit>("/api/wizard/device/commit", body),
+  wizardSitePreview: (body: unknown) => postJSON<WizardPreview>("/api/wizard/site/preview", body),
+  wizardSiteCommit: (body: unknown) => postJSON<WizardCommit>("/api/wizard/site/commit", body),
 };

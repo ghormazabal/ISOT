@@ -1,8 +1,9 @@
-"""API HTTP de solo lectura sobre el inventario ISoT multi-sitio.
+"""API HTTP sobre el inventario ISoT multi-sitio.
 
 Los listados y el grafo salen de los índices. El YAML se parsea solo
 cuando se pide el detalle de un dispositivo, clúster o template.
 Los values de un chart se leen bajo demanda (values_ref / values_inline).
+Los POST /api/wizard/* solo existen si ISOT_EDIT=1 (o create_app(edit=True)).
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from isot.gitdiff import RefError, list_commits, list_refs, semantic_diff
+from isot.gitdiff import RefError, clear_caches, list_commits, list_refs, semantic_diff
 from isot.helm import (
     chart_meta,
     charts_from_doc,
@@ -38,6 +39,8 @@ from isot.inventory import (
     site_by_id,
 )
 from isot.paths import find_repo_root
+from isot.cabling import default_policy, policy_from_site_body
+from isot.wizard import WizardError, commit_preview, device_preview, edit_enabled, site_preview
 
 SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
@@ -143,6 +146,7 @@ def graph_from_index(entries: list[dict[str, Any]], view: str = "network") -> di
             "ip": entry.get("ip"),
             "kind": entry.get("kind"),
             "cluster_ref": entry.get("cluster_ref"),
+            "leaf_pair": entry.get("leaf_pair"),
             "path": entry.get("path"),
             "entity": "device",
         }
@@ -280,6 +284,7 @@ def kubernetes_graph(
                     "ip": device.get("ip"),
                     "kind": device.get("kind"),
                     "cluster_ref": name,
+                    "leaf_pair": device.get("leaf_pair"),
                     "path": device.get("path"),
                     "entity": "device",
                 }
@@ -365,16 +370,17 @@ def _chart_values_payload(template_path: Path, release: str) -> dict[str, Any]:
     }
 
 
-def create_app(repo_root: Path | None = None) -> FastAPI:
+def create_app(repo_root: Path | None = None, edit: bool | None = None) -> FastAPI:
+    can_edit = edit_enabled(edit)
     app = FastAPI(
         title="ISoT",
-        description="Infrastructure Source of Truth — API de solo lectura (multi-sitio)",
-        version="0.6.0",
+        description="Infrastructure Source of Truth — API de inventario (multi-sitio)",
+        version="0.7.0",
     )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
-        allow_methods=["GET"],
+        allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["*"],
     )
 
@@ -404,6 +410,86 @@ def create_app(repo_root: Path | None = None) -> FastAPI:
     @app.get("/api/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/api/wizard/status")
+    def wizard_status() -> dict[str, Any]:
+        return {"edit": can_edit}
+
+    def require_edit() -> None:
+        if not can_edit:
+            raise HTTPException(status_code=403, detail="edición deshabilitada (ISOT_EDIT=1 o --edit)")
+
+    @app.get("/api/wizard/cabling-defaults")
+    def wizard_cabling_defaults(
+        architecture: str = Query(default="spine-leaf"),
+        spines: int | None = Query(default=None),
+        leaf_pairs: int | None = Query(default=None),
+        unpaired_leafs: int | None = Query(default=None),
+        mgmt_switches: int | None = Query(default=None),
+        dcgw: int | None = Query(default=None),
+        ports_per_leaf: int = Query(default=48),
+        pair_policy: str = Query(default="fill-first"),
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "architecture": architecture,
+            "ports_per_leaf": ports_per_leaf,
+            "pair_policy": pair_policy,
+        }
+        if spines is not None:
+            body["spines"] = spines
+        if leaf_pairs is not None:
+            body["leaf_pairs"] = leaf_pairs
+        if unpaired_leafs is not None:
+            body["unpaired_leafs"] = unpaired_leafs
+        if mgmt_switches is not None:
+            body["mgmt_switches"] = mgmt_switches
+        if dcgw is not None:
+            body["dcgw"] = dcgw
+        try:
+            return policy_from_site_body(body)
+        except Exception:
+            return default_policy(architecture)
+
+    @app.post("/api/wizard/site/preview")
+    def wizard_site_preview(body: dict[str, Any]) -> dict[str, Any]:
+        require_edit()
+        try:
+            return site_preview(resolved_root(), body)
+        except WizardError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/wizard/site/commit")
+    def wizard_site_commit(body: dict[str, Any]) -> dict[str, Any]:
+        require_edit()
+        try:
+            preview = site_preview(resolved_root(), body)
+            description = str(body.get("description") or body.get("id") or "nuevo-sitio")
+            result = commit_preview(resolved_root(), preview, f"sitio {description}")
+            clear_caches()
+            return {**result, "preview": preview}
+        except WizardError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/wizard/device/preview")
+    def wizard_device_preview(body: dict[str, Any]) -> dict[str, Any]:
+        require_edit()
+        try:
+            return device_preview(resolved_root(), body)
+        except (WizardError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/wizard/device/commit")
+    def wizard_device_commit(body: dict[str, Any]) -> dict[str, Any]:
+        require_edit()
+        try:
+            preview = device_preview(resolved_root(), body)
+            hostnames = ",".join(preview.get("hostnames") or []) or "device"
+            result = commit_preview(resolved_root(), preview, f"device {hostnames}")
+            clear_caches()
+            return {**result, "preview": preview}
+        except (WizardError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
 
     @app.get("/api/refs")
     def git_refs(rev: str | None = Query(default=None)) -> dict[str, Any]:
@@ -653,9 +739,15 @@ def create_app(repo_root: Path | None = None) -> FastAPI:
         if assets.is_dir():
             app.mount("/assets", StaticFiles(directory=assets), name="assets")
 
+        def spa_index() -> FileResponse:
+            return FileResponse(
+                FRONTEND_DIST / "index.html",
+                headers={"Cache-Control": "no-store"},
+            )
+
         @app.get("/")
         def spa_root() -> FileResponse:
-            return FileResponse(FRONTEND_DIST / "index.html")
+            return spa_index()
 
         @app.get("/{full_path:path}")
         def spa_fallback(full_path: str) -> FileResponse:
@@ -666,7 +758,7 @@ def create_app(repo_root: Path | None = None) -> FastAPI:
                 return FileResponse(candidate)
             index = FRONTEND_DIST / "index.html"
             if index.is_file():
-                return FileResponse(index)
+                return spa_index()
             raise HTTPException(status_code=404, detail="Frontend no construido")
 
     return app

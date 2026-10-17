@@ -40,8 +40,9 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
 
-      - name: Build del frontend
+      - name: Tests y build del frontend
         working-directory: web
         run: |
           npm ci
+          npm test
           npm run build

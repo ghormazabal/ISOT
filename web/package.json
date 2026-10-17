@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --experimental-strip-types --test src/wizardDraft.test.ts"
   },
   "dependencies": {
     "@xyflow/react": "^12.6.0",

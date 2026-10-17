@@ -45,6 +45,42 @@ def test_duplicate_ip_within_site_is_detected(tmp_path: Path) -> None:
     assert validate(root) != 0
 
 
+def test_duplicate_hostname_is_detected(tmp_path: Path) -> None:
+    root = seed_mini_repo(tmp_path)
+    write_yaml(
+        root / "sites" / "site-a" / "devices" / "baremetal" / "server-dup.yaml",
+        {
+            "hostname": "server-01",
+            "role": "k8s-worker",
+            "networking": [{"interface": "eno1", "ip": "10.0.1.16/24", "vlan": 100}],
+        },
+    )
+    issues = collect_issues(root)
+    assert any("hostname duplicado" in issue and "server-01" in issue for issue in issues)
+
+
+def test_duplicate_port_is_detected(tmp_path: Path) -> None:
+    root = seed_mini_repo(tmp_path)
+    write_yaml(
+        root / "sites" / "site-a" / "devices" / "baremetal" / "server-02.yaml",
+        {
+            "hostname": "server-02",
+            "role": "k8s-worker",
+            "cluster_ref": "k8s-prod",
+            "networking": [
+                {
+                    "interface": "eno1",
+                    "ip": "10.0.1.16/24",
+                    "vlan": 100,
+                    "connected_to": {"device": "switch-core", "port": "GigabitEthernet1/0/5"},
+                }
+            ],
+        },
+    )
+    issues = collect_issues(root)
+    assert any("puerto duplicado" in issue and "GigabitEthernet1/0/5" in issue for issue in issues)
+
+
 def test_same_ip_in_different_sites_is_allowed(tmp_path: Path) -> None:
     root = seed_mini_repo(tmp_path)
     write_yaml(

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { CompareSidebar } from "./components/CompareSidebar";
 import { CompareValues } from "./components/CompareValues";
@@ -8,7 +8,19 @@ import { Sidebar } from "./components/Sidebar";
 import { TemplateExplorer } from "./components/TemplateExplorer";
 import { TopologyGraph } from "./components/TopologyGraph";
 import { ValuesDiffView } from "./components/ValuesDiff";
+import { WizardsView } from "./components/WizardsView";
 import { api } from "./api";
+import {
+  applyEditToggle,
+  defaultBrowse,
+  draftsEqual,
+  emptyWizardDraft,
+  isDraftInProgress,
+  loadSession,
+  saveSession,
+  type BrowseSnapshot,
+  type WizardDraft,
+} from "./wizardDraft";
 import type {
   AppView,
   CanvasMode,
@@ -31,9 +43,13 @@ import type {
   ValuesDiff,
 } from "./types";
 
+const savedSession = loadSession();
+
 export default function App() {
-  const [view, setView] = useState<AppView>("network");
-  const [siteFilter, setSiteFilter] = useState<SiteFilter>("all");
+  const [view, setView] = useState<AppView>(() => (savedSession?.editing ? "wizards" : savedSession?.lastBrowse.view ?? "network"));
+  const [siteFilter, setSiteFilter] = useState<SiteFilter>(() => savedSession?.lastBrowse.siteFilter ?? "all");
+  const [lastBrowse, setLastBrowse] = useState<BrowseSnapshot>(() => savedSession?.lastBrowse ?? defaultBrowse());
+  const [wizardDraft, setWizardDraft] = useState<WizardDraft>(() => savedSession?.draft ?? emptyWizardDraft());
   const [sites, setSites] = useState<SiteIndexEntry[]>([]);
   const [devicesBySite, setDevicesBySite] = useState<Record<string, DeviceIndexEntry[]>>({});
   const [clustersBySite, setClustersBySite] = useState<Record<string, ClusterIndexEntry[]>>({});
@@ -51,7 +67,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
   const [canvas, setCanvas] = useState<CanvasMode>("graph");
-  const [compare, setCompare] = useState(false);
+  const [compare, setCompare] = useState(() => Boolean(savedSession && !savedSession.editing && savedSession.lastBrowse.compare));
   const [refs, setRefs] = useState<RefsPayload | null>(null);
   const [baseBranch, setBaseBranch] = useState("");
   const [baseCommit, setBaseCommit] = useState("");
@@ -64,16 +80,53 @@ export default function App() {
   const [diffLoading, setDiffLoading] = useState(false);
   const [onlyChanges, setOnlyChanges] = useState(true);
   const [diffEntity, setDiffEntity] = useState<DiffEntity | null>(null);
+  const [editEnabled, setEditEnabled] = useState(false);
+
+  const persistDraft = useCallback((draft: WizardDraft) => {
+    setWizardDraft((current) => (draftsEqual(current, draft) ? current : draft));
+  }, []);
+
+  const clearDraft = useCallback(() => {
+    setWizardDraft(emptyWizardDraft());
+  }, []);
+
+  useEffect(() => {
+    if (view === "wizards") return;
+    setLastBrowse({
+      view: view === "kubernetes" ? "kubernetes" : "network",
+      compare,
+      siteFilter,
+    });
+  }, [view, compare, siteFilter]);
+
+  useEffect(() => {
+    saveSession({
+      v: 1,
+      draft: wizardDraft,
+      lastBrowse,
+      editing: view === "wizards",
+    });
+  }, [wizardDraft, lastBrowse, view]);
+
+  const toggleEdit = () => {
+    const next = applyEditToggle(view, lastBrowse);
+    setView(next.view);
+    setCompare(next.compare);
+    if (view === "wizards") setSiteFilter(next.siteFilter);
+  };
+
+  const draftPending = isDraftInProgress(wizardDraft);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [siteIdx, templateIdx, globalGraph, gitRefs] = await Promise.all([
+        const [siteIdx, templateIdx, globalGraph, gitRefs, wizard] = await Promise.all([
           api.sites(),
           api.templates(),
           api.globalGraph(),
           api.refs().catch(() => null),
+          api.wizardStatus().catch(() => ({ edit: false })),
         ]);
         if (cancelled) return;
         const devices: Record<string, DeviceIndexEntry[]> = {};
@@ -111,6 +164,12 @@ export default function App() {
           const pick = pickDefaultRefs(gitRefs);
           setBaseBranch(pick.base);
           setHeadBranch(pick.head);
+        }
+        const canEdit = Boolean(wizard?.edit);
+        setEditEnabled(canEdit);
+        if (!canEdit && view === "wizards") {
+          setView(lastBrowse.view);
+          setCompare(lastBrowse.compare);
         }
       } catch (err) {
         if (!cancelled) setBootError(err instanceof Error ? err.message : String(err));
@@ -328,7 +387,7 @@ export default function App() {
   const activeSite = sites.find((item) => item.id === siteFilter);
 
   return (
-    <div className="app">
+    <div className={view === "wizards" ? "app app-wizards" : "app"}>
       <header className="topbar">
         <div>
           <p className="brand">ISoT</p>
@@ -376,14 +435,34 @@ export default function App() {
             type="button"
             className={compare ? "is-active" : ""}
             onClick={() => {
-              setCompare((value) => !value);
               setCanvas("graph");
               setDiffEntity(null);
+              if (view === "wizards") {
+                setView(lastBrowse.view);
+                setCompare(true);
+                setSiteFilter(lastBrowse.siteFilter);
+                return;
+              }
+              setCompare((value) => !value);
             }}
           >
             Comparar
           </button>
         </nav>
+        {editEnabled ? (
+          <nav className="view-tabs">
+            <button
+              type="button"
+              id="edit-toggle"
+              className={view === "wizards" ? "is-active" : ""}
+              aria-pressed={view === "wizards"}
+              onClick={toggleEdit}
+            >
+              Editar
+              {draftPending ? <span className="draft-pill">borrador</span> : null}
+            </button>
+          </nav>
+        ) : null}
         {compare ? (
           <div className="ref-pickers">
             <RefPicker
@@ -441,9 +520,34 @@ export default function App() {
             </button>
           </nav>
         ) : null}
-        <p className="badge">solo lectura · Git-as-a-Database</p>
+        <p className="badge">{editEnabled ? "edición · wizards" : "solo lectura · Git-as-a-Database"}</p>
       </header>
       {bootError ? <p className="boot-error">No se pudieron leer los índices: {bootError}</p> : null}
+      {editEnabled ? (
+        <WizardsView
+          hidden={view !== "wizards"}
+          sites={sites}
+          clustersBySite={clustersBySite}
+          templates={templates}
+          initialDraft={wizardDraft}
+          onDraftChange={persistDraft}
+          onClearDraft={clearDraft}
+          onOpenCompare={(base, head) => {
+            setView("network");
+            setSiteFilter("all");
+            setCompare(true);
+            setCanvas("graph");
+            setBaseBranch(base);
+            setBaseCommit("");
+            setBaseCustom("");
+            setHeadBranch(head);
+            setHeadCommit("");
+            setHeadCustom("");
+          }}
+        />
+      ) : null}
+      {view !== "wizards" ? (
+        <>
       {compare && diffError ? <p className="boot-error">Diff: {diffError}</p> : null}
       {compare && diffLoading ? <p className="boot-error">Calculando diff…</p> : null}
       {compare && diff ? (
@@ -538,6 +642,8 @@ export default function App() {
         diffEntity={compare ? diffEntity : null}
         onSelectDiffEntity={onSelectDiffChild}
       />
+        </>
+      ) : null}
     </div>
   );
 }

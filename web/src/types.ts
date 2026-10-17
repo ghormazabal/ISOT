@@ -15,6 +15,7 @@ export type DeviceIndexEntry = {
   kind: string;
   cluster_ref: string | null;
   cluster_ref_site?: string | null;
+  leaf_pair?: string | null;
   links: DeviceLink[];
 };
 
@@ -91,6 +92,7 @@ export type GraphNode = {
   description?: string | null;
   diff_status?: DiffStatus;
   diff_counts?: { added: number; removed: number; modified: number };
+  leaf_pair?: string | null;
 };
 
 export type GraphEdge = {
@@ -108,8 +110,36 @@ export type GraphPayload = {
   view?: string;
 };
 
+export type ConnectionRule = {
+  id?: string;
+  roles?: string[];
+  attach?: string;
+  leafs_per_node?: number;
+  bond?: string;
+  bond_name?: string;
+  purpose?: string;
+  via?: string;
+  description?: string;
+};
+
+export type ConnectionPolicy = {
+  architecture?: string;
+  pair_policy?: string;
+  ports_per_leaf?: number;
+  fabric?: {
+    spines?: number;
+    leaf_pairs?: number;
+    unpaired_leafs?: number;
+    mgmt_switches?: number;
+    dcgw?: number;
+  };
+  rules?: ConnectionRule[];
+};
+
 export type Topology = {
   site?: { id?: string; operator?: string; description?: string };
+  architecture?: string;
+  connection_rules?: ConnectionPolicy;
   subnets?: Array<{
     name: string;
     cidr: string;
@@ -276,6 +306,59 @@ export type Selection =
   | { type: "template"; site: string; name: string }
   | { type: "site"; id: string };
 
-export type GroupBy = "cluster" | "kind" | "vlan";
-export type AppView = "network" | "kubernetes";
+export type GroupBy = "cluster" | "kind" | "vlan" | "pair";
+export type AppView = "network" | "kubernetes" | "wizards";
+
+export type WizardField = {
+  path: string;
+  value: unknown;
+  auto: boolean;
+  origin: string;
+  hostname?: string;
+};
+
+export type WizardFile = {
+  path: string;
+  action: "create" | "modify";
+  content: string;
+  diff: string;
+};
+
+export type WizardPreview = {
+  kind?: string;
+  site?: string;
+  count?: number;
+  sibling?: string | null;
+  pattern_source?: string | null;
+  pattern_note?: string | null;
+  warnings?: string[];
+  role?: string | null;
+  hostnames?: string[];
+  fields?: WizardField[];
+  files?: WizardFile[];
+  name?: string;
+  graphs?: {
+    network?: GraphPayload;
+    kubernetes?: GraphPayload;
+    global?: GraphPayload;
+  };
+  topology?: Topology;
+  focus_ids?: string[];
+  summary?: { added: number; removed: number; modified: number; unchanged: number };
+  architecture?: string;
+  connection_rules?: ConnectionPolicy;
+  rules_source?: "declared" | "inferred" | null;
+  inferred_rules?: ConnectionPolicy | null;
+};
+
+export type WizardCommit = {
+  ok: boolean;
+  branch: string;
+  sha: string;
+  short: string;
+  base: string;
+  message: string;
+  files: string[];
+  preview?: WizardPreview;
+};
 export type SiteFilter = "all" | string;

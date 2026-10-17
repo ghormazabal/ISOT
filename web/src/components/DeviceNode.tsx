@@ -29,7 +29,7 @@ export function DeviceNode({ data, selected }: NodeProps<DeviceFlowNode>) {
       <strong>{data.hostname}</strong>
       <span className="muted">{data.role ?? "sin rol"}</span>
       <span className="mono">{data.ip ?? "sin-ip"}</span>
-      <DiffBadge counts={data.diff_counts} />
+      {data.diff_status === "added" ? <span className="nuevo-badge">nuevo</span> : <DiffBadge counts={data.diff_counts} />}
       <Handle type="source" position={Position.Right} />
     </div>
   );
@@ -47,7 +47,7 @@ export function ClusterGraphNode({ data, selected }: NodeProps<ClusterFlowNode>)
       <strong>{data.hostname}</strong>
       <span className="muted">clúster · {data.role ?? "—"}</span>
       <span className="mono">{data.ip ?? ""}</span>
-      <DiffBadge counts={data.diff_counts} />
+      {data.diff_status === "added" ? <span className="nuevo-badge">nuevo</span> : <DiffBadge counts={data.diff_counts} />}
       <Handle type="source" position={Position.Right} />
     </div>
   );
@@ -100,7 +100,7 @@ export function SiteGraphNode({ data, selected }: NodeProps<SiteFlowNode>) {
       <strong>{data.hostname}</strong>
       <span className="muted">sitio</span>
       <span className="mono">{data.ip ?? ""}</span>
-      <DiffBadge counts={data.diff_counts} />
+      {data.diff_status === "added" ? <span className="nuevo-badge">nuevo</span> : <DiffBadge counts={data.diff_counts} />}
       <Handle type="source" position={Position.Right} />
     </div>
   );
