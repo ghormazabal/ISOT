@@ -132,6 +132,19 @@ destinos con `..`, absolutos, por `.git`, enlaces simbólicos que escapan del
 repo y cualquier ruta dentro de la instalación de ISoT. No intentes
 saltarte estas comprobaciones.
 
+**Preview vs guardar.** `POST /api/renders/preview` solo calcula (no escribe).
+Para guardar la salida de una preview en su carpeta destino, la UI usa
+`POST /api/renders/save/status` (solo lectura: destino, `state` =
+`al_dia|desfasado|no_existe|error`, instancia o `new_instance` propuesta),
+`/api/renders/save/preview` y `/api/renders/save/commit` (edición; cuerpo
+`{template, site, cluster, instance, params, create_instance?,
+new_instance_id?, prune?, message?, branch?}`), equivalentes a Aplicar para
+una sola instancia. Sin instancia que coincida (template, sitio, clúster y
+params) hay que crearla (`create_instance: true`), y entra en `renders.yaml`
+en el mismo commit. Tú (LLM) no llamas a esta API: propone el template y la
+instancia, y que la persona guarde desde la UI o con un commit propio
+seguido de `isot index`.
+
 Con **Comparar** (barra superior, `?base=&head=`), la pestaña Diff ofrece
 destino en base vs render en head, salida base → head
 (`GET /api/renders/compare?base=&head=`) y diff de `manifest-templates/` +

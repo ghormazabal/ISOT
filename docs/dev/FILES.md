@@ -105,6 +105,7 @@ principales (no exhaustivo); los módulos privados (`_x`) se omiten.
 | `renders/RendersView.tsx` | Sección Renders: sub-pestañas; datos = head de Comparar |
 | `renders/RendersSummaryTab.tsx` | Resumen, instancias, destino, `renders.yaml` como texto |
 | `renders/RendersTemplatesTab.tsx` | Biblioteca, editor, preview en vivo, contexto |
+| `renders/SaveOutputDialog.tsx` | «Guardar en el repo» desde la preview: destino, diff por archivo, crear instancia, resultado con enlaces a Diff |
 | `renders/RendersDiffTab.tsx` | Diff contra el destino y aplicar; con Comparar: destino (base) vs render (head), salida base → head, templates |
 | `renders/RendersGuideTab.tsx` | Guías dentro de la UI |
 | `renders/common.tsx` | Editor con números de línea, diffs, árbol, diálogo de escritura |

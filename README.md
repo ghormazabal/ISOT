@@ -610,6 +610,11 @@ lo que quieras) **sin salir de la web**. Tiene cuatro sub-pestañas enlazables
 - **Plantillas**: biblioteca (templates del repo de datos + incluidos en ISoT,
   de solo lectura y clonables), editor por archivo con errores por línea,
   **preview en vivo** por sitio/clúster/instancia y explorador del contexto.
+  La preview no escribe nada; muestra `Destino: … · en repo: al día |
+  desfasado | no existe` y, con edición, **Guardar en el repo** (lo mismo que
+  Aplicar para esa instancia, con diff por archivo y commit en `wizard/…`; si
+  no hay instancia con esos parámetros, la crea en `renders.yaml` en el mismo
+  commit).
 - **Diff**: render fresco contra la carpeta destino **de este mismo repo de
   datos** (`rendered/` por defecto, configurable con `target_dir` global o por
   instancia): árbol con *nuevo / modificado / igual / huérfano* y diff
@@ -876,9 +881,10 @@ Con edición: `GET /api/wizard/status`, `GET /api/wizard/cabling-defaults`,
 Renders: `GET /api/renders[?ref=]`, `/api/renders/templates[/{id}[?source=repo|bundled]]`,
 `/api/renders/templates/{id}/clone?new_id=`, `/api/renders/context?site=&cluster=`,
 `POST /api/renders/preview`, `/api/renders/diff?instance=&target_ref=&ref=`,
-`/api/renders/compare?base=&head=[&instance=]`,
+`/api/renders/compare?base=&head=[&instance=]`, `POST /api/renders/save/status`
+(destino de la preview y su estado en el repo),
 `/api/renders/config`, `/api/renders/guide?doc=human|llm`; con edición
-`POST /api/renders/templates/save|config|apply/preview|commit` (siempre en una
+`POST /api/renders/templates/save|config|apply|save/preview|commit` (siempre en una
 rama `wizard/…`).
 
 ### Desarrollo de la herramienta

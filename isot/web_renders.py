@@ -27,6 +27,7 @@ from isot.renders import (
     SAFE_ID,
     TEMPLATE_DIRNAME,
     TEMPLATE_FILE,
+    Instance,
     RenderError,
     RenderService,
     compare_outputs,
@@ -401,6 +402,197 @@ def register(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         clear_caches(root)
         return maybe_push(result) if result.get("created") else result
+
+    # ------------------------------------------- guardar la salida de la preview
+
+    def _unique_instance_id(svc: RenderService, wanted: str) -> str:
+        base = re.sub(r"[^a-z0-9._-]+", "-", wanted.lower()).strip("-._")[:56] or "render"
+        taken = {i.id for i in svc.instances(enabled_only=False)}
+        candidate, n = base, 2
+        while candidate in taken:
+            candidate, n = f"{base}-{n}", n + 1
+        return candidate
+
+    def save_target(body: dict[str, Any], base: Path) -> tuple[RenderService, Instance, dict[str, Any]]:
+        """Instancia a la que corresponde la preview (o la que habría que crear con esos parámetros)."""
+        # La carpeta destino se lee en el mismo árbol (working tree o rama wizard/… materializada).
+        svc = RenderService(base, git_root=base)
+        template_id = str(body.get("template") or "")
+        if not SAFE_ID.fullmatch(template_id):
+            raise HTTPException(status_code=400, detail="template inválido")
+        if find_template(base, template_id) is None:
+            raise HTTPException(status_code=400, detail=f"el template {template_id} no está guardado: guárdalo (o clónalo) antes de guardar su salida")
+        site = str(body.get("site") or "")
+        if not site:
+            raise HTTPException(status_code=400, detail="falta site")
+        cluster = str(body.get("cluster") or "") or None
+        params = body.get("params") or {}
+        if not isinstance(params, dict):
+            raise HTTPException(status_code=400, detail="params debe ser un mapa")
+        instance_id = str(body.get("instance") or "") or None
+        inst = svc.instance(instance_id) if instance_id else None
+        reason: str | None = None
+        if instance_id and inst is None:
+            reason = f"la instancia {instance_id} no existe en {RENDERS_FILE}"
+        if inst is None and not instance_id:
+            same = [
+                i
+                for i in svc.instances(enabled_only=False)
+                if i.template == template_id and i.site == site and (i.cluster or None) == cluster and {**i.params, **params} == i.params
+            ]
+            inst = same[0] if same else None
+        if inst is not None:
+            if inst.template != template_id or inst.site != site or (inst.cluster or None) != cluster:
+                reason = f"la instancia {inst.id} es de otro template, sitio o clúster"
+            elif {**inst.params, **params} != inst.params:
+                reason = f"los params de la preview difieren de los guardados en la instancia {inst.id}"
+            elif not inst.enabled:
+                reason = f"la instancia {inst.id} está deshabilitada (enabled: false)"
+        elif reason is None:
+            reason = f"no hay ninguna instancia de {template_id} para {site}{'/' + cluster if cluster else ''} en {RENDERS_FILE}"
+        info: dict[str, Any] = {"template": template_id, "site": site, "cluster": cluster, "needs_instance": reason is not None, "reason": reason}
+        if reason is None:
+            info.update(instance=inst.id, new_instance=None)  # type: ignore[union-attr]
+            return svc, inst, info  # type: ignore[return-value]
+        base_params = dict(inst.params) if inst is not None and inst.template == template_id else {}
+        merged = {**base_params, **params}
+        wanted = str(body.get("new_instance_id") or "").strip()
+        if wanted:
+            if not SAFE_ID.fullmatch(wanted):
+                raise HTTPException(status_code=400, detail=f"id de instancia inválido: {wanted}")
+            if svc.instance(wanted) is not None:
+                raise HTTPException(status_code=400, detail=f"ya existe la instancia {wanted}")
+            new_id = wanted
+        else:
+            new_id = _unique_instance_id(svc, f"{site}-{cluster or 'site'}-{template_id}")
+        target = Instance(id=new_id, template=template_id, site=site, cluster=cluster, params=merged)
+        svc.config.instances.append(target)
+        proposal: dict[str, Any] = {"id": new_id, "template": template_id, "site": site}
+        if cluster:
+            proposal["cluster"] = cluster
+        if merged:
+            proposal["params"] = merged
+        info.update(instance=None, new_instance=proposal)
+        return svc, target, info
+
+    def _save_entry(svc: RenderService, target: Instance, base: Path) -> dict[str, Any]:
+        diff = svc.target_diff(instance_id=target.id)
+        entry = diff["instances"][0] if diff["instances"] else {"errors": [], "files": [], "dir": None}
+        folder = entry.get("dir")
+        if entry.get("target_error") or not folder:
+            state = "error"
+        elif entry.get("errors"):
+            state = "error"
+        elif not (base / folder).is_dir():
+            state = "no_existe"
+        else:
+            state = "al_dia" if entry.get("in_sync") else "desfasado"
+        return {"entry": entry, "dir": folder, "state": state}
+
+    @app.post("/api/renders/save/status")
+    def renders_save_status(body: dict[str, Any]) -> dict[str, Any]:
+        """¿Dónde se guardaría la salida de la preview y cómo está hoy en el repo? (solo lectura)."""
+        with render_root(_branch(body) or body.get("ref") or None) as base:
+            svc, target, info = save_target(body, base)
+            found = _save_entry(svc, target, base)
+        entry = found["entry"]
+        return {
+            **info,
+            "dir": found["dir"],
+            "state": found["state"],
+            "counts": entry.get("counts"),
+            "errors": entry.get("errors") or [],
+            "target_error": entry.get("target_error"),
+            "edit": can_edit(),
+        }
+
+    def save_plan(body: dict[str, Any], base: Path, root: Path) -> dict[str, Any]:
+        svc, target, info = save_target(body, base)
+        if info["needs_instance"] and not body.get("create_instance"):
+            raise HTTPException(status_code=400, detail=f"{info['reason']}: crea una instancia con estos parámetros")
+        branch = _branch(body)
+        source = resolve_ref(root, branch).sha if branch else head_sha(root)
+        try:
+            plan = svc.apply_plan([target.id], prune=bool(body.get("prune")), source_commit=source)
+        except RenderError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        found = _save_entry(svc, target, base)
+        entry = found["entry"]
+        if plan["skipped"] or not found["dir"]:
+            problems = [e.get("message", str(e)) if isinstance(e, dict) else str(e) for e in entry.get("errors") or []]
+            raise HTTPException(status_code=400, detail="no se puede guardar: " + "; ".join([entry.get("target_error") or "", *problems]).strip("; "))
+        folder = found["dir"]
+        writes = dict(plan["writes"])
+        extra: list[dict[str, Any]] = []
+        if info["new_instance"]:
+            cfg = config_plan({"upsert_instance": info["new_instance"]}, base)
+            if cfg["errors"]:
+                raise HTTPException(status_code=400, detail=f"{RENDERS_FILE} inválido: " + "; ".join(cfg["errors"][:5]))
+            writes[RENDERS_FILE] = cfg["text"]
+            extra = file_diffs(base, {RENDERS_FILE: cfg["text"]})
+        sidecar = [d for d in file_diffs(base, {k: v for k, v in writes.items() if k.endswith("/.isot-render.json")})]
+        for rel in [*writes, *plan["deletes"]]:
+            if rel != RENDERS_FILE and not rel.startswith(folder + "/"):
+                raise HTTPException(status_code=400, detail=f"ruta fuera del destino: {rel}")
+        files = [
+            {
+                "path": item["target_path"],
+                "status": item["status"],
+                "diff": item.get("diff") or "",
+                "action": "write" if item["status"] in {"new", "modified"} else ("delete" if item["status"] == "orphaned" and body.get("prune") else "keep"),
+            }
+            for item in entry.get("files") or []
+        ]
+        return {
+            **info,
+            "instance": target.id,
+            "dir": folder,
+            "state": found["state"],
+            "files": files,
+            "extra": [{"path": d["path"], "status": d["status"], "diff": d["diff"]} for d in [*extra, *sidecar] if d["status"] != "unchanged"],
+            "writes": writes,
+            "deletes": plan["deletes"],
+            "changes": len(writes) + len(plan["deletes"]),
+            "branch": branch,
+        }
+
+    @app.post("/api/renders/save/preview")
+    def renders_save_preview(body: dict[str, Any]) -> dict[str, Any]:
+        """Lo que escribiría «Guardar en el repo» (destino, estado por archivo y diffs), sin escribir."""
+        require_edit()
+        root = resolved_root()
+        with render_root(_branch(body)) as base:
+            plan = save_plan(body, base, root)
+        plan.pop("writes")
+        plan.pop("deletes")
+        return plan
+
+    @app.post("/api/renders/save/commit")
+    def renders_save_commit(body: dict[str, Any]) -> dict[str, Any]:
+        """Guarda la salida en la carpeta destino (mismo repo) en una rama wizard/…; índice en el mismo commit."""
+        require_edit()
+        root = resolved_root()
+        with render_root(_branch(body)) as base:
+            plan = save_plan(body, base, root)
+        if not plan["writes"] and not plan["deletes"]:
+            raise HTTPException(status_code=400, detail="la carpeta destino ya está al día")
+        message = " ".join(str(body.get("message") or "").split())[:200] or f"renders: guardar {plan['instance']}"
+        try:
+            from isot.renders import commit_files
+
+            result = commit_files(
+                root,
+                plan["writes"],
+                plan["deletes"],
+                message,
+                branch=_branch(body),
+                branch_label=f"render {plan['instance']}",
+            )
+        except WizardError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        clear_caches(root)
+        out = maybe_push(result) if result.get("created") else result
+        return {**out, "instance": plan["instance"], "dir": plan["dir"], "created_instance": bool(plan["new_instance"])}
 
 
 def validate_renders_text(text: str) -> list[str]:

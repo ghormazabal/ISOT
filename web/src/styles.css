@@ -3662,3 +3662,91 @@ label.checkbox {
   background: #14261f;
   border-color: #2b4f45;
 }
+
+/* ---- Guardar la salida de la preview en el repo ---- */
+.render-preview-tabs .render-save-button,
+.render-save-button {
+  margin-left: 10px;
+  padding: 5px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: #0b1512;
+  border-radius: 8px;
+}
+
+.render-save-button:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.render-save-button:disabled {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--muted);
+  cursor: not-allowed;
+  font-weight: 500;
+}
+
+.render-save-status {
+  margin: 0;
+  padding: 0 12px 6px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+
+.render-save-state {
+  font-weight: 600;
+}
+
+.render-save-state.is-al_dia {
+  color: var(--accent);
+}
+
+.render-save-state.is-desfasado {
+  color: #d9b45f;
+}
+
+.render-save-state.is-no_existe {
+  color: #7fb0d9;
+}
+
+.render-save-state.is-error {
+  color: var(--danger);
+}
+
+.save-instance-box {
+  border: 1px solid #5a4a2a;
+  background: #2a2412;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 8px 0;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.save-instance-box p {
+  margin: 0;
+}
+
+.save-instance-id,
+.save-message {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 6px 0;
+}
+
+.save-instance-id input,
+.save-message input {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}

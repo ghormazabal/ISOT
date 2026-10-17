@@ -162,3 +162,48 @@ export type RendersCompare = {
   errors: { base: string[]; head: string[] };
   templates: CompareFilesPayload;
 };
+
+/** Estado en el repo de la carpeta destino de la preview («Guardar en el repo»). */
+export type SaveState = "al_dia" | "desfasado" | "no_existe" | "error";
+
+export type NewInstanceProposal = { id: string; template: string; site: string; cluster?: string; params?: Record<string, unknown> };
+
+export type SaveBody = {
+  template: string;
+  site: string;
+  cluster?: string | null;
+  instance?: string | null;
+  params?: Record<string, unknown>;
+  branch?: string | null;
+  ref?: string | null;
+  create_instance?: boolean;
+  new_instance_id?: string;
+  prune?: boolean;
+  message?: string;
+};
+
+export type SaveStatus = {
+  template: string;
+  site: string;
+  cluster: string | null;
+  needs_instance: boolean;
+  reason: string | null;
+  instance: string | null;
+  new_instance: NewInstanceProposal | null;
+  dir: string | null;
+  state: SaveState;
+  counts?: StatusCounts | null;
+  errors: RenderError[];
+  target_error?: string | null;
+  edit: boolean;
+};
+
+export type SavePlan = Omit<SaveStatus, "instance" | "edit"> & {
+  instance: string;
+  files: { path: string; status: "new" | "modified" | "unchanged" | "orphaned"; diff: string; action: "write" | "delete" | "keep" }[];
+  extra: { path: string; status: string; diff: string }[];
+  changes: number;
+  branch: string | null;
+};
+
+export type SaveResult = WriteResult & { instance: string; dir: string; created_instance: boolean };

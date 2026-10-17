@@ -1670,6 +1670,7 @@ def commit_files(
     *,
     allowed_prefix: str | Iterable[str] | None = None,
     branch: str | None = None,
+    branch_label: str | None = None,
 ) -> dict[str, Any]:
     """Escribe/borra archivos en una rama `wizard/…` del repo y la confirma.
 
@@ -1712,7 +1713,7 @@ def commit_files(
         target_branch, created = branch, False
         proc = git(repo, ["checkout", branch])
     else:
-        target_branch, created = unique_wizard_branch(repo, description), True
+        target_branch, created = unique_wizard_branch(repo, branch_label or description), True
         if target_branch in PROTECTED_BRANCHES or target_branch == branch_now:
             raise WizardError("la rama destino no puede ser main ni la rama actual")
         proc = git(repo, ["checkout", "-b", target_branch])

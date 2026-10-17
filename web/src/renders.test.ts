@@ -5,6 +5,8 @@ import { parseInline, parseMarkdown, safeHref } from "./markdown.ts";
 import {
   appendOutput,
   filterByPath,
+  SAVE_STATE_LABEL,
+  saveBlockReason,
   splitPath,
   buildTree,
   classifyDiffLine,
@@ -103,5 +105,25 @@ describe("lista de archivos de salida", () => {
     assert.deepEqual(filterByPath(items, "nodes yaml").length, 3);
     assert.deepEqual(filterByPath(items, "all nodes").map((i) => i.path), ["all-nodes.yaml"]);
     assert.equal(filterByPath(items, "zzz").length, 0);
+  });
+});
+
+describe("guardar la salida en el repo", () => {
+  const ok = { canWrite: true, writeReason: "", docSource: "repo" as const, dirty: false, renderErrors: 0, hasPreview: true };
+  it("se puede con edición, template guardado y preview sin errores", () => {
+    assert.equal(saveBlockReason(ok), null);
+    assert.equal(saveBlockReason({ ...ok, docSource: "bundled" }), null);
+  });
+  it("explica por qué no", () => {
+    assert.equal(saveBlockReason({ ...ok, canWrite: false, writeReason: "Solo lectura" }), "Solo lectura");
+    assert.match(saveBlockReason({ ...ok, docSource: "draft" }) ?? "", /sin guardar/);
+    assert.match(saveBlockReason({ ...ok, dirty: true }) ?? "", /cambios sin guardar/);
+    assert.match(saveBlockReason({ ...ok, renderErrors: 2 }) ?? "", /2 error/);
+    assert.match(saveBlockReason({ ...ok, hasPreview: false }) ?? "", /preview/);
+    assert.equal(saveBlockReason({ ...ok, statusError: "carpeta inválida" }), "carpeta inválida");
+  });
+  it("etiquetas del estado en el repo", () => {
+    assert.equal(SAVE_STATE_LABEL.al_dia, "al día");
+    assert.equal(SAVE_STATE_LABEL.no_existe, "no existe");
   });
 });

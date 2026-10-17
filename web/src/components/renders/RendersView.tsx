@@ -90,6 +90,11 @@ export function RendersView({ sub, onSub, sites, editEnabled, compare, onCompare
       ) : null}
       {sub === "plantillas" ? (
         <RendersTemplatesTab
+          onReview={(refs) => {
+            onCompare(refs);
+            setVersion((value) => value + 1);
+            onSub("diff");
+          }}
           refName={ref || null}
           version={version}
           sites={sites}

@@ -73,6 +73,30 @@ deshabilitados.
    completo y, al confirmar, los escribe en `rendered/` en una rama.
 9. Revisa y fusiona la rama con tu flujo Git habitual (PR/MR).
 
+### Preview vs guardar
+
+La **Salida** de Plantillas es una *preview*: se calcula en memoria y no
+escribe nada (puedes copiarla con **Copiar**). Bajo las pestañas se ve
+`Destino: <carpeta> · en repo: al día | desfasado | no existe`: la carpeta de
+este mismo repo donde se guardaría y si lo que hay ahí coincide con la preview.
+
+**Guardar en el repo** (solo en modo edición, con head = Local o una rama
+`wizard/…`, el template guardado y sin errores de render) hace lo mismo que
+Diff → **Aplicar** para esa instancia: muestra la carpeta destino
+(`target_dir` de la instancia o `rendered/<sitio>/<clúster>/<template>/`), el
+estado de cada archivo (nuevo, modificado, igual, huérfano) con su diff, un
+mensaje de commit opcional y, al confirmar, hace commit en una rama
+`wizard/…` nueva **del mismo repo** (con el índice regenerado en ese commit).
+Al terminar ofrece **Ver en Diff** (base = la rama nueva, head = Local) y
+**Comparar main → rama**.
+
+La salida siempre se guarda **a partir de una instancia** de `renders.yaml`,
+para que Diff, Aplicar y la CI la reproduzcan igual. Si el template no tiene
+instancia para ese sitio/clúster (p. ej. uno incluido que aún no usas) o los
+params de la preview difieren de los de la instancia, el diálogo lo explica y
+ofrece **Crear instancia con estos parámetros**: añade la instancia a
+`renders.yaml` en el mismo commit.
+
 ## Anatomía de un template
 
 ```yaml

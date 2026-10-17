@@ -2,13 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 
 import { api } from "../../api";
 import type { PanelSpec } from "../../resize";
-import { appendOutput, getTopLevelKey, newTemplateSkeleton, SAFE_FILE_NAME, SAFE_TEMPLATE_ID, setTopLevelKey } from "../../renders";
+import { appendOutput, getTopLevelKey, newTemplateSkeleton, SAFE_FILE_NAME, SAFE_TEMPLATE_ID, SAVE_STATE_LABEL, saveBlockReason, setTopLevelKey } from "../../renders";
 import { rendersApi } from "../../rendersApi";
-import type { RenderError, RenderInstance, RenderPreview, RenderTemplateSummary } from "../../rendersTypes";
+import type { RenderError, RenderInstance, RenderPreview, RenderTemplateSummary, SaveBody, SaveStatus } from "../../rendersTypes";
 import type { ClusterIndexEntry, SiteIndexEntry } from "../../types";
 import { Splitter, usePanelSize } from "../Splitter";
 import { ValuesTree, valuesToTree } from "../ValuesTree";
 import { CodeEditor, CodeViewer, ErrorList, errorMessage, FileList, WriteDialog, type WriteFlow, type WriteMode } from "./common";
+import { SaveOutputDialog } from "./SaveOutputDialog";
 
 const SPEC_FILE = "template.yaml";
 const LIBRARY_SPEC: PanelSpec = { defaultSize: 250, min: 180, max: 420, collapsible: true };
@@ -37,9 +38,11 @@ type Props = {
   focus: { id: string; source?: "repo" | "bundled"; key: number } | null;
   onAfterCommit: () => void;
   onViewBranch: (branch: string) => void;
+  /** Tras «Guardar en el repo»: abrir Diff/Comparar con esas refs. */
+  onReview?: (refs: { base: string; head: string }) => void;
 };
 
-export function RendersTemplatesTab({ refName, version, sites, write, focus, onAfterCommit, onViewBranch }: Props) {
+export function RendersTemplatesTab({ refName, version, sites, write, focus, onAfterCommit, onViewBranch, onReview }: Props) {
   const library = usePanelSize("renders.library", LIBRARY_SPEC);
   const previewWidth = usePanelSize("renders.preview", PREVIEW_SPEC);
 
@@ -66,6 +69,9 @@ export function RendersTemplatesTab({ refName, version, sites, write, focus, onA
   const [rightTab, setRightTab] = useState<"salida" | "contexto">("salida");
   const [context, setContext] = useState<Record<string, unknown> | null>(null);
   const [contextQuery, setContextQuery] = useState("");
+  const [saveStatus, setSaveStatus] = useState<SaveStatus | null>(null);
+  const [saveStatusError, setSaveStatusError] = useState<string | null>(null);
+  const [saving, setSaving] = useState<SaveBody | null>(null);
 
   useEffect(() => {
     if (!site && sites[0]) setSite(sites[0].id);
@@ -180,8 +186,57 @@ export function RendersTemplatesTab({ refName, version, sites, write, focus, onA
     return () => window.clearTimeout(timer);
   }, [doc?.spec, doc?.files, doc?.id, site, cluster, instance, paramsText, refName]);
 
+  // Dónde se guardaría esta salida y cómo está hoy en el repo (solo lectura).
+  const saveBody: SaveBody | null = useMemo(() => {
+    if (!doc || doc.source === "draft" || !site) return null;
+    let params: Record<string, unknown> = {};
+    try {
+      params = paramsText.trim() ? (JSON.parse(paramsText) as Record<string, unknown>) : {};
+    } catch {
+      return null;
+    }
+    return { template: doc.id, site, cluster: cluster || null, instance: instance || null, params, branch: write.branch, ref: refName };
+  }, [doc?.id, doc?.source, site, cluster, instance, paramsText, write.branch, refName]);
+  const saveKey = JSON.stringify(saveBody);
+  useEffect(() => {
+    if (!saveBody) {
+      setSaveStatus(null);
+      setSaveStatusError(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      rendersApi
+        .saveStatus(saveBody)
+        .then((value) => {
+          if (cancelled) return;
+          setSaveStatus(value);
+          setSaveStatusError(null);
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          setSaveStatus(null);
+          setSaveStatusError(errorMessage(err));
+        });
+    }, 500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saveKey, version]);
+
   const readOnly = !doc || doc.source === "bundled" || !write.canWrite;
   const allErrors: RenderError[] = useMemo(() => [...(preview?.template_errors ?? []), ...(preview?.errors ?? [])], [preview]);
+  const saveBlocked = saveBlockReason({
+    canWrite: write.canWrite,
+    writeReason: write.reason,
+    docSource: doc?.source ?? null,
+    dirty,
+    renderErrors: allErrors.length,
+    hasPreview: Boolean(preview) && !previewError,
+    statusError: saveStatusError ?? saveStatus?.target_error ?? null,
+  });
   const errorLines = useMemo(() => {
     const lines = new Set<number>();
     for (const error of allErrors) {
@@ -529,7 +584,32 @@ export function RendersTemplatesTab({ refName, version, sites, write, focus, onA
             Contexto
           </button>
           <span className="muted render-preview-state">{previewing ? "renderizando…" : preview ? (preview.ok && !preview.template_errors.length ? "✔ ok" : "con errores") : ""}</span>
+          <button
+            type="button"
+            id="render-save-output"
+            className="primary render-save-button"
+            disabled={Boolean(saveBlocked) || !saveBody}
+            title={saveBlocked ?? (saveStatus?.needs_instance ? `${saveStatus.reason}: te propondrá crear una instancia` : "Guardar esta salida en su carpeta destino (rama wizard/… nueva)")}
+            onClick={() => saveBody && setSaving(saveBody)}
+          >
+            Guardar en el repo
+          </button>
         </nav>
+        {rightTab === "salida" && saveBody ? (
+          <p className="render-save-status muted" id="render-save-status">
+            {saveStatus ? (
+              <>
+                Destino: <code title={saveStatus.dir ?? ""}>{saveStatus.dir ? `${saveStatus.dir}/` : "—"}</code> · en repo:{" "}
+                <span className={`render-save-state is-${saveStatus.state}`}>{SAVE_STATE_LABEL[saveStatus.state] ?? saveStatus.state}</span>
+                {saveStatus.needs_instance ? <span title={saveStatus.reason ?? ""}> · sin instancia con estos parámetros</span> : <> · instancia <code>{saveStatus.instance}</code></>}
+              </>
+            ) : saveStatusError ? (
+              <span className="error">{saveStatusError}</span>
+            ) : (
+              "Destino: calculando…"
+            )}
+          </p>
+        ) : null}
         {rightTab === "salida" ? (
           <div className="render-preview-body is-output">
             {previewError ? <p className="error">{previewError}</p> : null}
@@ -553,6 +633,18 @@ export function RendersTemplatesTab({ refName, version, sites, write, focus, onA
           </div>
         )}
       </section>
+      {saving ? (
+        <SaveOutputDialog
+          body={saving}
+          status={saveStatus}
+          onClose={() => setSaving(null)}
+          onDone={() => onAfterCommit()}
+          onReview={(refs) => {
+            setSaving(null);
+            onReview?.(refs);
+          }}
+        />
+      ) : null}
       {flow ? (
         <WriteDialog
           flow={flow}

@@ -260,3 +260,25 @@ export function filterByPath<T extends { path: string }>(items: T[], query: stri
     return terms.every((term) => path.includes(term));
   });
 }
+
+export const SAVE_STATE_LABEL: Record<string, string> = { al_dia: "al día", desfasado: "desfasado", no_existe: "no existe", error: "error" };
+
+/** Motivo por el que «Guardar en el repo» está deshabilitado (null = se puede). */
+export function saveBlockReason(input: {
+  canWrite: boolean;
+  writeReason: string;
+  docSource: "repo" | "bundled" | "draft" | null;
+  dirty: boolean;
+  renderErrors: number;
+  hasPreview: boolean;
+  statusError?: string | null;
+}): string | null {
+  if (!input.canWrite) return input.writeReason;
+  if (!input.docSource) return "Elige un template.";
+  if (input.docSource === "draft") return "Template nuevo sin guardar: guárdalo (o clónalo) antes de guardar su salida.";
+  if (input.dirty) return "Hay cambios sin guardar en el template: guárdalos antes de guardar la salida.";
+  if (!input.hasPreview) return "Esperando la preview…";
+  if (input.renderErrors) return `La preview tiene ${input.renderErrors} error(es): corrígelos antes de guardar.`;
+  if (input.statusError) return input.statusError;
+  return null;
+}
