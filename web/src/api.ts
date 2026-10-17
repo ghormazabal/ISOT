@@ -6,6 +6,7 @@ import type {
   DeviceDetail,
   DeviceIndexEntry,
   GraphPayload,
+  LinkResponse,
   CommitsPayload,
   RefsPayload,
   SemanticDiff,
@@ -91,6 +92,16 @@ export const api = {
     if (site && site !== "all") params.set("site", site);
     return fetchJSON<SemanticDiff>(`/api/diff?${params.toString()}`);
   },
+  link: (source: string, target: string, refs?: { base: string; head: string } | null) => {
+    const params = new URLSearchParams({ source, target });
+    if (refs) {
+      params.set("base", refs.base);
+      params.set("head", refs.head);
+    }
+    return fetchJSON<LinkResponse>(`/api/link?${params.toString()}`);
+  },
+  linkPreview: (source: string, target: string, files: Array<{ path: string; content: string }>) =>
+    postJSON<LinkResponse>("/api/link/preview", { source, target, files }),
   wizardStatus: () => fetchJSON<{ edit: boolean }>("/api/wizard/status"),
   wizardCablingDefaults: (architecture: string, extra?: Record<string, string | number>) => {
     const params = new URLSearchParams({ architecture });

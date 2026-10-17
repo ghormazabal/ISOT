@@ -87,6 +87,9 @@ function flowNodeType(entity: GraphNode["entity"]): string {
   return "device";
 }
 
+/** Ancho (px) del área de clic de cada arista. */
+export const EDGE_HIT_WIDTH = 22;
+
 export function buildFlow(graph: GraphPayload, groupBy: GroupBy): { nodes: Node[]; edges: Edge[] } {
   const buckets = new Map<string, GraphNode[]>();
   for (const node of graph.nodes) {
@@ -185,6 +188,9 @@ export function buildFlow(graph: GraphPayload, groupBy: GroupBy): { nodes: Node[
       },
       labelStyle: { fill: stroke, fontSize: 10, fontFamily: "IBM Plex Mono, monospace" },
       animated: false,
+      // Zona de clic invisible más ancha que la línea (ver detalle de conexión).
+      interactionWidth: EDGE_HIT_WIDTH,
+      data: { vlans: edge.vlans, ports: edge.ports, diff_status: edge.diff_status },
     };
   });
 

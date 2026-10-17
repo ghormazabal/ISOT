@@ -464,3 +464,91 @@ export type WizardCommit = {
   preview?: WizardPreview;
 };
 export type SiteFilter = "all" | string;
+
+/** Un lado de un enlace lógico (lo que no está en el modelo llega como null). */
+export type LinkSide = {
+  interface: string | null;
+  port: string | null;
+  bond: string | null;
+  port_channel: string | null;
+  lacp: string | null;
+  members: string[] | null;
+  ip: string | null;
+  mtu: number | string | null;
+  device_mtu: number | string | null;
+  extra: Record<string, unknown>;
+};
+
+export type LinkVlan = {
+  id: number | string;
+  name: string | null;
+  subnet?: string | null;
+  cidr: string | null;
+  gateway: string | null;
+  vrf: string | null;
+  description: string | null;
+  interface?: string | null;
+  ip?: string | null;
+  network?: string | null;
+  allowed?: boolean;
+  extra_host?: boolean;
+  implicit?: boolean;
+};
+
+export type LinkEndpoint = {
+  id: string;
+  entity: "device" | "site" | "cluster" | "template";
+  label: string;
+  site: string;
+  hostname?: string;
+  role?: string | null;
+  kind?: string | null;
+  cluster_ref?: string | null;
+  path?: string | null;
+  remote?: boolean;
+  proposed?: boolean;
+};
+
+export type LinkSource = { path: string | null; key: string; yaml: string };
+
+export type LinkItem = {
+  type: "bond" | "interface" | "oob" | "hypervisor" | "reference";
+  label: string;
+  declared_by: "source" | "target";
+  source: LinkSide;
+  target: LinkSide;
+  vlans: LinkVlan[];
+  attributes: Record<string, unknown>;
+  sources: LinkSource[];
+  pair?: { source: LinkEndpoint; target: LinkEndpoint };
+};
+
+export type LinkDetail = {
+  kind: "network" | "dci" | "kubernetes";
+  source: LinkEndpoint;
+  target: LinkEndpoint;
+  links: LinkItem[];
+  vlans: LinkVlan[];
+  ports: string[];
+  paths: string[];
+};
+
+export type LinkChange = { path: string; before: unknown; after: unknown; status: "added" | "removed" | "modified" };
+
+export type LinkResponse = {
+  detail: LinkDetail;
+  base: LinkDetail | null;
+  head: LinkDetail | null;
+  diff: { status: "added" | "removed" | "modified" | "unchanged" | "missing"; changes: LinkChange[] } | null;
+  refs: { base: { ref: string; sha: string }; head: { ref: string; sha: string } } | null;
+};
+
+/** Arista seleccionada en un grafo. */
+export type EdgeSelection = {
+  id: string;
+  source: string;
+  target: string;
+  vlans: Array<number | string>;
+  ports: string[];
+  diff_status?: DiffStatus;
+};

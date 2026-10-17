@@ -6,6 +6,8 @@ import type {
   SiteIndexEntry,
   TemplateDetail,
 } from "../types";
+import type { ReactNode } from "react";
+
 import { formatValue } from "./ValuesTree";
 
 type Props = {
@@ -24,6 +26,8 @@ type Props = {
   onShowDiff?: () => void;
   diffEntity?: DiffEntity | null;
   onSelectDiffEntity?: (id: string) => void;
+  /** Vista «Conexión» de una arista seleccionada; reemplaza al resto del detalle. */
+  linkView?: ReactNode;
 };
 
 function dash(value: unknown): string {
@@ -54,14 +58,18 @@ export function DetailPanel({
   onShowDiff,
   diffEntity = null,
   onSelectDiffEntity,
+  linkView = null,
 }: Props) {
   const selectedSite = selection?.type === "site" ? sites.find((item) => item.id === selection.id) : null;
   return (
     <section className="detail">
       <header>
         <h2>Detalle</h2>
-        <p>{diffEntity ? "Diff entre refs de git" : "YAML cargado bajo demanda"}</p>
+        <p>{linkView ? "Arista seleccionada · Esc para cerrar" : diffEntity ? "Diff entre refs de git" : "YAML cargado bajo demanda"}</p>
       </header>
+      {linkView}
+      {linkView ? null : (
+        <>
       {loading ? <p className="muted">Cargando…</p> : null}
       {error ? <p className="error">{error}</p> : null}
       {!selection && !diffEntity && !loading ? (
@@ -90,6 +98,8 @@ export function DetailPanel({
       {!diffEntity && selection?.type === "template" && template ? (
         <TemplateBody template={template} onOpenCluster={onOpenCluster} onShowExplorer={onShowExplorer} />
       ) : null}
+        </>
+      )}
     </section>
   );
 }

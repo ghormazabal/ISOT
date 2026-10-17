@@ -26,10 +26,12 @@ import {
   type WizardMode,
 } from "../wizardDraft";
 import { wizardCanCommit, wizardStatus } from "../findings";
+import { LinkDetailView } from "./LinkDetail";
 import { Splitter } from "./Splitter";
+import { edgeSelection, fallbackDetail, relatedFindings } from "../links";
 import { TopologyGraph } from "./TopologyGraph";
 import type { PanelSpec } from "../resize";
-import type { Finding, FixContext } from "../types";
+import type { EdgeSelection, Finding, FixContext, LinkResponse } from "../types";
 
 type Props = {
   sites: SiteIndexEntry[];
@@ -1047,6 +1049,42 @@ function PreviewStage({
     min: MIN_DOCK_WIDTH,
     max: stageWidth ? Math.max(MIN_DOCK_WIDTH, stageWidth - MIN_GRAPH_WIDTH) : 2000,
   };
+  const [edge, setEdge] = useState<EdgeSelection | null>(null);
+  const [edgeResponse, setEdgeResponse] = useState<LinkResponse | null>(null);
+  const [edgeLoading, setEdgeLoading] = useState(false);
+  const [edgeError, setEdgeError] = useState<string | null>(null);
+  useEffect(() => setEdge(null), [preview, graphView]);
+  useEffect(() => {
+    if (!edge) {
+      setEdgeResponse(null);
+      setEdgeError(null);
+      return;
+    }
+    let cancelled = false;
+    setEdgeLoading(true);
+    setEdgeError(null);
+    setEdgeResponse(null);
+    const files = (preview.files ?? []).map((file) => ({ path: file.path, content: file.content }));
+    api
+      .linkPreview(edge.source, edge.target, files)
+      .then((payload) => {
+        if (!cancelled) setEdgeResponse(payload);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setEdgeError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setEdgeLoading(false);
+      });
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setEdge(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [edge, preview.files]);
   const graph = graphView === "global" ? preview.graphs?.global ?? null : preview.graphs?.network ?? null;
   const siteFilter = graphView === "global" ? "all" : (preview.site ?? "all");
   const focusIds = graphView === "global" && preview.site ? [`site:${preview.site}`] : (preview.focus_ids ?? []);
@@ -1090,6 +1128,9 @@ function PreviewStage({
           neighborhood={neighborhood}
           onNeighborhood={onNeighborhood}
           findings={preview.findings?.added ?? preview.findings?.current ?? []}
+          selectedEdgeId={edge?.id ?? null}
+          onSelectEdge={(item) => setEdge(edgeSelection(item))}
+          onClearEdge={() => setEdge(null)}
         />
       </div>
       )}
@@ -1110,19 +1151,30 @@ function PreviewStage({
           <button
             type="button"
             id="wizard-preview-tab-fields"
-            className={tab === "fields" ? "is-active" : ""}
-            onClick={() => onTab("fields")}
+            className={tab === "fields" && !edge ? "is-active" : ""}
+            onClick={() => {
+              setEdge(null);
+              onTab("fields");
+            }}
           >
             Campos
           </button>
           <button
             type="button"
             id="wizard-preview-tab-yaml"
-            className={tab === "yaml" ? "is-active" : ""}
-            onClick={() => onTab("yaml")}
+            className={tab === "yaml" && !edge ? "is-active" : ""}
+            onClick={() => {
+              setEdge(null);
+              onTab("yaml");
+            }}
           >
             YAML
           </button>
+          {edge ? (
+            <button type="button" id="wizard-preview-tab-link" className="is-active">
+              Conexión
+            </button>
+          ) : null}
           {onGraphHidden ? (
             <button
               type="button"
@@ -1135,7 +1187,21 @@ function PreviewStage({
             </button>
           ) : null}
         </nav>
-        {tab === "fields" ? (
+        {edge ? (
+          <LinkDetailView
+            edge={edge}
+            response={edgeResponse}
+            fallback={
+              edgeError
+                ? fallbackDetail(edge, (id) => graph?.nodes.find((node) => node.id === id)?.hostname ?? id.split(":").pop() ?? id)
+                : null
+            }
+            loading={edgeLoading}
+            error={edgeError}
+            findings={relatedFindings(edgeResponse?.detail ?? null, preview.findings?.added ?? preview.findings?.current ?? [])}
+            onClose={() => setEdge(null)}
+          />
+        ) : tab === "fields" ? (
           <FieldsTable preview={preview} edits={edits} onEdit={onEdit} />
         ) : (
           <YamlDiff preview={preview} />

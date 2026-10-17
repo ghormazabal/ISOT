@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from isot.gitdiff import RefError, clear_caches, list_commits, list_refs, semantic_diff
+from isot.gitdiff import RefError, clear_caches, list_commits, list_refs, resolve_sha, semantic_diff, snapshot_ref, validate_ref
 from isot.helm import (
     chart_meta,
     charts_from_doc,
@@ -27,6 +27,7 @@ from isot.helm import (
     strip_charts_payload,
 )
 from isot.indexer import index_path
+from isot.links import diff_details, link_details, overlay_files, view_from_snapshot, view_from_tree
 from isot.inventory import (
     CLUSTER_INDEX_NAME,
     DEVICE_INDEX_NAME,
@@ -43,6 +44,7 @@ from isot.cabling import default_policy, policy_from_site_body
 from isot.wizard import WizardError, commit_preview, device_preview, edit_enabled, site_preview
 
 SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
+SAFE_NODE_ID = re.compile(r"^[A-Za-z0-9._:-]{1,200}$")
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 
 
@@ -593,6 +595,54 @@ def create_app(repo_root: Path | None = None, edit: bool | None = None) -> FastA
             return semantic_diff(resolved_root(), base, head, site_id)
         except RefError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/link")
+    def link(
+        source: str = Query(...),
+        target: str = Query(...),
+        base: str | None = Query(default=None),
+        head: str | None = Query(default=None),
+    ) -> dict[str, Any]:
+        """Detalle de la arista source–target (ids del grafo). Con base/head, además el diff."""
+        if not SAFE_NODE_ID.fullmatch(source) or not SAFE_NODE_ID.fullmatch(target):
+            raise HTTPException(status_code=400, detail="id de nodo inválido")
+        root = resolved_root()
+        if base and head:
+            try:
+                base_sha = resolve_sha(root, validate_ref(base))
+                head_sha = resolve_sha(root, validate_ref(head))
+                before = link_details(view_from_snapshot(snapshot_ref(root, base_sha)), source, target)
+                after = link_details(view_from_snapshot(snapshot_ref(root, head_sha)), source, target)
+            except RefError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            if before is None and after is None:
+                raise HTTPException(status_code=404, detail=f"Conexión no encontrada en base ni head: {source} – {target}")
+            return {
+                "detail": after or before,
+                "base": before,
+                "head": after,
+                "diff": diff_details(before, after),
+                "refs": {"base": {"ref": base, "sha": base_sha}, "head": {"ref": head, "sha": head_sha}},
+            }
+        detail = link_details(view_from_tree(root), source, target)
+        if detail is None:
+            raise HTTPException(status_code=404, detail=f"Conexión no encontrada: {source} – {target}")
+        return {"detail": detail, "base": None, "head": None, "diff": None, "refs": None}
+
+    @app.post("/api/link/preview")
+    def link_preview(body: dict[str, Any]) -> dict[str, Any]:
+        """Como GET /api/link, pero sobre los archivos propuestos por el wizard (en memoria)."""
+        source, target = str(body.get("source") or ""), str(body.get("target") or "")
+        if not SAFE_NODE_ID.fullmatch(source) or not SAFE_NODE_ID.fullmatch(target):
+            raise HTTPException(status_code=400, detail="id de nodo inválido")
+        files = body.get("files") or []
+        if not isinstance(files, list):
+            raise HTTPException(status_code=400, detail="files debe ser una lista")
+        view = overlay_files(view_from_tree(resolved_root()), [item for item in files if isinstance(item, dict)])
+        detail = link_details(view, source, target)
+        if detail is None:
+            raise HTTPException(status_code=404, detail=f"Conexión no encontrada: {source} – {target}")
+        return {"detail": detail, "base": None, "head": None, "diff": None, "refs": None}
 
     @app.get("/api/sites")
     def list_sites() -> list[dict[str, Any]]:

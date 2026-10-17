@@ -6,6 +6,7 @@ import {
   useEdgesState,
   useNodesState,
   useReactFlow,
+  type EdgeMouseHandler,
   type NodeMouseHandler,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -22,7 +23,7 @@ import {
 } from "./DeviceNode";
 import { DIFF_STROKE, buildFlow, vlanColor } from "../layout";
 import { annotateGraph } from "../findings";
-import type { AppView, DiffStatus, Finding, GraphNode, GraphPayload, GroupBy, SiteFilter, Topology } from "../types";
+import type { AppView, DiffStatus, Finding, GraphEdge, GraphNode, GraphPayload, GroupBy, SiteFilter, Topology } from "../types";
 
 const nodeTypes = {
   device: DeviceNode,
@@ -50,6 +51,10 @@ type Props = {
   neighborhood?: boolean;
   onNeighborhood?: (value: boolean) => void;
   findings?: Finding[];
+  /** Arista seleccionada: se resalta con sus extremos y se atenúa el resto. */
+  selectedEdgeId?: string | null;
+  onSelectEdge?: (edge: GraphEdge) => void;
+  onClearEdge?: () => void;
 };
 
 export function TopologyGraph({
@@ -68,6 +73,9 @@ export function TopologyGraph({
   neighborhood = false,
   onNeighborhood,
   findings = [],
+  selectedEdgeId = null,
+  onSelectEdge,
+  onClearEdge,
 }: Props) {
   const effectiveGroup: GroupBy = siteFilter === "all" && view === "network" ? "kind" : groupBy;
   const decorated = useMemo(() => annotateGraph(graph, findings), [graph, findings]);
@@ -84,10 +92,41 @@ export function TopologyGraph({
   const [nodes, setNodes, onNodesChange] = useNodesState(laid.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(laid.edges);
 
+  const selectedEdge = useMemo(
+    () => (selectedEdgeId ? (visibleGraph?.edges.find((edge) => edge.id === selectedEdgeId) ?? null) : null),
+    [selectedEdgeId, visibleGraph],
+  );
+
   useEffect(() => {
-    setNodes(laid.nodes.map((node) => ({ ...node, selected: node.id === selectedId })));
-    setEdges(laid.edges);
-  }, [laid, selectedId, setEdges, setNodes]);
+    const endpoints = new Set(selectedEdge ? [selectedEdge.source, selectedEdge.target] : []);
+    setNodes(
+      laid.nodes.map((node) => ({
+        ...node,
+        selected: node.id === selectedId,
+        className: selectedEdge
+          ? endpoints.has(node.id)
+            ? "edge-endpoint"
+            : node.type === "clusterGroup"
+              ? "is-dimmed-group"
+              : "is-dimmed"
+          : undefined,
+      })),
+    );
+    setEdges(
+      laid.edges.map((edge) => ({
+        ...edge,
+        selected: edge.id === selectedEdge?.id,
+        className: selectedEdge ? (edge.id === selectedEdge.id ? "is-edge-selected" : "is-dimmed") : undefined,
+        zIndex: edge.id === selectedEdge?.id ? 10 : undefined,
+      })),
+    );
+  }, [laid, selectedId, selectedEdge, setEdges, setNodes]);
+
+  const onEdgeClick: EdgeMouseHandler = (event, edge) => {
+    event.stopPropagation();
+    const found = visibleGraph?.edges.find((item) => item.id === edge.id);
+    if (found) onSelectEdge?.(found);
+  };
 
   const onNodeClick: NodeMouseHandler = (_event, node) => {
     if (node.type === "clusterGroup") return;
@@ -101,7 +140,7 @@ export function TopologyGraph({
   const isGlobal = siteFilter === "all" && view === "network";
 
   return (
-    <section className="graph-pane">
+    <section className={`graph-pane${onSelectEdge ? " edges-clickable" : ""}${selectedEdge ? " has-edge-selection" : ""}`}>
       <header className="graph-toolbar">
         <div>
           <h2>{isGlobal ? "Sitios" : view === "kubernetes" ? "Kubernetes" : "Topología lógica"}</h2>
@@ -185,6 +224,9 @@ export function TopologyGraph({
           onEdgesChange={onEdgesChange}
           onNodeClick={onNodeClick}
           onNodeDoubleClick={onNodeDoubleClick}
+          onEdgeClick={onSelectEdge ? onEdgeClick : undefined}
+          onPaneClick={onClearEdge}
+          elementsSelectable
           nodeTypes={nodeTypes}
           fitView
           minZoom={0.2}

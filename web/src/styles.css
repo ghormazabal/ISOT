@@ -1732,3 +1732,221 @@ td {
   font-size: 11px;
 }
 
+
+/* ---- Aristas seleccionables y vista «Conexión» ---- */
+.edges-clickable .react-flow__edge {
+  cursor: pointer;
+}
+
+.edges-clickable .react-flow__edge:hover .react-flow__edge-path {
+  stroke-width: 3px !important;
+  filter: drop-shadow(0 0 3px rgba(111, 191, 168, 0.55));
+}
+
+.react-flow__edge.is-edge-selected .react-flow__edge-path {
+  stroke: var(--accent) !important;
+  stroke-width: 3.6px !important;
+  filter: drop-shadow(0 0 4px rgba(111, 191, 168, 0.7));
+}
+
+.react-flow__edge.is-edge-selected .react-flow__edge-textbg {
+  fill: #12352b;
+}
+
+.react-flow__edge.is-edge-selected .react-flow__edge-text {
+  fill: var(--text);
+}
+
+.react-flow__edge.is-dimmed {
+  opacity: 0.15;
+}
+
+.react-flow__node.is-dimmed {
+  opacity: 0.25;
+}
+
+.react-flow__node.is-dimmed-group {
+  opacity: 0.5;
+}
+
+.react-flow__node.edge-endpoint {
+  filter: drop-shadow(0 0 6px rgba(111, 191, 168, 0.8));
+}
+
+.react-flow__node.edge-endpoint > * {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.link-detail {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.link-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.link-detail-head h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.link-endpoints {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.link-endpoint {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.link-endpoint-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.link-endpoint-meta {
+  font-size: 11px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.link-arrow {
+  color: var(--accent);
+  font-size: 16px;
+}
+
+.link-status {
+  margin: 0;
+  font-size: 12px;
+}
+
+.value-tag.diff-added {
+  background: #1e4a3a;
+  color: #8ee0c0;
+}
+
+.value-tag.diff-removed {
+  background: #5a2424;
+  color: #f0a0a0;
+}
+
+.value-tag.diff-modified {
+  background: #5a4420;
+  color: #f0c674;
+}
+
+.value-tag.diff-unchanged,
+.value-tag.diff-missing {
+  background: #2c3640;
+  color: var(--muted);
+}
+
+.link-card {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  min-width: 0;
+}
+
+.link-card > summary {
+  cursor: pointer;
+  padding: 6px 8px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.link-card[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.link-card > .link-card-body,
+.link-card > div {
+  padding: 6px 8px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.link-sides,
+.link-vlans {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  table-layout: fixed;
+}
+
+.link-sides th,
+.link-sides td,
+.link-vlans th,
+.link-vlans td {
+  text-align: left;
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.link-sides th:first-child {
+  width: 34%;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.link-sources {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.link-sources details > summary {
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.link-yaml {
+  margin: 4px 0 0;
+  padding: 6px;
+  max-height: 220px;
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: pre;
+}
+
+.link-paths ul,
+.link-findings ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.link-detail h4 {
+  margin: 4px 0 2px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.link-endpoint .value-tag {
+  justify-self: start;
+}

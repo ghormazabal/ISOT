@@ -4,6 +4,7 @@ import { CompareSidebar } from "./components/CompareSidebar";
 import { CompareValues } from "./components/CompareValues";
 import { DetailPanel } from "./components/DetailPanel";
 import { FindingsBell, FindingsPanel } from "./components/FindingsPanel";
+import { LinkDetailView } from "./components/LinkDetail";
 import { RefPicker, effectiveRef } from "./components/RefPicker";
 import { Splitter, useMediaQuery, usePanelSize, useViewport } from "./components/Splitter";
 import { Sidebar } from "./components/Sidebar";
@@ -14,6 +15,7 @@ import { WizardsView } from "./components/WizardsView";
 import { api } from "./api";
 import { countFindings, scopeFindings, selectionFromFinding } from "./findings";
 import { appPanelSpecs, clampSize, layoutKey } from "./resize";
+import { edgeSelection, fallbackDetail, relatedFindings } from "./links";
 import {
   applyEditToggle,
   defaultBrowse,
@@ -34,7 +36,10 @@ import type {
   DeviceDetail,
   DeviceIndexEntry,
   DiffEntity,
+  EdgeSelection,
   Finding,
+  LinkEndpoint,
+  LinkResponse,
   OpenEntityRemediation,
   FindingsDiffPayload,
   FindingsPayload,
@@ -74,6 +79,10 @@ export default function App() {
   const [valuesDiff, setValuesDiff] = useState<ValuesDiff | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedEdge, setSelectedEdge] = useState<EdgeSelection | null>(null);
+  const [linkResponse, setLinkResponse] = useState<LinkResponse | null>(null);
+  const [linkLoading, setLinkLoading] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
   const [canvas, setCanvas] = useState<CanvasMode>("graph");
   const [compare, setCompare] = useState(() => Boolean(savedSession && !savedSession.editing && savedSession.lastBrowse.compare));
@@ -367,6 +376,7 @@ export default function App() {
   };
 
   const onGraphNode = (node: GraphNode) => {
+    setSelectedEdge(null);
     const siteIdFromNode =
       node.entity === "site" ? node.site || node.id.replace(/^site:/, "") : null;
     if (compare && diff) {
@@ -439,6 +449,78 @@ export default function App() {
     }
     return scopeFindings(findings, findingsScope);
   })();
+  // ---- Conexión (arista) seleccionada ----
+  const linkRefs = compare && diff ? { base: diff.base.sha, head: diff.head.sha } : null;
+  const linkRefKey = linkRefs ? `${linkRefs.base}..${linkRefs.head}` : "";
+  useEffect(() => {
+    if (!selectedEdge) {
+      setLinkResponse(null);
+      setLinkError(null);
+      setLinkLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLinkLoading(true);
+    setLinkError(null);
+    setLinkResponse(null);
+    const [base, head] = linkRefKey ? linkRefKey.split("..") : [];
+    api
+      .link(selectedEdge.source, selectedEdge.target, base && head ? { base, head } : null)
+      .then((payload) => {
+        if (!cancelled) setLinkResponse(payload);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setLinkError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLinkLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedEdge, linkRefKey]);
+
+  useEffect(() => {
+    if (!selectedEdge) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedEdge(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedEdge]);
+
+  useEffect(() => {
+    setSelectedEdge(null);
+  }, [view, siteFilter, compare, canvas]);
+
+  const nodeLabel = (id: string) => graph?.nodes.find((node) => node.id === id)?.hostname ?? id.split(":").pop() ?? id;
+  const openEndpoint = (endpoint: LinkEndpoint) => {
+    setSelectedEdge(null);
+    if (endpoint.entity === "site") {
+      setSiteFilter(endpoint.site);
+      setSelection({ type: "site", id: endpoint.site });
+    } else if (endpoint.entity === "cluster") {
+      setSelection({ type: "cluster", site: endpoint.site, name: endpoint.label });
+    } else if (endpoint.entity === "template") {
+      setSelection({ type: "template", site: endpoint.site || "global", name: endpoint.label });
+    } else if (endpoint.hostname) {
+      setSelection({ type: "device", site: endpoint.site, hostname: endpoint.hostname });
+    }
+  };
+  const linkView = selectedEdge ? (
+    <LinkDetailView
+      edge={selectedEdge}
+      response={linkResponse}
+      fallback={linkError ? fallbackDetail(selectedEdge, nodeLabel) : null}
+      loading={linkLoading}
+      error={linkError}
+      findings={relatedFindings(linkResponse?.detail ?? null, scopedFindings?.findings ?? [])}
+      compare={compare}
+      onOpenEndpoint={openEndpoint}
+      onClose={() => setSelectedEdge(null)}
+    />
+  ) : null;
+
   // «Corregir» en un hallazgo: entra en Editar con el wizard «Agregar device» precargado.
   const fixFinding = (finding: Finding) => {
     if (!editEnabled) return;
@@ -781,6 +863,9 @@ export default function App() {
           onlyChanges={onlyChanges}
           onOnlyChanges={setOnlyChanges}
           findings={scopedFindings?.findings ?? []}
+          selectedEdgeId={selectedEdge?.id ?? null}
+          onSelectEdge={(edge) => setSelectedEdge(edgeSelection(edge))}
+          onClearEdge={() => setSelectedEdge(null)}
         />
       )}
       <DetailPanel
@@ -802,6 +887,7 @@ export default function App() {
         onShowDiff={() => setCanvas("diff")}
         diffEntity={compare ? diffEntity : null}
         onSelectDiffEntity={onSelectDiffChild}
+        linkView={linkView}
       />
       <Splitter
         id="split-sidebar"

@@ -131,6 +131,28 @@ Demo con cambios ficticios (`demo/diff-example` vs el tip de esta rama):
 # VLAN 2099 LAB / LAB_NET, se quita site1-jump001, cniConfig.mtu 1440 → 1500
 ```
 
+## Detalle de conexiones
+
+Toda línea de los grafos (Red, Kubernetes, mapa global con DCI, Comparar y la
+vista previa del wizard) es clicable: tiene un área de clic más ancha, se
+resalta al pasar el mouse y, al pincharla, resalta la conexión y sus dos
+extremos (atenúa el resto). El panel **Detalle** muestra la vista
+**Conexión**:
+
+- extremos (equipo, rol, clúster), clicables para enfocar cada uno;
+- un bloque por enlace lógico (bond, interfaz, OOB, hypervisor o DCI) con, por
+  lado, interfaz/puerto, bond, PortChannel/LAG, LACP (`mode`), miembros, IP y
+  MTU; VLANs con nombre, red, gateway y VRF; y la ruta YAML (archivo + clave)
+  con el fragmento plegable. Lo que el inventario no declara se muestra como «—»;
+- en Comparar, el estado de la arista en el diff y los cambios de atributos;
+- hallazgos relacionados (p.ej. `INV-PORT`).
+
+`Esc` o un clic en el fondo limpia la selección. API:
+`GET /api/link?source=<id>&target=<id>[&base=<ref>&head=<ref>]` y
+`POST /api/link/preview` (con los archivos de la vista previa del wizard).
+
+![Detalle de una conexión de SITE1](docs/images/edge-details.png)
+
 ## Edición con wizards
 
 La UI no escribe YAML hasta que confirmas. Para encender los wizards:
@@ -391,7 +413,8 @@ API de solo lectura: `/api/sites`, `/api/sites/{id}/devices`,
 `/api/refs`, `/api/commits?rev=<ref>`, y
 `/api/diff?base=<ref>&head=<ref>[&site=<id>]`,
 `/api/findings?site=&ref=` (estricto por sitio; sin `site` trae `by_site`
-y `global`), `/api/findings?base=&head=[&site=]`, `/api/rules`.
+y `global`), `/api/findings?base=&head=[&site=]`, `/api/rules`,
+`/api/link?source=&target=[&base=&head=]`.
 Con edición: `GET /api/wizard/status`, `GET /api/wizard/cabling-defaults`,
 `POST /api/wizard/device/preview|commit`, `POST /api/wizard/site/preview|commit`.
 
