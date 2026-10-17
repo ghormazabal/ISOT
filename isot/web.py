@@ -438,13 +438,15 @@ def create_app(repo_root: Path | None = None, edit: bool | None = None) -> FastA
         head: str | None = Query(default=None),
     ) -> dict[str, Any]:
         from isot.rules.evaluate import (
+            counts_by_site,
             diff_findings,
             evaluate,
             evaluate_ref,
+            finding_counts,
             payload as findings_payload,
         )
 
-        site_id = site.strip() if site else None
+        site_id = site.strip().lower() if site else None
         if site_id == "all":
             site_id = None
         try:
@@ -452,17 +454,24 @@ def create_app(repo_root: Path | None = None, edit: bool | None = None) -> FastA
                 base_findings = evaluate_ref(resolved_root(), base, site=site_id)
                 head_findings = evaluate_ref(resolved_root(), head, site=site_id)
                 added, resolved = diff_findings(base_findings, head_findings)
+                known = sorted(set(base_findings.site_ids) | set(head_findings.site_ids))
+                scope_ids = [site_id] if site_id else known
                 return {
-                    "base": findings_payload(base_findings),
-                    "head": findings_payload(head_findings),
+                    "scope": site_id or "all",
+                    "base": findings_payload(base_findings, site=site_id),
+                    "head": findings_payload(head_findings, site=site_id),
                     "added": [item.to_dict() for item in added],
                     "resolved": [item.to_dict() for item in resolved],
+                    "added_counts": finding_counts(added),
+                    "resolved_counts": finding_counts(resolved),
+                    "added_by_site": counts_by_site(added, scope_ids),
+                    "resolved_by_site": counts_by_site(resolved, scope_ids),
                 }
             if ref:
                 findings = evaluate_ref(resolved_root(), ref, site=site_id)
             else:
                 findings = evaluate(resolved_root(), site=site_id)
-            return findings_payload(findings)
+            return findings_payload(findings, site=site_id)
         except RefError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -520,7 +529,9 @@ def create_app(repo_root: Path | None = None, edit: bool | None = None) -> FastA
             preview = site_preview(resolved_root(), body)
             _guard_wizard_findings(preview, body)
             description = str(body.get("description") or body.get("id") or "nuevo-sitio")
-            result = commit_preview(resolved_root(), preview, f"sitio {description}")
+            result = commit_preview(
+                resolved_root(), preview, f"sitio {description}", site=preview.get("site") or body.get("id")
+            )
             clear_caches()
             return {**result, "preview": preview}
         except WizardError as exc:
@@ -541,7 +552,9 @@ def create_app(repo_root: Path | None = None, edit: bool | None = None) -> FastA
             preview = device_preview(resolved_root(), body)
             _guard_wizard_findings(preview, body)
             hostnames = ",".join(preview.get("hostnames") or []) or "device"
-            result = commit_preview(resolved_root(), preview, f"device {hostnames}")
+            result = commit_preview(
+                resolved_root(), preview, f"device {hostnames}", site=preview.get("site") or body.get("site")
+            )
             clear_caches()
             return {**result, "preview": preview}
         except (WizardError, ValueError) as exc:

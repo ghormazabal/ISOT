@@ -368,10 +368,20 @@ export type Finding = {
   graph_id: string | null;
   silenced?: boolean;
   override_reason?: string | null;
+  /** Hallazgo de un template atribuido al clúster que lo usa ("global/<name>"). */
+  source_template?: string | null;
 };
 
+export type FindingCounts = { error: number; warning: number; info: number; total: number };
+
 export type FindingsPayload = {
-  counts: { error: number; warning: number; info: number; total: number };
+  /** "all" (vista global) o el id del sitio. */
+  scope?: string;
+  counts: FindingCounts;
+  /** Contadores por sitio (todos los sitios en la vista global). */
+  by_site?: Record<string, FindingCounts>;
+  /** Hallazgos no atribuibles a un sitio (templates sin uso, inventario). */
+  global?: FindingCounts;
   findings: Finding[];
   rules?: Array<{
     id: string;
@@ -383,13 +393,20 @@ export type FindingsPayload = {
 };
 
 export type FindingsDiffPayload = {
+  scope?: string;
   base: FindingsPayload;
   head: FindingsPayload;
   added: Finding[];
   resolved: Finding[];
+  added_counts?: FindingCounts;
+  resolved_counts?: FindingCounts;
+  added_by_site?: Record<string, FindingCounts>;
+  resolved_by_site?: Record<string, FindingCounts>;
 };
 
 export type WizardFindings = {
+  site?: string | null;
+  counts?: FindingCounts;
   added: Finding[];
   resolved: Finding[];
   current: Finding[];

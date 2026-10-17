@@ -234,13 +234,22 @@ Catálogo versionado en [`docs/rules.md`](docs/rules.md) e
 regla tiene id estable (`K8S-CP-001`, `INV-IP-001`, …), severidad por
 defecto y recomendación.
 
-La campana del header muestra contadores error / warning / info. El panel
-filtra por severidad, sitio, clúster y regla; cada hallazgo enlaza a la
-entidad (foco en el grafo) y enseña la recomendación. Los nodos y grupos
-de clúster llevan badge de severidad. En wizards, la vista previa evalúa
-el estado propuesto: **errores nuevos bloquean Confirmar**; warnings
-nuevos piden un checkbox. Comparar lista hallazgos añadidos y resueltos
-entre base y head.
+Los hallazgos son **por sitio**. Dentro de un sitio (Red, Kubernetes,
+values o el wizard de ese sitio) la campana del header y el panel muestran
+solo los hallazgos de ese sitio, con contadores error / warning / info. Un
+hallazgo de un template global aparece en un sitio solo si alguno de sus
+clústeres usa ese template, marcado como «plantilla … · vía clúster …» y
+atribuido a ese clúster. En la vista global (mapa de sitios) el panel
+agrupa por sitio con contadores por grupo, más un grupo «Global /
+plantillas» para templates que ningún clúster usa; cada nodo de sitio del
+mapa lleva sus propios contadores, y un clic en el grupo o en el nodo abre
+el sitio. El panel filtra por severidad, clúster y regla; cada hallazgo
+enlaza a la entidad (foco en el grafo) y enseña la recomendación. Los
+nodos y grupos de clúster llevan badge de severidad. En wizards, la vista
+previa evalúa el estado propuesto: **solo los errores nuevos del sitio del
+wizard bloquean Confirmar** (los de otros sitios no); warnings nuevos
+piden un checkbox. Comparar lista hallazgos añadidos y resueltos entre
+base y head, también acotado al sitio elegido.
 
 Silencio: `rule_overrides: [{id: K8S-CP-001, severity: off, reason: "..."}]`
 en el YAML del clúster, device o `topology/index.yaml`. Sin `reason` el
@@ -256,11 +265,12 @@ En GitHub Actions el validador emite annotations para avisos e infos.
 
 ![Campana de hallazgos](docs/images/findings-bell.png)
 
-*Header: campana con contadores por severidad.*
+*Header dentro de un sitio: la campana cuenta solo los hallazgos de ese sitio.*
 
 ![Panel lateral de hallazgos](docs/images/findings-panel.png)
 
-*Panel filtrable; clic en un hallazgo enfoca la entidad en el grafo.*
+*Vista global: panel agrupado por sitio (con «Global / plantillas» aparte) y
+contadores en cada nodo de sitio; clic en un grupo abre el sitio.*
 
 ![Badge de severidad en el grafo](docs/images/findings-graph-badge.png)
 
@@ -334,7 +344,8 @@ API de solo lectura: `/api/sites`, `/api/sites/{id}/devices`,
 `/api/sites/{id}/clusters/{name}/values-diff`,
 `/api/refs`, `/api/commits?rev=<ref>`, y
 `/api/diff?base=<ref>&head=<ref>[&site=<id>]`,
-`/api/findings?site=&ref=`, `/api/findings?base=&head=`, `/api/rules`.
+`/api/findings?site=&ref=` (estricto por sitio; sin `site` trae `by_site`
+y `global`), `/api/findings?base=&head=[&site=]`, `/api/rules`.
 Con edición: `GET /api/wizard/status`, `GET /api/wizard/cabling-defaults`,
 `POST /api/wizard/device/preview|commit`, `POST /api/wizard/site/preview|commit`.
 

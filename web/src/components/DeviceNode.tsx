@@ -113,15 +113,30 @@ export function ReleaseGraphNode({ data, selected }: NodeProps<ReleaseFlowNode>)
 
 type SiteFlowNode = Node<GraphNode, "siteNode">;
 
+function SiteFindingCounters({ counts }: { counts: GraphNode["finding_counts"] }) {
+  if (!counts) return null;
+  const total = (counts.error || 0) + (counts.warning || 0) + (counts.info || 0);
+  if (!total) return null;
+  return (
+    <span className="site-findings" title="Hallazgos del sitio (clic para abrirlo)">
+      {counts.error ? <span className="sev-pill sev-error">{counts.error}</span> : null}
+      {counts.warning ? <span className="sev-pill sev-warning">{counts.warning}</span> : null}
+      {counts.info ? <span className="sev-pill sev-info">{counts.info}</span> : null}
+    </span>
+  );
+}
+
 export function SiteGraphNode({ data, selected }: NodeProps<SiteFlowNode>) {
   return (
     <div className={`device-node kind-site${selected ? " is-selected" : ""}${diffClass(data.diff_status)}`}>
       <Handle type="target" position={Position.Left} />
-      <strong>{data.hostname}</strong>
+      <strong className="site-title">
+        {data.hostname}
+        <SiteFindingCounters counts={data.finding_counts} />
+      </strong>
       <span className="muted">sitio</span>
       <span className="mono">{data.ip ?? ""}</span>
       {data.diff_status === "added" ? <span className="nuevo-badge">nuevo</span> : <DiffBadge counts={data.diff_counts} />}
-      <FindingBadge severity={data.finding_severity} counts={data.finding_counts} />
       <Handle type="source" position={Position.Right} />
     </div>
   );

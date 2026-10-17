@@ -391,7 +391,11 @@ def test_k8s_ver_003_unpinned(tmp_path: Path) -> None:
             ],
         },
     )
-    assert _find(evaluate(root), "K8S-VER-003", "sin versión", site=None)
+    hits = _find(evaluate(root), "K8S-VER-003", "sin versión", site="*")
+    # El template global se atribuye a cada clúster que lo usa (uno por sitio aquí).
+    assert {(item.site, item.cluster) for item in hits} == {("site-a", "k8s-prod"), ("site-b", "k8s-edge")}
+    assert all(item.source_template == "global/rke2-lab" for item in hits)
+    assert not _find(evaluate(root), "K8S-VER-003", site=None)
     write_yaml(
         root / "cluster-templates" / "rke2-lab" / "template.yaml",
         {
@@ -402,7 +406,7 @@ def test_k8s_ver_003_unpinned(tmp_path: Path) -> None:
             ],
         },
     )
-    assert not _find(evaluate(root), "K8S-VER-003", site=None)
+    assert not _find(evaluate(root), "K8S-VER-003", site="*")
 
 
 def test_k8s_tpl_001_missing_template(tmp_path: Path) -> None:

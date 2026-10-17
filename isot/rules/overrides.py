@@ -92,10 +92,14 @@ def apply_overrides(findings: list[Finding], tables: list[tuple[str | None, str 
     out: list[Finding] = []
     for finding in findings:
         match: dict[str, str] | None = None
+        entities = {finding.entity_id}
+        if finding.source_template and finding.site and finding.cluster:
+            # Un hallazgo de template atribuido a un clúster acepta overrides de ese clúster.
+            entities.add(f"{finding.site}/{finding.cluster}")
         for scope_site, scope_entity, table in tables:
             if finding.id not in table:
                 continue
-            if scope_entity and scope_entity != finding.entity_id:
+            if scope_entity and scope_entity not in entities:
                 continue
             if scope_site and scope_site != finding.site:
                 continue

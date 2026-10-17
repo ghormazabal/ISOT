@@ -1236,3 +1236,83 @@ td {
     border-top: 1px solid var(--line);
   }
 }
+
+.bell-scope {
+  font-size: 11px;
+  color: var(--muted);
+  border-left: 1px solid var(--line);
+  padding-left: 6px;
+}
+
+.findings-scope {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.finding-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.finding-site {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.finding-origin {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.findings-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.findings-group {
+  display: grid;
+  gap: 6px;
+}
+
+.findings-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 4px 2px;
+  color: inherit;
+  cursor: pointer;
+}
+
+.findings-group-head:disabled {
+  cursor: default;
+}
+
+.findings-group-pills {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.findings-group-go {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.site-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.site-findings {
+  display: inline-flex;
+  gap: 4px;
+  font-weight: 400;
+}

@@ -11,7 +11,7 @@ import { TopologyGraph } from "./components/TopologyGraph";
 import { ValuesDiffView } from "./components/ValuesDiff";
 import { WizardsView } from "./components/WizardsView";
 import { api } from "./api";
-import { selectionFromFinding } from "./findings";
+import { countFindings, scopeFindings, selectionFromFinding } from "./findings";
 import {
   applyEditToggle,
   defaultBrowse,
@@ -414,6 +414,35 @@ export default function App() {
   };
 
   const activeSite = sites.find((item) => item.id === siteFilter);
+  const siteNames = useMemo(() => Object.fromEntries(sites.map((item) => [item.id, item.name])), [sites]);
+  const siteIds = useMemo(() => sites.map((item) => item.id), [sites]);
+
+  // Sitio al que pertenecen la campana y el panel: el filtro de sitio o, en Editar,
+  // el sitio del wizard activo. "all" = vista global agrupada por sitio.
+  const findingsScope: string = (() => {
+    if (view !== "wizards") return siteFilter;
+    if (wizardDraft.mode === "device") return wizardDraft.device.site || "all";
+    if (wizardDraft.mode === "site") return wizardDraft.site.id || "all";
+    return "all";
+  })();
+  const scopedFindings: FindingsPayload | null = (() => {
+    if (compare && findingsDiff && view !== "wizards") return scopeFindings(findingsDiff.head, findingsScope);
+    const current = view === "wizards" && wizardDraft.mode === "site" ? wizardDraft.site.preview?.findings?.current : null;
+    if (current && findingsScope !== "all") {
+      // Sitio nuevo aún sin commit: lo que reporta la vista previa del wizard.
+      return { scope: findingsScope, counts: countFindings(current), findings: current };
+    }
+    return scopeFindings(findings, findingsScope);
+  })();
+  const openSiteFromFindings = (site: string) => {
+    if (view === "wizards") {
+      setView(lastBrowse.view);
+      setCompare(lastBrowse.compare);
+    }
+    setSiteFilter(site);
+    setSelection({ type: "site", id: site });
+    setCanvas("graph");
+  };
 
   return (
     <div className={view === "wizards" ? "app app-wizards" : "app"}>
@@ -479,11 +508,8 @@ export default function App() {
           </button>
         </nav>
         <FindingsBell
-          counts={
-            compare && findingsDiff
-              ? findingsDiff.head.counts
-              : (findings?.counts ?? { error: 0, warning: 0, info: 0 })
-          }
+          counts={scopedFindings?.counts ?? { error: 0, warning: 0, info: 0 }}
+          scopeLabel={findingsScope === "all" ? null : (siteNames[findingsScope] ?? findingsScope)}
           onClick={() => setFindingsOpen((value) => !value)}
           active={findingsOpen}
         />
@@ -658,11 +684,7 @@ export default function App() {
           compare={compare}
           onlyChanges={onlyChanges}
           onOnlyChanges={setOnlyChanges}
-          findings={
-            compare && findingsDiff
-              ? findingsDiff.head.findings
-              : (findings?.findings ?? [])
-          }
+          findings={scopedFindings?.findings ?? []}
         />
       )}
       <DetailPanel
@@ -688,15 +710,20 @@ export default function App() {
         </>
       ) : null}
       <FindingsPanel
-        payload={compare && findingsDiff ? findingsDiff.head : findings}
+        payload={scopedFindings}
+        scope={findingsScope}
+        siteNames={siteNames}
+        siteIds={siteIds}
         added={findingsDiff?.added}
         resolved={findingsDiff?.resolved}
-        compare={compare}
+        compare={compare && view !== "wizards"}
+        onOpenSite={openSiteFromFindings}
         open={findingsOpen}
         onClose={() => setFindingsOpen(false)}
         onSelect={(finding: Finding) => {
           const next = selectionFromFinding(finding);
           if (!next) return;
+          if (view === "wizards") setCompare(lastBrowse.compare);
           if (next.type === "cluster" && next.site && next.name) {
             setSelection({ type: "cluster", site: next.site, name: next.name });
             setView("kubernetes");

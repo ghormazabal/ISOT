@@ -411,7 +411,10 @@ def format_report(
         if finding.severity not in grouped:
             continue
         label = {"error": "ERROR", "warning": "WARN", "info": "INFO"}[finding.severity]
-        grouped[finding.severity].append(f"[{label}] {finding.id} {finding.entity_id}: {finding.message}")
+        entity = finding.entity_id
+        if getattr(finding, "source_template", None) and finding.site and finding.cluster:
+            entity = f"{entity} (vía {finding.site}/{finding.cluster})"
+        grouped[finding.severity].append(f"[{label}] {finding.id} {entity}: {finding.message}")
     body: list[str] = []
     for key in ("error", "warning", "info"):
         body.extend(grouped[key])
@@ -446,6 +449,7 @@ def github_annotations(repo_root: Path) -> str:
 
     lines: list[str] = []
     level = {"error": "error", "warning": "warning", "info": "notice"}
+    seen: set[str] = set()
     for finding in evaluate(repo_root):
         kind = level.get(finding.severity)
         if not kind:
@@ -453,7 +457,12 @@ def github_annotations(repo_root: Path) -> str:
         path = finding.path or "sites.yaml"
         title = finding.id
         message = finding.message.replace("%", "%25").replace("\n", "%0A")
-        lines.append(f"::{kind} file={path},title={title}::{message}")
+        line = f"::{kind} file={path},title={title}::{message}"
+        # Un template usado por varios clústeres genera una sola annotation en su archivo.
+        if line in seen:
+            continue
+        seen.add(line)
+        lines.append(line)
     return "\n".join(lines) + ("\n" if lines else "")
 
 

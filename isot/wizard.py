@@ -1158,13 +1158,24 @@ def unique_wizard_branch(repo: Path, description: str) -> str:
         n += 1
 
 
-def commit_preview(repo: Path, preview: dict[str, Any], description: str) -> dict[str, Any]:
+def commit_preview(
+    repo: Path, preview: dict[str, Any], description: str, *, site: str | None = None
+) -> dict[str, Any]:
+    """Aplica el preview en una rama wizard/… y la confirma.
+
+    Bloquea solo por errores *nuevos* del sitio del wizard (o no atribuibles a
+    ningún sitio); los errores previos o de otros sitios no bloquean.
+    """
     files = preview.get("files") or []
     if not files:
         raise WizardError("preview sin archivos")
     dirty = git(repo, ["status", "--porcelain"])
     if dirty.stdout.strip():
         raise WizardError("working tree sucio; confirma o descarta cambios antes del wizard")
+    from isot.rules.evaluate import diff_findings, evaluate, wizard_scope
+
+    scope = site or (str(preview.get("site")) if preview.get("site") else None)
+    base_findings = evaluate(repo)
     branch_now = current_branch(repo)
     if branch_now in PROTECTED_BRANCHES:
         # still allowed to *create* a wizard branch from here; just never commit onto it
@@ -1182,9 +1193,8 @@ def commit_preview(repo: Path, preview: dict[str, Any], description: str) -> dic
     try:
         apply_files(repo, files)
         write_indexes(repo)
-        from isot.rules.evaluate import evaluate
-
-        errors = [item for item in evaluate(repo) if item.severity == "error"]
+        added, _ = diff_findings(base_findings, evaluate(repo))
+        errors = [item for item in wizard_scope(added, scope) if item.severity == "error"]
         if errors:
             git(repo, ["reset", "--hard", "HEAD"])
             git(repo, ["clean", "-fd"])

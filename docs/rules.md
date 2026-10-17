@@ -16,8 +16,42 @@ rule_overrides:
 
 Sin `reason` el override **se ignora** y aparece `RULE-OVR-001`.
 
-API: `GET /api/findings?site=&ref=` y `GET /api/findings?base=&head=`.
 En GITHUB_ACTIONS el validador emite annotations (`::warning` / `::notice`).
+
+## Hallazgos por sitio
+
+Cada hallazgo pertenece a un sitio (`site`) o es global (`site: null`).
+
+- **Templates.** Un hallazgo sobre un template (p. ej. `K8S-VER-003`,
+  `INV-HELM-001`) se replica en cada clúster que usa ese template: la copia
+  lleva `site` y `cluster` del clúster, `graph_id` del nodo del clúster y
+  `source_template` con el origen (`global/<nombre>` o `<sitio>/<nombre>`).
+  Un template que ningún clúster usa queda global (o en su sitio, si es un
+  template de sitio). Así un template usado en dos sitios cuenta en ambos.
+- **Overrides.** Un `rule_overrides` en el clúster también aplica a los
+  hallazgos de template atribuidos a ese clúster (silenciar en un sitio no
+  silencia el otro).
+
+API:
+
+- `GET /api/findings?site=<id>[&ref=<ref>]`: solo hallazgos con
+  `site == <id>` (sin globales). Ids de sitio en minúsculas.
+- `GET /api/findings` (vista global): todos, más `by_site`
+  (`{site: {error, warning, info, total}}`, incluye sitios en cero) y
+  `global` (no atribuibles a un sitio). `counts.total` =
+  Σ `by_site[*].total` + `global.total`.
+- `GET /api/findings?base=&head=[&site=]`: `base` y `head` con el mismo
+  formato, `added` / `resolved` acotados al sitio, `added_counts`,
+  `resolved_counts`, `added_by_site` y `resolved_by_site`.
+
+Wizards: la vista previa y el commit comparan el inventario antes y después
+y solo **bloquean por errores nuevos del sitio del wizard** o nuevos sin
+sitio atribuible. Errores previos o de otros sitios no bloquean. Los
+warnings nuevos del sitio piden confirmar con el checkbox.
+
+UI: dentro de un sitio la campana y el panel muestran solo ese sitio; en la
+vista global el panel agrupa por sitio (más «Global / plantillas») y cada
+nodo de sitio del mapa lleva sus contadores.
 
 ## Catálogo
 
