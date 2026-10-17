@@ -146,7 +146,7 @@ def test_site_preview_and_commit(tmp_path: Path) -> None:
     assert "sites.yaml" in paths
     assert "sites/site-c/topology/index.yaml" in paths
     assert any(path.endswith("SITE-C-NODE001.yaml") for path in paths)
-    commit = client.post("/api/wizard/site/commit", json=body)
+    commit = client.post("/api/wizard/site/commit", json={**body, "accept_warnings": True})
     assert commit.status_code == 200, commit.text
     assert commit.json()["branch"].startswith("wizard/")
     catalog = load_yaml(root / "sites.yaml")

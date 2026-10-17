@@ -20,7 +20,8 @@ import {
   TemplateGraphNode,
 } from "./DeviceNode";
 import { DIFF_STROKE, buildFlow, vlanColor } from "../layout";
-import type { AppView, DiffStatus, GraphNode, GraphPayload, GroupBy, SiteFilter, Topology } from "../types";
+import { annotateGraph } from "../findings";
+import type { AppView, DiffStatus, Finding, GraphNode, GraphPayload, GroupBy, SiteFilter, Topology } from "../types";
 
 const nodeTypes = {
   device: DeviceNode,
@@ -47,6 +48,7 @@ type Props = {
   focusIds?: string[];
   neighborhood?: boolean;
   onNeighborhood?: (value: boolean) => void;
+  findings?: Finding[];
 };
 
 export function TopologyGraph({
@@ -64,14 +66,16 @@ export function TopologyGraph({
   focusIds,
   neighborhood = false,
   onNeighborhood,
+  findings = [],
 }: Props) {
   const effectiveGroup: GroupBy = siteFilter === "all" && view === "network" ? "kind" : groupBy;
+  const decorated = useMemo(() => annotateGraph(graph, findings), [graph, findings]);
   const visibleGraph = useMemo(() => {
-    if (!graph) return null;
-    const seeds = focusIds?.length ? focusIds : addedIds(graph);
-    const narrowed = neighborhood ? neighborhoodGraph(graph, seeds) : graph;
+    if (!decorated) return null;
+    const seeds = focusIds?.length ? focusIds : addedIds(decorated);
+    const narrowed = neighborhood ? neighborhoodGraph(decorated, seeds) : decorated;
     return filterGraph(narrowed, onlyChanges && compare && !neighborhood);
-  }, [graph, onlyChanges, compare, neighborhood, focusIds]);
+  }, [decorated, onlyChanges, compare, neighborhood, focusIds]);
   const laid = useMemo(
     () => (visibleGraph ? buildFlow(visibleGraph, effectiveGroup) : { nodes: [], edges: [] }),
     [visibleGraph, effectiveGroup],

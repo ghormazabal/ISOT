@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CompareSidebar } from "./components/CompareSidebar";
 import { CompareValues } from "./components/CompareValues";
 import { DetailPanel } from "./components/DetailPanel";
+import { FindingsBell, FindingsPanel } from "./components/FindingsPanel";
 import { RefPicker, effectiveRef } from "./components/RefPicker";
 import { Sidebar } from "./components/Sidebar";
 import { TemplateExplorer } from "./components/TemplateExplorer";
@@ -10,6 +11,7 @@ import { TopologyGraph } from "./components/TopologyGraph";
 import { ValuesDiffView } from "./components/ValuesDiff";
 import { WizardsView } from "./components/WizardsView";
 import { api } from "./api";
+import { selectionFromFinding } from "./findings";
 import {
   applyEditToggle,
   defaultBrowse,
@@ -29,6 +31,9 @@ import type {
   DeviceDetail,
   DeviceIndexEntry,
   DiffEntity,
+  Finding,
+  FindingsDiffPayload,
+  FindingsPayload,
   GraphNode,
   GraphPayload,
   GroupBy,
@@ -81,6 +86,9 @@ export default function App() {
   const [onlyChanges, setOnlyChanges] = useState(true);
   const [diffEntity, setDiffEntity] = useState<DiffEntity | null>(null);
   const [editEnabled, setEditEnabled] = useState(false);
+  const [findings, setFindings] = useState<FindingsPayload | null>(null);
+  const [findingsDiff, setFindingsDiff] = useState<FindingsDiffPayload | null>(null);
+  const [findingsOpen, setFindingsOpen] = useState(false);
 
   const persistDraft = useCallback((draft: WizardDraft) => {
     setWizardDraft((current) => (draftsEqual(current, draft) ? current : draft));
@@ -121,12 +129,13 @@ export default function App() {
     let cancelled = false;
     (async () => {
       try {
-        const [siteIdx, templateIdx, globalGraph, gitRefs, wizard] = await Promise.all([
+        const [siteIdx, templateIdx, globalGraph, gitRefs, wizard, findingsPayload] = await Promise.all([
           api.sites(),
           api.templates(),
           api.globalGraph(),
           api.refs().catch(() => null),
           api.wizardStatus().catch(() => ({ edit: false })),
+          api.findings().catch(() => null),
         ]);
         if (cancelled) return;
         const devices: Record<string, DeviceIndexEntry[]> = {};
@@ -165,6 +174,7 @@ export default function App() {
           setBaseBranch(pick.base);
           setHeadBranch(pick.head);
         }
+        if (findingsPayload) setFindings(findingsPayload);
         const canEdit = Boolean(wizard?.edit);
         setEditEnabled(canEdit);
         if (!canEdit && view === "wizards") {
@@ -271,6 +281,25 @@ export default function App() {
       })
       .finally(() => {
         if (!cancelled) setDiffLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [compare, baseRef, headRef, siteFilter]);
+
+  useEffect(() => {
+    if (!compare || !baseRef || !headRef) {
+      setFindingsDiff(null);
+      return;
+    }
+    let cancelled = false;
+    api
+      .findingsDiff(baseRef, headRef, siteFilter)
+      .then((payload) => {
+        if (!cancelled) setFindingsDiff(payload);
+      })
+      .catch(() => {
+        if (!cancelled) setFindingsDiff(null);
       });
     return () => {
       cancelled = true;
@@ -449,6 +478,15 @@ export default function App() {
             Comparar
           </button>
         </nav>
+        <FindingsBell
+          counts={
+            compare && findingsDiff
+              ? findingsDiff.head.counts
+              : (findings?.counts ?? { error: 0, warning: 0, info: 0 })
+          }
+          onClick={() => setFindingsOpen((value) => !value)}
+          active={findingsOpen}
+        />
         {editEnabled ? (
           <nav className="view-tabs">
             <button
@@ -620,6 +658,11 @@ export default function App() {
           compare={compare}
           onlyChanges={onlyChanges}
           onOnlyChanges={setOnlyChanges}
+          findings={
+            compare && findingsDiff
+              ? findingsDiff.head.findings
+              : (findings?.findings ?? [])
+          }
         />
       )}
       <DetailPanel
@@ -644,6 +687,35 @@ export default function App() {
       />
         </>
       ) : null}
+      <FindingsPanel
+        payload={compare && findingsDiff ? findingsDiff.head : findings}
+        added={findingsDiff?.added}
+        resolved={findingsDiff?.resolved}
+        compare={compare}
+        open={findingsOpen}
+        onClose={() => setFindingsOpen(false)}
+        onSelect={(finding: Finding) => {
+          const next = selectionFromFinding(finding);
+          if (!next) return;
+          if (next.type === "cluster" && next.site && next.name) {
+            setSelection({ type: "cluster", site: next.site, name: next.name });
+            setView("kubernetes");
+            if (next.site !== "all") setSiteFilter(next.site);
+          } else if (next.type === "device" && next.site && next.hostname) {
+            setSelection({ type: "device", site: next.site, hostname: next.hostname });
+            setView("network");
+            setSiteFilter(next.site);
+          } else if (next.type === "template" && next.site && next.name) {
+            setSelection({ type: "template", site: next.site, name: next.name });
+            setView("kubernetes");
+          } else if (next.type === "site" && next.id) {
+            setSelection({ type: "site", id: next.id });
+            setSiteFilter(next.id);
+            setView("network");
+          }
+          setCanvas("graph");
+        }}
+      />
     </div>
   );
 }

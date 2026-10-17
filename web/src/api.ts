@@ -14,6 +14,8 @@ import type {
   TemplateIndexEntry,
   Topology,
   ValuesDiff,
+  FindingsDiffPayload,
+  FindingsPayload,
   WizardCommit,
   WizardPreview,
 } from "./types";
@@ -103,4 +105,16 @@ export const api = {
   wizardDeviceCommit: (body: unknown) => postJSON<WizardCommit>("/api/wizard/device/commit", body),
   wizardSitePreview: (body: unknown) => postJSON<WizardPreview>("/api/wizard/site/preview", body),
   wizardSiteCommit: (body: unknown) => postJSON<WizardCommit>("/api/wizard/site/commit", body),
+  findings: (params?: { site?: string; ref?: string }) => {
+    const search = new URLSearchParams();
+    if (params?.site && params.site !== "all") search.set("site", params.site);
+    if (params?.ref) search.set("ref", params.ref);
+    const q = search.toString();
+    return fetchJSON<FindingsPayload>(`/api/findings${q ? `?${q}` : ""}`);
+  },
+  findingsDiff: (base: string, head: string, site?: string) => {
+    const search = new URLSearchParams({ base, head });
+    if (site && site !== "all") search.set("site", site);
+    return fetchJSON<FindingsDiffPayload>(`/api/findings?${search.toString()}`);
+  },
 };

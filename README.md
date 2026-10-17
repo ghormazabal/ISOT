@@ -42,7 +42,9 @@ Tres patrones:
    sitio** y entre sitios que comparten un `address_space`, más
    `cluster_ref` / `template_ref` / `connected_to` rotos, `values_ref`
    inexistentes o YAML inválido, y `values_overrides` que apuntan a un
-   release que el template no declara. `isot-leakcheck` cubre también los
+   release que el template no declara. El motor de reglas (`isot/rules/`)
+   añade hallazgos de Kubernetes y de integridad (ver
+   [Reglas de control](#reglas-de-control)). `isot-leakcheck` cubre también los
    archivos de values.
 
 Punteros lógicos (se resuelven **en el sitio actual** salvo que se indique otro):
@@ -225,6 +227,49 @@ rol: patrón nuevo**.*
 *Tras avanzar el wizard y volver a Sitios: **Editar** lleva el badge
 **borrador**. El grafo global no pierde el sitio.*
 
+## Reglas de control
+
+Catálogo versionado en [`docs/rules.md`](docs/rules.md) e
+`isot/rules/k8s_eol.yaml` (EOL de Kubernetes, fácil de actualizar). Cada
+regla tiene id estable (`K8S-CP-001`, `INV-IP-001`, …), severidad por
+defecto y recomendación.
+
+La campana del header muestra contadores error / warning / info. El panel
+filtra por severidad, sitio, clúster y regla; cada hallazgo enlaza a la
+entidad (foco en el grafo) y enseña la recomendación. Los nodos y grupos
+de clúster llevan badge de severidad. En wizards, la vista previa evalúa
+el estado propuesto: **errores nuevos bloquean Confirmar**; warnings
+nuevos piden un checkbox. Comparar lista hallazgos añadidos y resueltos
+entre base y head.
+
+Silencio: `rule_overrides: [{id: K8S-CP-001, severity: off, reason: "..."}]`
+en el YAML del clúster, device o `topology/index.yaml`. Sin `reason` el
+override se ignora (`RULE-OVR-001`).
+
+```bash
+python -m isot.validator              # exit ≠ 0 solo con errores
+python -m isot.validator --strict     # también falla por warnings
+python -m isot.validator --format json
+```
+
+En GitHub Actions el validador emite annotations para avisos e infos.
+
+![Campana de hallazgos](docs/images/findings-bell.png)
+
+*Header: campana con contadores por severidad.*
+
+![Panel lateral de hallazgos](docs/images/findings-panel.png)
+
+*Panel filtrable; clic en un hallazgo enfoca la entidad en el grafo.*
+
+![Badge de severidad en el grafo](docs/images/findings-graph-badge.png)
+
+*Clústeres Kubernetes con badge warning/info sobre el nodo y el grupo.*
+
+![Wizard bloqueado por un error de reglas](docs/images/wizard-blocked.png)
+
+*Vista previa del wizard: un error nuevo deshabilita Confirmar.*
+
 ## Capturas
 
 ### Topología de SITE1
@@ -288,7 +333,8 @@ API de solo lectura: `/api/sites`, `/api/sites/{id}/devices`,
 `/api/templates/{name}/values/{release}` (lazy),
 `/api/sites/{id}/clusters/{name}/values-diff`,
 `/api/refs`, `/api/commits?rev=<ref>`, y
-`/api/diff?base=<ref>&head=<ref>[&site=<id>]`.
+`/api/diff?base=<ref>&head=<ref>[&site=<id>]`,
+`/api/findings?site=&ref=`, `/api/findings?base=&head=`, `/api/rules`.
 Con edición: `GET /api/wizard/status`, `GET /api/wizard/cabling-defaults`,
 `POST /api/wizard/device/preview|commit`, `POST /api/wizard/site/preview|commit`.
 

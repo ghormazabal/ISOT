@@ -1,0 +1,16 @@
+# Tabla EOL de Kubernetes (aprox. 14 meses tras el release).
+# Actualizar al publicar una minor: añadir la fila y, si aplica, recortar las viejas.
+# Las fechas son el último día de soporte de esa minor.
+as_of_note: "Fuente: ciclo de 14 meses de Kubernetes. Fácil de editar."
+eol:
+  "1.28": "2024-10-28"
+  "1.29": "2025-02-28"
+  "1.30": "2025-06-28"
+  "1.31": "2025-10-28"
+  "1.32": "2026-02-28"
+  "1.33": "2026-06-28"
+  "1.34": "2026-10-28"
+  "1.35": "2027-02-28"
+  "1.36": "2027-06-28"
+  "1.37": "2027-10-28"
+  "1.38": "2028-02-28"

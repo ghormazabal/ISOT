@@ -21,7 +21,9 @@ import {
   type WizardDraft,
   type WizardMode,
 } from "../wizardDraft";
+import { wizardCanCommit } from "../findings";
 import { TopologyGraph } from "./TopologyGraph";
+import type { Finding } from "../types";
 
 type Props = {
   sites: SiteIndexEntry[];
@@ -212,6 +214,7 @@ function DeviceWizard({
   const [neighborhood, setNeighborhood] = useState(initial.neighborhood);
   const [tab, setTab] = useState<DockTab>(initial.tab);
   const [saveRules, setSaveRules] = useState(initial.saveRules);
+  const [acceptWarnings, setAcceptWarnings] = useState(false);
   const skipPreview = useRef(Boolean(initial.preview));
   const clusters = clustersBySite[site] ?? [];
 
@@ -239,8 +242,9 @@ function DeviceWizard({
       count,
       fields: edits,
       save_inferred_rules: saveRules,
+      accept_warnings: acceptWarnings,
     }),
-    [site, kind, cluster, role, count, edits, saveRules],
+    [site, kind, cluster, role, count, edits, saveRules, acceptWarnings],
   );
 
   const run = async (action: "preview" | "commit") => {
@@ -356,10 +360,21 @@ function DeviceWizard({
           <button type="button" onClick={() => void run("preview")} disabled={loading} id="wizard-device-preview">
             Vista previa
           </button>
-          <button type="button" className="primary" onClick={() => void run("commit")} disabled={loading || !preview}>
+          <button
+            type="button"
+            className="primary"
+            id="wizard-device-commit"
+            onClick={() => void run("commit")}
+            disabled={loading || !preview || !wizardCanCommit(preview, acceptWarnings).ok}
+          >
             Confirmar en rama wizard/…
           </button>
         </div>
+        <WizardFindingsBox
+          preview={preview}
+          acceptWarnings={acceptWarnings}
+          onAccept={setAcceptWarnings}
+        />
         {error ? <p className="boot-error">{error}</p> : null}
         <CommitBanner commit={commit} onOpenCompare={onOpenCompare} />
       </div>
@@ -440,6 +455,7 @@ function SiteWizard({
   const [neighborhood, setNeighborhood] = useState(initial.neighborhood);
   const [tab, setTab] = useState<DockTab>(initial.tab);
   const [graphView, setGraphView] = useState<"network" | "global">(initial.graphView);
+  const [acceptWarnings, setAcceptWarnings] = useState(false);
   const skipDefaults = useRef((initial.rules?.length ?? 0) > 0);
 
   const availableTemplates = useMemo(
@@ -564,6 +580,7 @@ function SiteWizard({
     dci,
     dci_peer: "site1",
     clusters: [{ name: clusterName, template_ref: templateRef, workers, role: "worker" }],
+    accept_warnings: acceptWarnings,
   };
 
   const run = async (action: "preview" | "commit") => {
@@ -904,12 +921,19 @@ function SiteWizard({
               <button type="button" onClick={() => void run("preview")} disabled={loading} id="wizard-site-preview">
                 Vista previa
               </button>
-              <button type="button" className="primary" onClick={() => void run("commit")} disabled={loading || !preview}>
+              <button
+                type="button"
+                className="primary"
+                id="wizard-site-commit"
+                onClick={() => void run("commit")}
+                disabled={loading || !preview || !wizardCanCommit(preview, acceptWarnings).ok}
+              >
                 Confirmar en rama wizard/…
               </button>
             </>
           )}
         </div>
+        <WizardFindingsBox preview={preview} acceptWarnings={acceptWarnings} onAccept={setAcceptWarnings} />
         {error ? <p className="boot-error">{error}</p> : null}
         <CommitBanner commit={commit} onOpenCompare={onOpenCompare} />
       </div>
@@ -989,6 +1013,7 @@ function PreviewStage({
           focusIds={focusIds}
           neighborhood={neighborhood}
           onNeighborhood={onNeighborhood}
+          findings={preview.findings?.added ?? preview.findings?.current ?? []}
         />
       </div>
       <aside className="wizard-dock">
@@ -1125,6 +1150,50 @@ function YamlDiff({ preview }: { preview: WizardPreview }) {
           <pre className="wizard-diff">{file.diff || file.content}</pre>
         </details>
       ))}
+    </div>
+  );
+}
+
+function WizardFindingsBox({
+  preview,
+  acceptWarnings,
+  onAccept,
+}: {
+  preview: WizardPreview | null;
+  acceptWarnings: boolean;
+  onAccept: (value: boolean) => void;
+}) {
+  const added = preview?.findings?.added ?? [];
+  if (!preview || !added.length) return null;
+  const errors = added.filter((item) => item.severity === "error");
+  const warnings = added.filter((item) => item.severity === "warning");
+  const infos = added.filter((item) => item.severity === "info");
+  return (
+    <div className="wizard-findings" id="wizard-findings">
+      {errors.length ? (
+        <p className="boot-error" id="wizard-findings-block">
+          {errors.length} error(es) de reglas bloquean Confirmar.
+        </p>
+      ) : null}
+      {warnings.length ? (
+        <label className="diff-filter">
+          <input
+            id="wizard-accept-warnings"
+            type="checkbox"
+            checked={acceptWarnings}
+            onChange={(event) => onAccept(event.target.checked)}
+          />{" "}
+          Acepto {warnings.length} aviso(s) nuevos
+        </label>
+      ) : null}
+      <ul className="findings-list compact">
+        {[...errors, ...warnings, ...infos].map((item: Finding, index) => (
+          <li key={`${item.id}:${item.entity_id}:${index}`}>
+            <span className={`sev-pill sev-${item.severity}`}>{item.severity}</span>{" "}
+            <strong>{item.id}</strong> {item.message}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

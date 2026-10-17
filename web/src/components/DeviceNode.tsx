@@ -7,6 +7,23 @@ function diffClass(status: GraphNode["diff_status"]): string {
   return status ? ` diff-${status}` : "";
 }
 
+function FindingBadge({
+  severity,
+  counts,
+}: {
+  severity: GraphNode["finding_severity"];
+  counts: GraphNode["finding_counts"];
+}) {
+  if (!severity) return null;
+  const n = (counts?.error || 0) + (counts?.warning || 0) + (counts?.info || 0);
+  return (
+    <span className={`finding-badge sev-${severity}`}>
+      {severity}
+      {n > 1 ? ` · ${n}` : ""}
+    </span>
+  );
+}
+
 function DiffBadge({ counts }: { counts: GraphNode["diff_counts"] }) {
   if (!counts) return null;
   const added = counts.added || 0;
@@ -24,12 +41,13 @@ function DiffBadge({ counts }: { counts: GraphNode["diff_counts"] }) {
 
 export function DeviceNode({ data, selected }: NodeProps<DeviceFlowNode>) {
   return (
-    <div className={`device-node kind-${data.kind ?? "otros"}${selected ? " is-selected" : ""}${diffClass(data.diff_status)}`}>
+    <div className={`device-node kind-${data.kind ?? "otros"}${selected ? " is-selected" : ""}${diffClass(data.diff_status)}${data.finding_severity ? ` sev-${data.finding_severity}` : ""}`}>
       <Handle type="target" position={Position.Left} />
       <strong>{data.hostname}</strong>
       <span className="muted">{data.role ?? "sin rol"}</span>
       <span className="mono">{data.ip ?? "sin-ip"}</span>
       {data.diff_status === "added" ? <span className="nuevo-badge">nuevo</span> : <DiffBadge counts={data.diff_counts} />}
+      <FindingBadge severity={data.finding_severity} counts={data.finding_counts} />
       <Handle type="source" position={Position.Right} />
     </div>
   );
@@ -42,12 +60,13 @@ type ReleaseFlowNode = Node<GraphNode, "releaseNode">;
 
 export function ClusterGraphNode({ data, selected }: NodeProps<ClusterFlowNode>) {
   return (
-    <div className={`device-node kind-cluster${selected ? " is-selected" : ""}${diffClass(data.diff_status)}`}>
+    <div className={`device-node kind-cluster${selected ? " is-selected" : ""}${diffClass(data.diff_status)}${data.finding_severity ? ` sev-${data.finding_severity}` : ""}`}>
       <Handle type="target" position={Position.Left} />
       <strong>{data.hostname}</strong>
       <span className="muted">clúster · {data.role ?? "—"}</span>
       <span className="mono">{data.ip ?? ""}</span>
       {data.diff_status === "added" ? <span className="nuevo-badge">nuevo</span> : <DiffBadge counts={data.diff_counts} />}
+      <FindingBadge severity={data.finding_severity} counts={data.finding_counts} />
       <Handle type="source" position={Position.Right} />
     </div>
   );
@@ -61,6 +80,7 @@ export function TemplateGraphNode({ data, selected }: NodeProps<TemplateFlowNode
       <span className="muted">template{data.site ? ` · ${data.site}` : ""}</span>
       <span className="mono">{data.ip ?? ""}</span>
       <DiffBadge counts={data.diff_counts} />
+      <FindingBadge severity={data.finding_severity} counts={data.finding_counts} />
       <Handle type="source" position={Position.Right} />
     </div>
   );
@@ -101,6 +121,7 @@ export function SiteGraphNode({ data, selected }: NodeProps<SiteFlowNode>) {
       <span className="muted">sitio</span>
       <span className="mono">{data.ip ?? ""}</span>
       {data.diff_status === "added" ? <span className="nuevo-badge">nuevo</span> : <DiffBadge counts={data.diff_counts} />}
+      <FindingBadge severity={data.finding_severity} counts={data.finding_counts} />
       <Handle type="source" position={Position.Right} />
     </div>
   );

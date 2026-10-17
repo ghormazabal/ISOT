@@ -386,7 +386,13 @@ def format_report(
     devices: list[Device],
     issues: list[str],
     warnings: list[str] | None = None,
+    findings: list | None = None,
 ) -> str:
+    from isot.rules.evaluate import evaluate, finding_counts
+
+    if findings is None:
+        findings = evaluate(repo_root)
+    counts = finding_counts(findings)
     warnings = warnings or []
     ip_count = sum(1 for d in devices for i in d.interfaces if i.ip_address)
     sites = sorted({device.site_id for device in devices})
@@ -397,40 +403,106 @@ def format_report(
         f"Sitios: {', '.join(sites) or '—'}",
         f"Dispositivos analizados: {len(devices)}",
         f"Interfaces con IP: {ip_count}",
+        f"Hallazgos: {counts['error']} error(es), {counts['warning']} aviso(s), {counts['info']} info",
         "",
     ]
-    body: list[str] = [f"[WARN] {item}" for item in warnings]
-    if issues:
-        body.extend(f"[ERROR] {issue}" for issue in issues)
+    grouped: dict[str, list[str]] = {"error": [], "warning": [], "info": []}
+    for finding in findings:
+        if finding.severity not in grouped:
+            continue
+        label = {"error": "ERROR", "warning": "WARN", "info": "INFO"}[finding.severity]
+        grouped[finding.severity].append(f"[{label}] {finding.id} {finding.entity_id}: {finding.message}")
+    body: list[str] = []
+    for key in ("error", "warning", "info"):
+        body.extend(grouped[key])
+    del issues, warnings
+    if counts["error"]:
         body.append("")
-        extra = f", {len(warnings)} aviso(s)" if warnings else ""
-        body.append(f"Resultado: FALLÓ ({len(issues)} error(es){extra})")
+        body.append(
+            f"Resultado: FALLÓ ({counts['error']} error(es), {counts['warning']} aviso(s), {counts['info']} info)"
+        )
         return "\n".join(header + body) + "\n"
-    if warnings:
+    extra = []
+    if counts["warning"]:
+        extra.append(f"{counts['warning']} aviso(s)")
+    if counts["info"]:
+        extra.append(f"{counts['info']} info")
+    if extra:
         body.append("")
-        body.append(f"Resultado: OK ({len(warnings)} aviso(s) de connection_rules)")
+        body.append(f"Resultado: OK ({', '.join(extra)})")
         return "\n".join(header + body) + "\n"
     header.append("Resultado: OK (sin colisiones de IP ni referencias rotas)")
     return "\n".join(header) + "\n"
 
 
-def validate(repo_root: Path) -> int:
+def findings_json(repo_root: Path) -> dict:
+    from isot.rules.evaluate import payload as findings_payload, evaluate
+
+    return findings_payload(evaluate(repo_root))
+
+
+def github_annotations(repo_root: Path) -> str:
+    from isot.rules.evaluate import evaluate
+
+    lines: list[str] = []
+    level = {"error": "error", "warning": "warning", "info": "notice"}
+    for finding in evaluate(repo_root):
+        kind = level.get(finding.severity)
+        if not kind:
+            continue
+        path = finding.path or "sites.yaml"
+        title = finding.id
+        message = finding.message.replace("%", "%25").replace("\n", "%0A")
+        lines.append(f"::{kind} file={path},title={title}::{message}")
+    return "\n".join(lines) + ("\n" if lines else "")
+
+
+def validate(repo_root: Path, *, strict: bool = False, fmt: str = "text") -> int:
+    from isot.rules.evaluate import evaluate, finding_counts
+
     devices = load_devices(repo_root)
-    issues = collect_issues(repo_root, devices)
-    warnings = collect_warnings(repo_root, devices)
-    sys.stdout.write(format_report(repo_root, devices, issues, warnings))
-    return FAIL_EXIT if issues else OK_EXIT
+    findings = evaluate(repo_root)
+    counts = finding_counts(findings)
+    if fmt == "json":
+        import json
+
+        sys.stdout.write(json.dumps(findings_json(repo_root), ensure_ascii=False, indent=2) + "\n")
+    else:
+        issues = [item.message for item in findings if item.severity == "error"]
+        warnings = [item.message for item in findings if item.severity == "warning"]
+        sys.stdout.write(format_report(repo_root, devices, issues, warnings, findings=findings))
+        import os
+
+        if os.environ.get("GITHUB_ACTIONS") and fmt != "json":
+            sys.stdout.write(github_annotations(repo_root))
+    if counts["error"]:
+        return FAIL_EXIT
+    if strict and counts["warning"]:
+        return FAIL_EXIT
+    return OK_EXIT
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Valida IPs únicas y referencias lógicas del inventario ISoT."
+        description="Valida IPs únicas, referencias lógicas y reglas de control de ISoT."
     )
     parser.add_argument(
         "--root",
         type=Path,
         default=None,
         help="Raíz del repositorio ISoT (por defecto: detección automática).",
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="También falla si hay warnings.",
+    )
+    parser.add_argument(
+        "--format",
+        dest="fmt",
+        choices=("text", "json"),
+        default="text",
+        help="Salida text (por defecto) o json.",
     )
     return parser
 
@@ -442,7 +514,7 @@ def main(argv: list[str] | None = None) -> int:
     except FileNotFoundError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return FAIL_EXIT
-    return validate(root)
+    return validate(root, strict=args.strict, fmt=args.fmt)
 
 
 if __name__ == "__main__":

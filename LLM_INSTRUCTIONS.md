@@ -163,3 +163,18 @@ subred del hermano (sin gateway ni VIPs MetalLB), siguiente PortChannel
 libre en el par de leafs. No inventes rangos. El usuario confirma campos
 `auto` (origen en tooltip). Tras el commit, abre Comparar base vs
 `wizard/…`.
+
+## 9. Reglas de control
+
+No silencies hallazgos sin `reason`. Catálogo: [docs/rules.md](docs/rules.md).
+EOL de Kubernetes: `isot/rules/k8s_eol.yaml`. Endpoints `GET /api/findings`
+y `GET /api/rules`. El validador (`python -m isot.validator`) agrupa
+hallazgos y solo sale ≠ 0 si hay **errores**; `--strict` también por
+warnings; `--format json`. En CI, los warnings salen como annotations.
+
+Overrides: `rule_overrides: [{id, severity, reason}]` en clúster, device o
+`topology/index.yaml`. Sin reason se ignora (`RULE-OVR-001`).
+
+La vista previa del wizard evalúa el estado propuesto. Errores **nuevos**
+bloquean Confirmar; warnings nuevos exigen checkbox `accept_warnings`.
+Comparar distingue hallazgos añadidos y resueltos entre refs.

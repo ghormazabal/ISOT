@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "isot"
-version = "0.7.0"
+version = "0.8.0"
 description = "ISoT: Infrastructure Source of Truth (Git-as-a-Database)"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -31,7 +31,7 @@ isot-leakcheck = "isot.leakcheck:main"
 include = ["isot*"]
 
 [tool.setuptools.package-data]
-isot = ["forbidden_patterns.json"]
+isot = ["forbidden_patterns.json", "rules/k8s_eol.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

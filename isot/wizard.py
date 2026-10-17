@@ -54,7 +54,6 @@ from isot.cabling import (
 from isot.gitdiff import diff_from_snapshots, git, snapshot_inventory
 from isot.indexer import write_indexes
 from isot.inventory import load_catalog, load_clusters, load_devices, load_templates, load_topology, load_yaml, site_by_id
-from isot.validator import collect_issues
 
 PROTECTED_BRANCHES = {"main", "master", "HEAD"}
 KIND_DIRS = {"baremetal": "baremetal", "vm": "virtual-machines", "network": "network"}
@@ -687,6 +686,9 @@ def attach_preview_graph(repo: Path, preview: dict[str, Any], site: str | None) 
             preview["focus_ids"] = [f"site:{site}"]
         else:
             preview["focus_ids"] = []
+        from isot.rules.evaluate import evaluate_overlay
+
+        preview["findings"] = evaluate_overlay(repo, files, site=site)
     return preview
 
 
@@ -1180,13 +1182,17 @@ def commit_preview(repo: Path, preview: dict[str, Any], description: str) -> dic
     try:
         apply_files(repo, files)
         write_indexes(repo)
-        issues = collect_issues(repo)
-        if issues:
+        from isot.rules.evaluate import evaluate
+
+        errors = [item for item in evaluate(repo) if item.severity == "error"]
+        if errors:
             git(repo, ["reset", "--hard", "HEAD"])
             git(repo, ["clean", "-fd"])
             git(repo, ["checkout", branch_now])
             git(repo, ["branch", "-D", new_branch])
-            raise WizardError("validador: " + "; ".join(issues[:8]))
+            raise WizardError(
+                "validador: " + "; ".join(f"{item.id} {item.message}" for item in errors[:8])
+            )
         git(repo, ["add", "-A"])
         message = f"wizard: {description}"
         env_args = [

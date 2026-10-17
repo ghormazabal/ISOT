@@ -46,6 +46,19 @@ SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 
 
+def _guard_wizard_findings(preview: dict[str, Any], body: dict[str, Any]) -> None:
+    findings = preview.get("findings") or {}
+    added = findings.get("added") or []
+    errors = [item for item in added if item.get("severity") == "error"]
+    if errors:
+        raise WizardError(
+            "reglas: " + "; ".join(f"{item.get('id')} {item.get('message')}" for item in errors[:6])
+        )
+    warnings = [item for item in added if item.get("severity") == "warning"]
+    if warnings and not body.get("accept_warnings"):
+        raise WizardError("hay avisos nuevos: marca el checkbox para confirmar")
+
+
 def _json_file(path: Path) -> Any:
     import json
 
@@ -411,6 +424,48 @@ def create_app(repo_root: Path | None = None, edit: bool | None = None) -> FastA
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/api/rules")
+    def list_rules() -> list[dict[str, str]]:
+        from isot.rules.evaluate import catalog
+
+        return catalog()
+
+    @app.get("/api/findings")
+    def list_findings(
+        site: str | None = Query(default=None),
+        ref: str | None = Query(default=None),
+        base: str | None = Query(default=None),
+        head: str | None = Query(default=None),
+    ) -> dict[str, Any]:
+        from isot.rules.evaluate import (
+            diff_findings,
+            evaluate,
+            evaluate_ref,
+            payload as findings_payload,
+        )
+
+        site_id = site.strip() if site else None
+        if site_id == "all":
+            site_id = None
+        try:
+            if base and head:
+                base_findings = evaluate_ref(resolved_root(), base, site=site_id)
+                head_findings = evaluate_ref(resolved_root(), head, site=site_id)
+                added, resolved = diff_findings(base_findings, head_findings)
+                return {
+                    "base": findings_payload(base_findings),
+                    "head": findings_payload(head_findings),
+                    "added": [item.to_dict() for item in added],
+                    "resolved": [item.to_dict() for item in resolved],
+                }
+            if ref:
+                findings = evaluate_ref(resolved_root(), ref, site=site_id)
+            else:
+                findings = evaluate(resolved_root(), site=site_id)
+            return findings_payload(findings)
+        except RefError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.get("/api/wizard/status")
     def wizard_status() -> dict[str, Any]:
         return {"edit": can_edit}
@@ -463,6 +518,7 @@ def create_app(repo_root: Path | None = None, edit: bool | None = None) -> FastA
         require_edit()
         try:
             preview = site_preview(resolved_root(), body)
+            _guard_wizard_findings(preview, body)
             description = str(body.get("description") or body.get("id") or "nuevo-sitio")
             result = commit_preview(resolved_root(), preview, f"sitio {description}")
             clear_caches()
@@ -483,6 +539,7 @@ def create_app(repo_root: Path | None = None, edit: bool | None = None) -> FastA
         require_edit()
         try:
             preview = device_preview(resolved_root(), body)
+            _guard_wizard_findings(preview, body)
             hostnames = ",".join(preview.get("hostnames") or []) or "device"
             result = commit_preview(resolved_root(), preview, f"device {hostnames}")
             clear_caches()

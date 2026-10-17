@@ -124,16 +124,28 @@ export function buildFlow(graph: GraphPayload, groupBy: GroupBy): { nodes: Node[
               ? "Releases Helm"
               : `clúster ${key}`
           : groupLabel(key, groupBy);
+    const rank: Record<string, number> = { error: 3, warning: 2, info: 1 };
+    let groupSev: string | undefined;
+    let best = 0;
+    for (const member of members) {
+      const sev = member.finding_severity;
+      const value = sev ? rank[sev] || 0 : 0;
+      if (value > best) {
+        best = value;
+        groupSev = sev;
+      }
+    }
+    const border = groupSev === "error" ? "#d46a6a" : groupSev === "warning" ? "#d4a017" : groupSev === "info" ? "#5b9fd4" : "#2c3640";
     nodes.push({
       id: `group:${key}`,
       type: "clusterGroup",
       position: { x: 24 + col * (COL_WIDTH + 40), y: 16 },
-      data: { label },
+      data: { label, finding_severity: groupSev },
       style: {
         width: COL_WIDTH,
         height,
         background: "rgba(255,255,255,0.03)",
-        border: "1px solid #2c3640",
+        border: `1px solid ${border}`,
         borderRadius: 8,
         pointerEvents: "none",
       },

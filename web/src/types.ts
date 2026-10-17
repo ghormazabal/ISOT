@@ -93,6 +93,8 @@ export type GraphNode = {
   diff_status?: DiffStatus;
   diff_counts?: { added: number; removed: number; modified: number };
   leaf_pair?: string | null;
+  finding_severity?: "error" | "warning" | "info";
+  finding_counts?: { error: number; warning: number; info: number };
 };
 
 export type GraphEdge = {
@@ -349,6 +351,49 @@ export type WizardPreview = {
   connection_rules?: ConnectionPolicy;
   rules_source?: "declared" | "inferred" | null;
   inferred_rules?: ConnectionPolicy | null;
+  findings?: WizardFindings;
+};
+
+export type Finding = {
+  id: string;
+  severity: "error" | "warning" | "info" | "off";
+  default_severity?: string;
+  entity_kind: string;
+  entity_id: string;
+  site: string | null;
+  cluster: string | null;
+  message: string;
+  recommendation: string;
+  path: string | null;
+  graph_id: string | null;
+  silenced?: boolean;
+  override_reason?: string | null;
+};
+
+export type FindingsPayload = {
+  counts: { error: number; warning: number; info: number; total: number };
+  findings: Finding[];
+  rules?: Array<{
+    id: string;
+    severity: string;
+    description: string;
+    entity: string;
+    recommendation: string;
+  }>;
+};
+
+export type FindingsDiffPayload = {
+  base: FindingsPayload;
+  head: FindingsPayload;
+  added: Finding[];
+  resolved: Finding[];
+};
+
+export type WizardFindings = {
+  added: Finding[];
+  resolved: Finding[];
+  current: Finding[];
+  blocked: boolean;
 };
 
 export type WizardCommit = {
