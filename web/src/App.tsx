@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { CompareSidebar } from "./components/CompareSidebar";
 import { CompareValues } from "./components/CompareValues";
 import { DetailPanel } from "./components/DetailPanel";
 import { FindingsBell, FindingsPanel } from "./components/FindingsPanel";
 import { RefPicker, effectiveRef } from "./components/RefPicker";
+import { Splitter, useMediaQuery, usePanelSize, useViewport } from "./components/Splitter";
 import { Sidebar } from "./components/Sidebar";
 import { TemplateExplorer } from "./components/TemplateExplorer";
 import { TopologyGraph } from "./components/TopologyGraph";
@@ -12,6 +13,7 @@ import { ValuesDiffView } from "./components/ValuesDiff";
 import { WizardsView } from "./components/WizardsView";
 import { api } from "./api";
 import { countFindings, scopeFindings, selectionFromFinding } from "./findings";
+import { appPanelSpecs, clampSize, layoutKey } from "./resize";
 import {
   applyEditToggle,
   defaultBrowse,
@@ -499,9 +501,46 @@ export default function App() {
     setCanvas("graph");
   };
 
+  const narrow = useMediaQuery("(max-width: 1100px)");
+  const viewport = useViewport();
+  const topbarRef = useRef<HTMLElement | null>(null);
+  const [topbarHeight, setTopbarHeight] = useState(56);
+  useEffect(() => {
+    const node = topbarRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setTopbarHeight(Math.round(node.getBoundingClientRect().height)));
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  const panelKey = (panel: string) => layoutKey(view, compare, narrow ? `narrow.${panel}` : panel);
+  const sidebarStore = usePanelSize(panelKey("sidebar"), appPanelSpecs(viewport, narrow).sidebar);
+  const detailStore = usePanelSize(panelKey("detail"), appPanelSpecs(viewport, narrow).detail);
+  const specs = appPanelSpecs(viewport, narrow, { sidebar: sidebarStore.size, detail: detailStore.size, topbar: topbarHeight });
+  const sidebar = { ...sidebarStore, size: clampSize(sidebarStore.size, specs.sidebar) };
+  const detail = { ...detailStore, size: clampSize(detailStore.size, specs.detail) };
+  const mainHeight = usePanelSize(panelKey("main-height"), specs.mainHeight);
+  const findingsWidth = usePanelSize(panelKey("findings"), specs.findings);
+  const appStyle = {
+    "--sidebar-w": `${sidebar.size}px`,
+    "--detail-w": `${detail.size}px`,
+    "--main-h": `${mainHeight.size}px`,
+    "--findings-w": `${findingsWidth.size}px`,
+    "--topbar-h": `${topbarHeight}px`,
+  } as CSSProperties;
+
   return (
-    <div className={view === "wizards" ? "app app-wizards" : "app"}>
-      <header className="topbar">
+    <div
+      className={[
+        "app",
+        view === "wizards" ? "app-wizards" : "",
+        sidebar.size === 0 ? "sidebar-collapsed" : "",
+        !narrow && detail.size === 0 ? "detail-collapsed" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      style={appStyle}
+    >
+      <header className="topbar" ref={topbarRef}>
         <div>
           <p className="brand">ISoT</p>
           <p className="tagline">
@@ -764,7 +803,57 @@ export default function App() {
         diffEntity={compare ? diffEntity : null}
         onSelectDiffEntity={onSelectDiffChild}
       />
+      <Splitter
+        id="split-sidebar"
+        className="app-split app-split-sidebar"
+        orientation="vertical"
+        label="Ancho del menú lateral"
+        size={sidebar.size}
+        spec={specs.sidebar}
+        sign={1}
+        onSize={sidebar.setSize}
+        onReset={sidebar.reset}
+      />
+      {narrow ? (
+        <Splitter
+          id="split-detail"
+          className="app-split app-split-main-height"
+          orientation="horizontal"
+          label="Alto del grafo (resto: detalle)"
+          size={mainHeight.size}
+          spec={specs.mainHeight}
+          sign={1}
+          onSize={mainHeight.setSize}
+          onReset={mainHeight.reset}
+        />
+      ) : (
+        <Splitter
+          id="split-detail"
+          className="app-split app-split-detail"
+          orientation="vertical"
+          label="Ancho del panel de detalle"
+          size={detail.size}
+          spec={specs.detail}
+          sign={-1}
+          onSize={detail.setSize}
+          onReset={detail.reset}
+        />
+      )}
         </>
+      ) : null}
+      {findingsOpen ? (
+        <Splitter
+          id="split-findings"
+          className="app-split app-split-findings"
+          orientation="vertical"
+          label="Ancho del panel de hallazgos"
+          size={findingsWidth.size}
+          spec={specs.findings}
+          sign={-1}
+          onSize={findingsWidth.setSize}
+          onReset={findingsWidth.reset}
+          controls="findings-panel"
+        />
       ) : null}
       <FindingsPanel
         payload={scopedFindings}

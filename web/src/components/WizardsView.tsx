@@ -16,6 +16,8 @@ import type {
 import {
   DEFAULT_DOCK_WIDTH,
   clampDockWidth,
+  MIN_DOCK_WIDTH,
+  MIN_GRAPH_WIDTH,
   emptyWizardDraft,
   isDraftInProgress,
   type DeviceDraftState,
@@ -24,7 +26,9 @@ import {
   type WizardMode,
 } from "../wizardDraft";
 import { wizardCanCommit, wizardStatus } from "../findings";
+import { Splitter } from "./Splitter";
 import { TopologyGraph } from "./TopologyGraph";
+import type { PanelSpec } from "../resize";
 import type { Finding, FixContext } from "../types";
 
 type Props = {
@@ -1030,16 +1034,18 @@ function PreviewStage({
 }) {
   const [groupBy, setGroupBy] = useState<GroupBy>(defaultGroupBy);
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const dragging = useRef(false);
-  const resize = (clientX: number) => {
-    const rect = stageRef.current?.getBoundingClientRect();
-    if (!rect || !onDockWidth) return;
-    onDockWidth(clampDockWidth(rect.right - clientX, rect.width));
-  };
-  const nudge = (delta: number) => {
-    const rect = stageRef.current?.getBoundingClientRect();
-    if (!rect || !onDockWidth) return;
-    onDockWidth(clampDockWidth(dockWidth + delta, rect.width));
+  const [stageWidth, setStageWidth] = useState(0);
+  useEffect(() => {
+    const node = stageRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setStageWidth(node.getBoundingClientRect().width));
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  const dockSpec: PanelSpec = {
+    defaultSize: DEFAULT_DOCK_WIDTH,
+    min: MIN_DOCK_WIDTH,
+    max: stageWidth ? Math.max(MIN_DOCK_WIDTH, stageWidth - MIN_GRAPH_WIDTH) : 2000,
   };
   const graph = graphView === "global" ? preview.graphs?.global ?? null : preview.graphs?.network ?? null;
   const siteFilter = graphView === "global" ? "all" : (preview.site ?? "all");
@@ -1050,7 +1056,7 @@ function PreviewStage({
       ref={stageRef}
       className={`wizard-stage${graphHidden ? " graph-hidden" : ""}`}
       id="wizard-graph"
-      style={graphHidden ? undefined : { gridTemplateColumns: `minmax(0, 1fr) 8px min(${dockWidth}px, 70%)` }}
+      style={graphHidden ? undefined : { gridTemplateColumns: `minmax(0, 1fr) 10px min(${dockWidth}px, 70%)` }}
     >
       {graphHidden ? null : (
       <div className="wizard-graph-wrap">
@@ -1088,29 +1094,15 @@ function PreviewStage({
       </div>
       )}
       {graphHidden ? null : (
-        <div
-          className="wizard-divider"
+        <Splitter
           id="wizard-divider"
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Ancho del panel Campos / YAML"
-          tabIndex={0}
-          title="Arrastra para cambiar el ancho (o usa ← →)"
-          onPointerDown={(event) => {
-            dragging.current = true;
-            event.currentTarget.setPointerCapture(event.pointerId);
-          }}
-          onPointerMove={(event) => {
-            if (dragging.current) resize(event.clientX);
-          }}
-          onPointerUp={(event) => {
-            dragging.current = false;
-            event.currentTarget.releasePointerCapture(event.pointerId);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "ArrowLeft") nudge(24);
-            if (event.key === "ArrowRight") nudge(-24);
-          }}
+          className="wizard-divider"
+          orientation="vertical"
+          label="Ancho del panel Campos / YAML"
+          size={stageWidth ? clampDockWidth(dockWidth, stageWidth) : dockWidth}
+          spec={dockSpec}
+          sign={-1}
+          onSize={(value) => onDockWidth?.(stageWidth ? clampDockWidth(value, stageWidth) : value)}
         />
       )}
       <aside className="wizard-dock">

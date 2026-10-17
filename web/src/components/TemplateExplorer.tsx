@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   Background,
   Controls,
@@ -12,6 +12,9 @@ import "@xyflow/react/dist/style.css";
 import { api } from "../api";
 import type { ChartMeta, ChartValues, TemplateDetail } from "../types";
 import { ValuesTree, valuesToTree } from "./ValuesTree";
+import { RefitOnResize } from "./RefitOnResize";
+import { Splitter, usePanelSize } from "./Splitter";
+import { clampSize, explorerPanelSpecs } from "../resize";
 
 type Props = {
   template: TemplateDetail;
@@ -121,12 +124,33 @@ export function TemplateExplorer({ template, onOpenCluster }: Props) {
     }
   };
 
+  const paneRef = useRef<HTMLElement | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const [paneSize, setPaneSize] = useState({ width: 900, height: 700 });
+  useEffect(() => {
+    const node = paneRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      const rect = node.getBoundingClientRect();
+      setPaneSize({ width: Math.round(rect.width), height: Math.round(rect.height) });
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  const specs = explorerPanelSpecs(paneSize);
+  const graphHeight = usePanelSize("explorer.graph", specs.graph);
+  const treeWidth = usePanelSize("explorer.tree", specs.tree);
+  const paneStyle = {
+    "--explorer-graph-h": `${clampSize(graphHeight.size, specs.graph)}px`,
+    "--explorer-tree-w": `${clampSize(treeWidth.size, specs.tree)}px`,
+  } as CSSProperties;
+
   const active = charts.find((item) => item.name === activeChart) ?? null;
   const activeValues = activeChart ? values[activeChart] : undefined;
   const valueNodes = activeValues ? valuesToTree(activeValues.values) : [];
 
   return (
-    <section className="explorer-pane">
+    <section className="explorer-pane" ref={paneRef} style={paneStyle}>
       <header className="graph-toolbar">
         <div>
           <h2>Explorador del template</h2>
@@ -152,6 +176,7 @@ export function TemplateExplorer({ template, onOpenCluster }: Props) {
           edges={graph.edges}
           onNodeClick={onNodeClick}
           fitView
+          minZoom={0.1}
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable
@@ -159,9 +184,20 @@ export function TemplateExplorer({ template, onOpenCluster }: Props) {
         >
           <Background gap={18} color="#24303a" />
           <Controls showInteractive={false} />
+          <RefitOnResize />
         </ReactFlow>
       </div>
-      <div className="explorer-body">
+      <Splitter
+        id="split-explorer-graph"
+        orientation="horizontal"
+        label="Alto del grafo del template"
+        size={clampSize(graphHeight.size, specs.graph)}
+        spec={specs.graph}
+        sign={1}
+        onSize={graphHeight.setSize}
+        onReset={graphHeight.reset}
+      />
+      <div className="explorer-body" ref={bodyRef}>
         <div className="explorer-tree-pane">
           <ul className="explorer-tree">
             <li>
@@ -247,6 +283,16 @@ export function TemplateExplorer({ template, onOpenCluster }: Props) {
             <p className="muted">Ningún clúster referencia este template.</p>
           )}
         </div>
+        <Splitter
+          id="split-explorer-tree"
+          orientation="vertical"
+          label="Ancho de la lista del template"
+          size={clampSize(treeWidth.size, specs.tree)}
+          spec={specs.tree}
+          sign={1}
+          onSize={treeWidth.setSize}
+          onReset={treeWidth.reset}
+        />
         <div className="explorer-values">
           {active ? (
             <>

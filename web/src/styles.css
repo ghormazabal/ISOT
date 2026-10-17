@@ -36,9 +36,196 @@ select {
 
 .app {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 380px;
-  grid-template-rows: auto 1fr;
+  grid-template-columns: var(--sidebar-w, 280px) minmax(0, 1fr) var(--detail-w, 380px);
+  grid-template-rows: auto minmax(0, 1fr);
   height: 100%;
+}
+
+/* Ubicación explícita: los divisores se superponen al borde sin mover columnas. */
+.app > .sidebar {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+}
+
+.app > .graph-pane,
+.app > .explorer-pane {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.app > .detail {
+  grid-column: 3;
+  grid-row: 2;
+  min-width: 0;
+}
+
+.app.sidebar-collapsed > .sidebar,
+.app.detail-collapsed > .detail {
+  display: none;
+}
+
+/* ---- Divisores redimensionables (componente Splitter) ---- */
+
+.splitter {
+  position: relative;
+  flex: none;
+  background: transparent;
+  touch-action: none;
+  outline: none;
+  z-index: 12;
+}
+
+.splitter-vertical {
+  width: 10px;
+  cursor: col-resize;
+  align-self: stretch;
+}
+
+.splitter-horizontal {
+  height: 10px;
+  cursor: row-resize;
+  justify-self: stretch;
+}
+
+.splitter::before {
+  content: "";
+  position: absolute;
+  background: var(--line);
+  transition: background 0.12s ease;
+}
+
+.splitter-vertical::before {
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 0.5px);
+  width: 1px;
+}
+
+.splitter-horizontal::before {
+  left: 0;
+  right: 0;
+  top: calc(50% - 0.5px);
+  height: 1px;
+}
+
+.splitter:hover::before,
+.splitter:focus-visible::before,
+.splitter.is-dragging::before {
+  background: var(--accent);
+}
+
+.splitter-vertical:hover::before,
+.splitter-vertical:focus-visible::before,
+.splitter-vertical.is-dragging::before {
+  left: calc(50% - 1.5px);
+  width: 3px;
+}
+
+.splitter-horizontal:hover::before,
+.splitter-horizontal:focus-visible::before,
+.splitter-horizontal.is-dragging::before {
+  top: calc(50% - 1.5px);
+  height: 3px;
+}
+
+.splitter-grip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background-color: var(--panel-2);
+  background-image: radial-gradient(circle, var(--muted) 0.9px, transparent 1.4px);
+  pointer-events: none;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.splitter-vertical .splitter-grip {
+  width: 8px;
+  height: 30px;
+  background-size: 6px 6px;
+  background-position: center 1px;
+}
+
+.splitter-horizontal .splitter-grip {
+  width: 30px;
+  height: 8px;
+  background-size: 6px 6px;
+  background-position: 1px center;
+}
+
+.splitter:hover .splitter-grip,
+.splitter:focus-visible .splitter-grip,
+.splitter.is-dragging .splitter-grip {
+  border-color: var(--accent);
+  background-color: #1d3a32;
+  background-image: radial-gradient(circle, var(--accent) 0.9px, transparent 1.4px);
+}
+
+.splitter:focus-visible .splitter-grip {
+  box-shadow: 0 0 0 2px rgba(111, 191, 168, 0.35);
+}
+
+body.is-resizing {
+  user-select: none;
+}
+
+body.resizing-col,
+body.resizing-col * {
+  cursor: col-resize !important;
+}
+
+body.resizing-row,
+body.resizing-row * {
+  cursor: row-resize !important;
+}
+
+/* Divisores de la app: van sobre el borde (el borde del panel ya dibuja la línea). */
+.app-split::before {
+  background: transparent;
+}
+
+.app-split-sidebar {
+  grid-row: 2;
+  grid-column: 2;
+  justify-self: start;
+  margin-left: -5px;
+}
+
+.app.sidebar-collapsed .app-split-sidebar {
+  margin-left: 0;
+}
+
+.app-split-detail {
+  grid-row: 2;
+  grid-column: 3;
+  justify-self: start;
+  margin-left: -5px;
+}
+
+.app.detail-collapsed .app-split-detail {
+  margin-left: -10px;
+}
+
+.app-split.is-collapsed::before {
+  background: var(--line);
+}
+
+.app-split-main-height {
+  grid-row: 3;
+  grid-column: 1 / -1;
+  align-self: start;
+  margin-top: -5px;
+}
+
+.app-split-findings {
+  position: fixed;
+  top: var(--topbar-h, 56px);
+  right: calc(min(var(--findings-w, 420px), 100vw) - 5px);
+  height: calc(100vh - var(--topbar-h, 56px));
+  z-index: 21;
 }
 
 .topbar {
@@ -585,15 +772,17 @@ td {
 }
 
 .explorer-graph {
-  height: 280px;
-  border-bottom: 1px solid var(--line);
+  height: var(--explorer-graph-h, 280px);
+  flex: none;
+  min-height: 0;
 }
 
 .explorer-body {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  grid-template-columns: var(--explorer-tree-w, 300px) 10px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .explorer-tree-pane,
@@ -604,7 +793,11 @@ td {
 }
 
 .explorer-tree-pane {
-  border-right: 1px solid var(--line);
+  min-width: 0;
+}
+
+.explorer-values {
+  min-width: 0;
 }
 
 .explorer-tree,
@@ -791,8 +984,13 @@ td {
 
 .compare-side {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  grid-template-columns: minmax(0, var(--side-split, 50%)) 10px minmax(0, 1fr);
+  column-gap: 6px;
+}
+
+.compare-side > div {
+  min-width: 0;
+  overflow: auto;
 }
 
 .diff-mark {
@@ -892,17 +1090,9 @@ td {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.wizard-divider {
-  cursor: col-resize;
-  background: var(--line);
+.wizard-stage > .splitter-vertical {
+  width: auto;
   min-height: 0;
-  touch-action: none;
-}
-
-.wizard-divider:hover,
-.wizard-divider:focus-visible {
-  background: var(--accent);
-  outline: none;
 }
 
 .wizard-graph-wrap {
@@ -1326,10 +1516,10 @@ td {
 
 .findings-drawer {
   position: fixed;
-  top: 56px;
+  top: var(--topbar-h, 56px);
   right: 0;
-  width: min(420px, 100vw);
-  height: calc(100vh - 56px);
+  width: min(var(--findings-w, 420px), 100vw);
+  height: calc(100vh - var(--topbar-h, 56px));
   background: var(--panel);
   border-left: 1px solid var(--line);
   z-index: 20;
@@ -1401,9 +1591,13 @@ td {
 
 @media (max-width: 1100px) {
   .app {
-    grid-template-columns: 240px 1fr;
+    grid-template-columns: var(--sidebar-w, 240px) minmax(0, 1fr);
     /* La barra superior puede envolver en dos líneas: alto automático. */
-    grid-template-rows: auto 42vh minmax(0, 1fr);
+    grid-template-rows: auto var(--main-h, 42vh) minmax(0, 1fr);
+  }
+  .app > .detail {
+    grid-column: 1 / -1;
+    grid-row: 3;
   }
   .app.app-wizards {
     grid-template-columns: minmax(0, 1fr);

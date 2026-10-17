@@ -11,6 +11,7 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { ClusterGroup } from "./ClusterGroup";
+import { RefitOnResize } from "./RefitOnResize";
 import {
   ClusterGraphNode,
   DeviceNode,
@@ -192,6 +193,7 @@ export function TopologyGraph({
           <Background color="#2c3640" gap={18} />
           <Controls showInteractive={false} />
           <FitFocus ids={neighborhood && visibleGraph ? visibleGraph.nodes.map((node) => node.id) : (focusIds ?? [])} />
+          <RefitOnResize ids={neighborhood && visibleGraph ? visibleGraph.nodes.map((node) => node.id) : (focusIds ?? [])} />
         </ReactFlow>
       </div>
     </section>

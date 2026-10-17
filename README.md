@@ -174,6 +174,23 @@ o round-robin. El generador y **Agregar device** las respetan. En sitios
 viejos sin el bloque se infieren de los hermanos y se pueden guardar. El
 validador avisa (`[WARN]`, no error) si un device las viola.
 
+### Paneles redimensionables
+
+Todos los límites entre paneles se arrastran con el mouse: menú lateral,
+detalle, hallazgos, Campos/YAML del wizard, alto del grafo del explorador
+(y del grafo frente al detalle en pantallas angostas), lista ↔ chart del
+explorador y Base ↔ Head en «lado a lado». El divisor se resalta al pasar
+el mouse (cursor ↔ / ↕, grip con puntos). Con foco: flechas (Shift = paso
+largo), Home/End y Enter (colapsa/expande menú y detalle). Doble clic
+restablece el tamaño por defecto; arrastrar el menú o el detalle bajo la
+mitad de su mínimo los colapsa. Los tamaños se guardan por vista en
+`localStorage` (`isot.layout.v1`) y los grafos se reencuadran al soltar.
+
+![Paneles redimensionables en el explorador](docs/images/resizable-panels.png)
+
+*Explorador de un template a 1280×800: divisor grafo/lista en pleno arrastre
+(resaltado) y grips en el menú, la lista y el panel de hallazgos.*
+
 ### Layout del wizard
 
 La página del wizard ocupa el viewport y scrollea entera si es corto. El

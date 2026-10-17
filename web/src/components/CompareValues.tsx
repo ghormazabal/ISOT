@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import type { DiffChange, DiffEntity, SemanticDiff } from "../types";
 import { formatValue, ValuesTree, valuesToTree } from "./ValuesTree";
+import { Splitter, usePanelSize } from "./Splitter";
+import { COMPARE_SIDE_SPEC } from "../resize";
 
 type Props = {
   diff: SemanticDiff;
@@ -17,6 +19,7 @@ const KIND_LABEL: Record<DiffChange["status"], string> = {
 export function CompareValues({ diff, onSelectEntity }: Props) {
   const [query, setQuery] = useState("");
   const [onlyChanged, setOnlyChanged] = useState(true);
+  const split = usePanelSize("compare.side-split", COMPARE_SIDE_SPEC);
   const [sideBySide, setSideBySide] = useState(false);
   const needle = query.trim().toLowerCase();
 
@@ -86,16 +89,23 @@ export function CompareValues({ diff, onSelectEntity }: Props) {
               <span className="muted">{entity.site || "global"}</span>
             </button>
             {sideBySide ? (
-              <div className="compare-side">
-                <div>
-                  <h3>Base</h3>
-                  <ValuesTree nodes={valuesToTree(entity.before)} query={query} emptyLabel="—" defaultOpen />
-                </div>
-                <div>
-                  <h3>Head</h3>
-                  <ValuesTree nodes={valuesToTree(entity.after)} query={query} emptyLabel="—" defaultOpen />
-                </div>
-              </div>
+              <SideBySide
+                split={split.size}
+                onSplit={split.setSize}
+                onReset={split.reset}
+                left={
+                  <>
+                    <h3>Base</h3>
+                    <ValuesTree nodes={valuesToTree(entity.before)} query={query} emptyLabel="—" defaultOpen />
+                  </>
+                }
+                right={
+                  <>
+                    <h3>Head</h3>
+                    <ValuesTree nodes={valuesToTree(entity.after)} query={query} emptyLabel="—" defaultOpen />
+                  </>
+                }
+              />
             ) : (
               <div className="table-wrap">
                 <table className="diff-table">
@@ -132,4 +142,38 @@ function statusTag(status: DiffEntity["status"]): string {
   if (status === "removed") return "missing";
   if (status === "modified") return "overridden";
   return "inherited";
+}
+
+/** Base y Head lado a lado con divisor; la proporción (%) es la misma para todos los bloques. */
+function SideBySide({
+  split,
+  onSplit,
+  onReset,
+  left,
+  right,
+}: {
+  split: number;
+  onSplit: (value: number) => void;
+  onReset: () => void;
+  left: ReactNode;
+  right: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  return (
+    <div className="compare-side" ref={ref} style={{ "--side-split": `${split}%` } as CSSProperties}>
+      <div>{left}</div>
+      <Splitter
+        className="compare-side-split"
+        orientation="vertical"
+        label="Proporción Base / Head"
+        size={split}
+        spec={COMPARE_SIDE_SPEC}
+        sign={1}
+        onSize={onSplit}
+        onReset={onReset}
+        containerRef={ref}
+      />
+      <div>{right}</div>
+    </div>
+  );
 }

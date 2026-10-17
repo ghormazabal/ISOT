@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node --experimental-strip-types --test src/wizardDraft.test.ts src/findings.test.ts src/remediation.test.ts src/wizardLayout.test.ts"
+    "test": "node --experimental-strip-types --test src/wizardDraft.test.ts src/findings.test.ts src/remediation.test.ts src/wizardLayout.test.ts src/resize.test.ts"
   },
   "dependencies": {
     "@xyflow/react": "^12.6.0",
