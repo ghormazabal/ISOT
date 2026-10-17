@@ -56,7 +56,10 @@ deshabilitados.
 2. Es de solo lectura: escribe un id (p. ej. `netplan-mi-sitio`) y pulsa
    **Clonar al repo de datos**. Se abre una copia en el editor como borrador.
 3. Elige **sitio** y **clúster** en la columna de preview. La salida se
-   recalcula sola a medida que escribes.
+   recalcula sola a medida que escribes. Arriba aparece la lista de archivos
+   generados (ruta relativa; con muchos archivos `per_item`, con filtro y
+   scroll) y debajo el contenido del elegido, a todo el ancho, con
+   **ajustar líneas** y **Copiar**. Las listas de la pestaña Diff funcionan igual.
 4. Edita los `.j2`. Si te equivocas, verás el error con archivo y línea; al
    pulsarlo, el editor salta a esa línea (marcada en rojo en el margen).
 5. Pulsa **Guardar…**: ves el diff de lo que se va a escribir en

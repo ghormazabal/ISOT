@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { refLabel, type CompareRefs } from "../compare";
 import type { CompareFileEntry, CompareFilePayload, CompareFilesPayload } from "../types";
-import { FileTree, SideBySideDiff, StatusBadge, UnifiedDiff } from "./renders/common";
+import { CopyButton, FileList, SideBySideDiff, StatusBadge, UnifiedDiff, useWrap } from "./renders/common";
 
 type Props = {
   refs: CompareRefs;
@@ -23,6 +23,7 @@ export function FilesCompare({ refs, prefix, focusPath, title = "Archivos", clas
   const [file, setFile] = useState<CompareFilePayload | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [mode, setMode] = useState<"unified" | "split">("unified");
+  const [wrap, setWrap] = useWrap();
   const [query, setQuery] = useState("");
   const [onlyYaml, setOnlyYaml] = useState(false);
   const prefixKey = (prefix ?? []).join("|");
@@ -99,10 +100,10 @@ export function FilesCompare({ refs, prefix, focusPath, title = "Archivos", clas
         </label>
         {error ? <p className="error">{error}</p> : null}
         {!list && !error ? <p className="muted">Comparando…</p> : null}
-        {list ? <FileTree items={files} selected={selected} onSelect={(item) => setSelected(item.path)} badge={(item) => <StatusBadge status={item.status} />} /> : null}
+        {list ? <FileList items={files} selected={selected} onSelect={(item) => setSelected(item.path)} badge={(item) => <StatusBadge status={item.status} />} filterMin={Number.POSITIVE_INFINITY} className="is-tall" /> : null}
         {list?.truncated ? <p className="muted">Lista truncada: filtra por carpeta.</p> : null}
       </aside>
-      <div className="files-compare-view">
+      <div className={`files-compare-view${wrap ? " is-wrap" : ""}`}>
         <div className="render-diff-controls">
           {file ? (
             <>
@@ -119,6 +120,11 @@ export function FilesCompare({ refs, prefix, focusPath, title = "Archivos", clas
               Lado a lado
             </button>
           </nav>
+          <label className="checkbox viewer-wrap" title="Ajustar las líneas largas al ancho">
+            <input type="checkbox" checked={wrap} onChange={(event) => setWrap(event.target.checked)} />
+            <span>ajustar líneas</span>
+          </label>
+          {file && !file.binary ? <CopyButton text={file.after ?? file.before ?? ""} /> : null}
         </div>
         {fileError ? <p className="error">{fileError}</p> : null}
         {file?.binary ? <p className="muted">Archivo binario: no se muestra el contenido.</p> : null}

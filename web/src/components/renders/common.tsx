@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
-import { buildTree, classifyDiffLine, sideBySide, type TreeNode } from "../../renders";
+import { buildTree, classifyDiffLine, FILE_FILTER_MIN, filterByPath, sideBySide, splitPath, type TreeNode } from "../../renders";
 import type { RenderError, RenderWarning, WritePreview, WriteResult } from "../../rendersTypes";
 
 /** Permisos de escritura de la vista actual (edición + rama que se continúa). */
@@ -355,4 +355,176 @@ export function WriteDialog({
 
 export function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Lista compacta de archivos (ruta relativa: carpeta atenuada + nombre), con filtro
+ * si hay muchos y altura limitada con scroll propio. Se apila sobre el visor.
+ */
+export function FileList<T extends { path: string }>({
+  items,
+  selected,
+  onSelect,
+  badge,
+  filterMin = FILE_FILTER_MIN,
+  className = "",
+  id,
+}: {
+  items: T[];
+  selected: string | null;
+  onSelect: (item: T) => void;
+  badge?: (item: T) => ReactNode;
+  filterMin?: number;
+  className?: string;
+  id?: string;
+}) {
+  const [query, setQuery] = useState("");
+  const shown = useMemo(() => filterByPath(items, query), [items, query]);
+  const active = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    active.current?.scrollIntoView({ block: "nearest" });
+  }, [selected]);
+  if (!items.length) return <p className="muted">Sin archivos.</p>;
+  return (
+    <div className={`file-list-box ${className}`} id={id}>
+      {items.length > filterMin ? (
+        <div className="file-list-filter">
+          <input value={query} placeholder={`Filtrar ${items.length} archivos…`} spellCheck={false} onChange={(event) => setQuery(event.target.value)} aria-label="Filtrar archivos" />
+          <span className="muted">{query ? `${shown.length}/${items.length}` : items.length}</span>
+        </div>
+      ) : null}
+      <ul className="file-list" role="listbox">
+        {shown.map((item) => {
+          const { dir, name } = splitPath(item.path);
+          const isActive = item.path === selected;
+          return (
+            <li key={item.path}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={isActive}
+                ref={isActive ? active : undefined}
+                className={`file-list-item${isActive ? " is-active" : ""}`}
+                title={item.path}
+                onClick={() => onSelect(item)}
+              >
+                <span className="file-path">
+                  {dir ? <span className="file-dir">{dir}</span> : null}
+                  <span className="file-base">{name}</span>
+                </span>
+                {badge ? badge(item) : null}
+              </button>
+            </li>
+          );
+        })}
+        {!shown.length ? <li className="muted file-list-empty">Ningún archivo coincide.</li> : null}
+      </ul>
+    </div>
+  );
+}
+
+const WRAP_KEY = "isot.renders.wrap";
+
+/** Ajuste de líneas largas, recordado en localStorage. */
+export function useWrap(): [boolean, (value: boolean) => void] {
+  const [wrap, setWrap] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(WRAP_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const update = (value: boolean) => {
+    setWrap(value);
+    try {
+      localStorage.setItem(WRAP_KEY, value ? "1" : "0");
+    } catch {
+      /* sin almacenamiento */
+    }
+  };
+  return [wrap, update];
+}
+
+async function copyText(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.style.position = "fixed";
+  area.style.opacity = "0";
+  document.body.appendChild(area);
+  area.select();
+  document.execCommand("copy");
+  area.remove();
+}
+
+export function CopyButton({ text, label = "Copiar" }: { text: string; label?: string }) {
+  const [state, setState] = useState<"idle" | "ok" | "error">("idle");
+  useEffect(() => {
+    if (state === "idle") return;
+    const timer = window.setTimeout(() => setState("idle"), 1500);
+    return () => window.clearTimeout(timer);
+  }, [state]);
+  return (
+    <button
+      type="button"
+      className="viewer-button"
+      title="Copiar el contenido al portapapeles"
+      onClick={() => {
+        copyText(text).then(
+          () => setState("ok"),
+          () => setState("error"),
+        );
+      }}
+    >
+      {state === "ok" ? "✔ copiado" : state === "error" ? "no se pudo copiar" : label}
+    </button>
+  );
+}
+
+/** Barra del visor: ruta, controles propios (p.ej. Unificado/Lado a lado), ajustar líneas y copiar. */
+export function ViewerBar({
+  path,
+  wrap,
+  onWrap,
+  copy,
+  before,
+  children,
+}: {
+  path: string | null;
+  wrap: boolean;
+  onWrap: (value: boolean) => void;
+  copy?: string | null;
+  before?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="viewer-bar">
+      {before}
+      <code className="viewer-path" title={path ?? ""}>
+        {path ?? ""}
+      </code>
+      <span className="viewer-actions">
+        {children}
+        <label className="checkbox viewer-wrap" title="Ajustar las líneas largas al ancho">
+          <input type="checkbox" checked={wrap} onChange={(event) => onWrap(event.target.checked)} />
+          <span>ajustar líneas</span>
+        </label>
+        {copy !== undefined && copy !== null ? <CopyButton text={copy} /> : null}
+      </span>
+    </div>
+  );
+}
+
+/** Visor de un archivo de texto: ocupa el ancho y el alto restantes, con scroll propio. */
+export function CodeViewer({ path, content, className = "" }: { path: string | null; content: string | null; className?: string }) {
+  const [wrap, setWrap] = useWrap();
+  return (
+    <div className={`code-viewer ${wrap ? "is-wrap" : ""} ${className}`}>
+      <ViewerBar path={path} wrap={wrap} onWrap={setWrap} copy={content ?? ""} />
+      <pre className="render-output-content">{content ?? ""}</pre>
+    </div>
+  );
 }

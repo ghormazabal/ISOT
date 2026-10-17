@@ -4,6 +4,8 @@ import { describe, it } from "node:test";
 import { parseInline, parseMarkdown, safeHref } from "./markdown.ts";
 import {
   appendOutput,
+  filterByPath,
+  splitPath,
   buildTree,
   classifyDiffLine,
   driftLabel,
@@ -86,5 +88,20 @@ describe("markdown de la guía", () => {
     );
     assert.equal(safeHref("javascript:alert(1)"), null);
     assert.equal(safeHref("#seccion"), "#seccion");
+  });
+});
+
+describe("lista de archivos de salida", () => {
+  it("separa carpeta y nombre", () => {
+    assert.deepEqual(splitPath("site3/edge/nads.yaml"), { dir: "site3/edge/", name: "nads.yaml" });
+    assert.deepEqual(splitPath("solo.yaml"), { dir: "", name: "solo.yaml" });
+  });
+  it("filtra por todos los términos de la ruta", () => {
+    const items = [{ path: "nodes/n1/netplan.yaml" }, { path: "nodes/n2/netplan.yaml" }, { path: "all-nodes.yaml" }];
+    assert.equal(filterByPath(items, "").length, 3);
+    assert.deepEqual(filterByPath(items, "N2").map((i) => i.path), ["nodes/n2/netplan.yaml"]);
+    assert.deepEqual(filterByPath(items, "nodes yaml").length, 3);
+    assert.deepEqual(filterByPath(items, "all nodes").map((i) => i.path), ["all-nodes.yaml"]);
+    assert.equal(filterByPath(items, "zzz").length, 0);
   });
 });

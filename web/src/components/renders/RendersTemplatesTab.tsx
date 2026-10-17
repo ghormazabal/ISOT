@@ -8,7 +8,7 @@ import type { RenderError, RenderInstance, RenderPreview, RenderTemplateSummary 
 import type { ClusterIndexEntry, SiteIndexEntry } from "../../types";
 import { Splitter, usePanelSize } from "../Splitter";
 import { ValuesTree, valuesToTree } from "../ValuesTree";
-import { CodeEditor, ErrorList, errorMessage, FileTree, WriteDialog, type WriteFlow, type WriteMode } from "./common";
+import { CodeEditor, CodeViewer, ErrorList, errorMessage, FileList, WriteDialog, type WriteFlow, type WriteMode } from "./common";
 
 const SPEC_FILE = "template.yaml";
 const LIBRARY_SPEC: PanelSpec = { defaultSize: 250, min: 180, max: 420, collapsible: true };
@@ -531,15 +531,15 @@ export function RendersTemplatesTab({ refName, version, sites, write, focus, onA
           <span className="muted render-preview-state">{previewing ? "renderizando…" : preview ? (preview.ok && !preview.template_errors.length ? "✔ ok" : "con errores") : ""}</span>
         </nav>
         {rightTab === "salida" ? (
-          <div className="render-preview-body">
+          <div className="render-preview-body is-output">
             {previewError ? <p className="error">{previewError}</p> : null}
-            <ErrorList errors={allErrors} warnings={preview?.warnings} onJump={jumpTo} />
+            <div className="render-preview-errors">
+              <ErrorList errors={allErrors} warnings={preview?.warnings} onJump={jumpTo} />
+            </div>
             {preview ? (
               <div className="render-output">
-                <div className="render-output-tree">
-                  <FileTree items={preview.files} selected={selectedOut} onSelect={(file) => setSelectedOut(file.path)} />
-                </div>
-                <pre className="render-output-content">{selectedFile?.content ?? ""}</pre>
+                <FileList id="render-output-files" className="render-output-files" items={preview.files} selected={selectedOut} onSelect={(file) => setSelectedOut(file.path)} />
+                {preview.files.length ? <CodeViewer path={selectedFile?.path ?? null} content={selectedFile?.content ?? ""} className="render-output-viewer" /> : null}
               </div>
             ) : null}
           </div>

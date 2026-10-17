@@ -241,3 +241,22 @@ export function driftLabel(counts: StatusCounts): string {
   if (!parts.length) return counts.unchanged ? "al día" : "sin archivos";
   return parts.join(" · ");
 }
+
+/** Con más archivos que esto, la lista de salida muestra un filtro. */
+export const FILE_FILTER_MIN = 6;
+
+/** `a/b/c.yaml` → { dir: "a/b/", name: "c.yaml" } (para listas compactas con la ruta relativa). */
+export function splitPath(path: string): { dir: string; name: string } {
+  const index = path.lastIndexOf("/");
+  return index < 0 ? { dir: "", name: path } : { dir: path.slice(0, index + 1), name: path.slice(index + 1) };
+}
+
+/** Filtra por ruta: todos los términos (separados por espacios) deben aparecer, sin distinguir mayúsculas. */
+export function filterByPath<T extends { path: string }>(items: T[], query: string): T[] {
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!terms.length) return items;
+  return items.filter((item) => {
+    const path = item.path.toLowerCase();
+    return terms.every((term) => path.includes(term));
+  });
+}

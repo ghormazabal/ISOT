@@ -5,7 +5,7 @@ import { driftLabel } from "../../renders";
 import { rendersApi } from "../../rendersApi";
 import type { DiffFile, DiffInstance, RendersCompare, RendersDiff } from "../../rendersTypes";
 import { FilesCompare } from "../FilesCompare";
-import { ErrorList, errorMessage, FileTree, SideBySideDiff, StatusBadge, UnifiedDiff, WriteDialog, type WriteFlow, type WriteMode } from "./common";
+import { ErrorList, errorMessage, FileList, SideBySideDiff, StatusBadge, UnifiedDiff, useWrap, ViewerBar, WriteDialog, type WriteFlow, type WriteMode } from "./common";
 
 type Props = {
   refName: string | null;
@@ -31,6 +31,7 @@ type DiffView = "drift" | "output" | "files";
  */
 export function RendersDiffTab({ refName, compare, onCompare, version, write, instance, onInstance, onAfterCommit }: Props) {
   const [view, setView] = useState<DiffView>("drift");
+  const [wrap, setWrap] = useWrap();
   const targetRef = compare && !isLocalRef(compare.base) ? compare.base : "";
   const [data, setData] = useState<RendersDiff | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -202,14 +203,14 @@ export function RendersDiffTab({ refName, compare, onCompare, version, write, in
                 </div>
               ))}
               <h4>Archivos</h4>
-              <FileTree items={files} selected={selected} onSelect={(file) => setSelected(file.path)} badge={(file) => <StatusBadge status={file.status} />} />
+              <FileList items={files} selected={selected} onSelect={(file) => setSelected(file.path)} badge={(file) => <StatusBadge status={file.status} />} />
             </aside>
-            <section className="render-diff-view">
+            <section className={`render-diff-view${wrap ? " is-wrap" : ""}`}>
               {current ? (
                 <>
-                  <header>
-                    <StatusBadge status={current.status} /> <code>{current.path}</code> <span className="muted">({current.instance})</span>
-                  </header>
+                  <ViewerBar path={current.path} wrap={wrap} onWrap={setWrap} copy={current.after ?? current.before ?? ""} before={<StatusBadge status={current.status} />}>
+                    <span className="muted">{current.instance}</span>
+                  </ViewerBar>
                   {current.status === "orphaned" ? (
                     <p className="muted">Existe en el destino pero el render ya no lo genera. «Borrar huérfanos» al aplicar lo elimina.</p>
                   ) : null}
@@ -256,6 +257,7 @@ function OutputCompare({ refs, instance, onInstance, version }: { refs: CompareR
   const [hideUnchanged, setHideUnchanged] = useState(true);
   const [mode, setMode] = useState<"unified" | "split">("unified");
   const [selected, setSelected] = useState<string | null>(null);
+  const [wrap, setWrap] = useWrap();
 
   useEffect(() => {
     let cancelled = false;
@@ -335,14 +337,14 @@ function OutputCompare({ refs, instance, onInstance, version }: { refs: CompareR
                 </p>
               ))}
               <h4>Archivos</h4>
-              <FileTree items={files} selected={selected} onSelect={(file) => setSelected(file.path)} badge={(file) => <StatusBadge status={file.status} />} />
+              <FileList items={files} selected={selected} onSelect={(file) => setSelected(file.path)} badge={(file) => <StatusBadge status={file.status} />} />
             </aside>
-            <section className="render-diff-view">
+            <section className={`render-diff-view${wrap ? " is-wrap" : ""}`}>
               {current ? (
                 <>
-                  <header>
-                    <StatusBadge status={current.status} /> <code>{current.path}</code> <span className="muted">({current.instance})</span>
-                  </header>
+                  <ViewerBar path={current.path} wrap={wrap} onWrap={setWrap} copy={current.after ?? current.before ?? ""} before={<StatusBadge status={current.status} />}>
+                    <span className="muted">{current.instance}</span>
+                  </ViewerBar>
                   {mode === "unified" ? (
                     <UnifiedDiff diff={current.diff} />
                   ) : (
