@@ -33,15 +33,31 @@ from isot.inventory import (
     DEVICE_INDEX_NAME,
     GLOBAL_SITE,
     TEMPLATE_INDEX_NAME,
+    find_global_template,
     find_template_file,
+    is_library_rel,
+    library_roots,
+    library_template_files,
     load_catalog,
+    load_docs,
+    referenced_library_templates,
+    rel_path,
     load_yaml,
     resolve_template_path,
     site_by_id,
 )
-from isot.paths import find_repo_root
+from isot import config as isot_config
+from isot.indexer import build_template_index
 from isot.cabling import default_policy, policy_from_site_body
-from isot.wizard import WizardError, commit_preview, device_preview, edit_enabled, site_preview
+from isot.wizard import (
+    WizardError,
+    commit_preview,
+    device_preview,
+    edit_enabled,
+    list_site_templates as wizard_site_templates,
+    push_branch,
+    site_preview,
+)
 
 SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
 SAFE_NODE_ID = re.compile(r"^[A-Za-z0-9._:-]{1,200}$")
@@ -117,10 +133,51 @@ def load_site_template_index(root: Path, site_id: str) -> list[dict[str, Any]]:
 
 
 def load_global_template_index(root: Path) -> list[dict[str, Any]]:
+    """Índice global del repo de datos + templates de la biblioteca que algún
+    clúster referencia (se calculan al vuelo; no se escriben en el repo)."""
     path = root / "cluster-templates" / TEMPLATE_INDEX_NAME
-    if not path.is_file():
+    entries = _load_list_index(path, f"cluster-templates/{TEMPLATE_INDEX_NAME}") if path.is_file() else []
+    return entries + library_template_index(root)
+
+
+def library_template_index(root: Path) -> list[dict[str, Any]]:
+    sites, _ = load_catalog(root)
+    docs = referenced_library_templates(root, sites)
+    if not docs:
         return []
-    return _load_list_index(path, f"cluster-templates/{TEMPLATE_INDEX_NAME}")
+    from isot.indexer import _used_by_map
+
+    entries = build_template_index(root, docs, _used_by_map(root, sites))
+    layers = {str(doc.get("_path")): doc.get("_library") for doc in docs}
+    for entry in entries:
+        entry["library"] = layers.get(str(entry.get("path")))
+    return entries
+
+
+def library_catalog(root: Path | None) -> list[dict[str, Any]]:
+    """Templates de la biblioteca disponibles para el wizard (aunque nadie los use)."""
+    present = set()
+    if root is not None:
+        for path in (root / "cluster-templates").glob("*"):
+            present.add(path.stem if path.is_file() else path.name)
+    out: list[dict[str, Any]] = []
+    for prefix, path in library_template_files():
+        docs = load_docs(path.parent, path.parent, GLOBAL_SITE, files=[path])
+        doc = docs[0] if docs else {}
+        name = str(doc.get("template_name") or doc.get("_stem"))
+        out.append(
+            {
+                "name": name,
+                "site": GLOBAL_SITE,
+                "scope": "global",
+                "library": prefix,
+                "distro": doc.get("distro"),
+                "version": doc.get("version") or None,
+                "path": f"{prefix}/{name}",
+                "in_repo": name in present,
+            }
+        )
+    return out
 
 
 def load_all_templates(root: Path) -> list[dict[str, Any]]:
@@ -385,8 +442,51 @@ def _chart_values_payload(template_path: Path, release: str) -> dict[str, Any]:
     }
 
 
-def create_app(repo_root: Path | None = None, edit: bool | None = None) -> FastAPI:
-    can_edit = edit_enabled(edit)
+class DataRepoState:
+    """Repositorio de datos activo. Se vuelve a resolver mientras no haya uno
+    (así el onboarding detecta un isot.yaml recién creado sin reiniciar)."""
+
+    def __init__(self, repo_root: Path | None, config_path: str | Path | None) -> None:
+        self.fixed = repo_root.resolve() if repo_root is not None else None
+        self.config_path = config_path
+        self.resolved: isot_config.Resolved | None = None
+        self.error: str | None = None
+        self.missing = False
+        self.refresh()
+
+    def refresh(self) -> None:
+        if self.fixed is not None:
+            config = isot_config.Config(source=None)
+            try:
+                config = isot_config.load_config(self.config_path) or config
+            except isot_config.ConfigError:
+                pass
+            self.resolved = isot_config.Resolved(self.fixed, "create_app", config)
+            return
+        try:
+            self.resolved = isot_config.resolve(config_path=self.config_path)
+            self.error = None
+            self.missing = False
+            isot_config.apply(self.resolved.config)
+        except isot_config.ConfigMissing as exc:
+            self.resolved, self.error, self.missing = None, str(exc), True
+        except isot_config.ConfigError as exc:
+            self.resolved, self.error, self.missing = None, str(exc), False
+
+    def current(self) -> isot_config.Resolved | None:
+        if self.resolved is None:
+            self.refresh()
+        return self.resolved
+
+
+def create_app(
+    repo_root: Path | None = None,
+    edit: bool | None = None,
+    config_path: str | Path | None = None,
+) -> FastAPI:
+    state = DataRepoState(repo_root, config_path or os.environ.get("ISOT_CONFIG") or None)
+    config_edit = bool(state.resolved and state.resolved.config.edit.enabled)
+    can_edit = edit_enabled(edit) or (edit is None and config_edit)
     app = FastAPI(
         title="ISoT",
         description="Infrastructure Source of Truth — API de inventario (multi-sitio)",
@@ -400,17 +500,18 @@ def create_app(repo_root: Path | None = None, edit: bool | None = None) -> FastA
     )
 
     def resolved_root() -> Path:
-        if repo_root is not None:
-            return repo_root
-        if os.environ.get("ISOT_ROOT"):
-            return Path(os.environ["ISOT_ROOT"]).resolve()
-        return find_repo_root()
+        current = state.current()
+        if current is None:
+            raise HTTPException(status_code=503, detail=state.error or isot_config.NO_CONFIG_MESSAGE)
+        return current.repo
 
-    def safe_under_root(path: Path, base: Path) -> Path:
+    def safe_under_root(path: Path, base: Path, *, library: bool = False) -> Path:
         resolved = path.resolve()
-        if not resolved.is_relative_to(base.resolve()):
-            raise HTTPException(status_code=400, detail="Ruta fuera del repositorio")
-        return resolved
+        if resolved.is_relative_to(base.resolve()):
+            return resolved
+        if library and any(resolved.is_relative_to(root.resolve()) for root in library_roots()):
+            return resolved
+        raise HTTPException(status_code=400, detail="Ruta fuera del repositorio")
 
     def require_site(site_id: str):
         if not SAFE_NAME.fullmatch(site_id):
@@ -423,8 +524,45 @@ def create_app(repo_root: Path | None = None, edit: bool | None = None) -> FastA
         return base, site
 
     @app.get("/api/health")
-    def health() -> dict[str, str]:
-        return {"status": "ok"}
+    def health() -> dict[str, Any]:
+        current = state.current()
+        return {
+            "status": "ok",
+            "configured": current is not None,
+            "data_repo": current.repo.name if current else None,
+        }
+
+    @app.get("/api/config")
+    def config_info() -> dict[str, Any]:
+        """Repositorio de datos activo (sin secretos: ISoT no maneja credenciales)."""
+        current = state.current()
+        if current is None:
+            return {
+                "configured": False,
+                "error": None if state.missing else state.error,
+                "message": isot_config.NO_CONFIG_MESSAGE,
+                "hints": isot_config.HINTS,
+                "search": ["--config", "$ISOT_CONFIG", "./isot.yaml", "~/.config/isot/config.yaml"],
+                "edit": can_edit,
+            }
+        cfg = current.config
+        return {
+            "configured": True,
+            "origin": current.origin,
+            "config_file": str(cfg.source) if cfg.source else None,
+            "data_repo": isot_config.repo_status(current.repo, cfg),
+            # Preparado para varios repos (selector futuro): lista y repo activo.
+            "repos": [
+                {"id": item.id, "name": item.name or item.path.name, "active": item.path == current.repo}
+                for item in cfg.repos
+            ],
+            "active_repo": current.repo_id,
+            "templates": [str(path) for path in cfg.templates],
+            "edit": can_edit,
+            "push": bool(can_edit and cfg.edit.push),
+            "push_remote": cfg.edit.push_remote,
+            "ui": {"title": cfg.ui.title},
+        }
 
     @app.get("/api/rules")
     def list_rules() -> list[dict[str, str]]:
@@ -479,7 +617,20 @@ def create_app(repo_root: Path | None = None, edit: bool | None = None) -> FastA
 
     @app.get("/api/wizard/status")
     def wizard_status() -> dict[str, Any]:
-        return {"edit": can_edit}
+        current = state.current()
+        return {
+            "edit": can_edit,
+            "push": bool(can_edit and current and current.config.edit.push),
+            "site_templates": wizard_site_templates(current.repo if current else None),
+            "template_library": library_catalog(current.repo if current else None),
+        }
+
+    def maybe_push(result: dict[str, Any]) -> dict[str, Any]:
+        current = state.current()
+        if not current or not current.config.edit.push:
+            return result
+        result["push"] = push_branch(current.repo, result["branch"], current.config.edit.push_remote)
+        return result
 
     def require_edit() -> None:
         if not can_edit:
@@ -535,7 +686,7 @@ def create_app(repo_root: Path | None = None, edit: bool | None = None) -> FastA
                 resolved_root(), preview, f"sitio {description}", site=preview.get("site") or body.get("id")
             )
             clear_caches()
-            return {**result, "preview": preview}
+            return {**maybe_push(result), "preview": preview}
         except WizardError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -558,7 +709,7 @@ def create_app(repo_root: Path | None = None, edit: bool | None = None) -> FastA
                 resolved_root(), preview, f"device {hostnames}", site=preview.get("site") or body.get("site")
             )
             clear_caches()
-            return {**result, "preview": preview}
+            return {**maybe_push(result), "preview": preview}
         except (WizardError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -739,9 +890,11 @@ def create_app(repo_root: Path | None = None, edit: bool | None = None) -> FastA
         if template_ref:
             found = resolve_template_path(base, load_catalog(base)[0], site_id, str(template_ref))
             if found is not None:
-                template_path = found.relative_to(base).as_posix()
+                template_path = rel_path(found, base)
                 template_site = (
-                    GLOBAL_SITE if template_path.startswith("cluster-templates/") else template_path.split("/", 2)[1]
+                    GLOBAL_SITE
+                    if template_path.startswith("cluster-templates/") or is_library_rel(template_path)
+                    else template_path.split("/", 2)[1]
                 )
         return {
             "name": name,
@@ -754,7 +907,7 @@ def create_app(repo_root: Path | None = None, edit: bool | None = None) -> FastA
         }
 
     def _template_payload(base: Path, path: Path, site_id: str, name: str) -> dict[str, Any]:
-        rel = path.relative_to(base).as_posix()
+        rel = rel_path(path, base)
         data = load_yaml(path)
         if not isinstance(data, dict):
             data = {"_raw": data}
@@ -785,10 +938,10 @@ def create_app(repo_root: Path | None = None, edit: bool | None = None) -> FastA
         return safe_under_root(located, base)
 
     def _locate_global_template(base: Path, name: str) -> Path:
-        located = find_template_file(base / "cluster-templates", name)
+        located = find_global_template(base, name)
         if located is None:
             raise HTTPException(status_code=404, detail=f"No existe cluster-templates/{name}/")
-        return safe_under_root(located, base)
+        return safe_under_root(located, base, library=True)
 
     @app.get("/api/sites/{site_id}/templates/{name}/values/{release}")
     def site_template_values(site_id: str, name: str, release: str) -> dict[str, Any]:
@@ -848,7 +1001,7 @@ def create_app(repo_root: Path | None = None, edit: bool | None = None) -> FastA
         found = resolve_template_path(base, sites, site_id, str(template_ref))
         if found is None:
             raise HTTPException(status_code=404, detail=f"template_ref={template_ref!r} no existe")
-        found = safe_under_root(found, base)
+        found = safe_under_root(found, base, library=True)
         tdoc = load_yaml(found)
         if not isinstance(tdoc, dict):
             tdoc = {}
@@ -887,11 +1040,43 @@ def create_app(repo_root: Path | None = None, edit: bool | None = None) -> FastA
 app = create_app()
 
 
+def build_parser():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Sirve la API y la UI de ISoT sobre un repositorio de datos.")
+    parser.add_argument("--config", type=Path, default=None, help="Archivo de configuración isot.yaml.")
+    parser.add_argument("--repo", type=Path, default=None, help="Repositorio de datos (ignora data_repo.path).")
+    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--edit", action="store_true", help="Habilita los wizards (equivale a edit.enabled).")
+    return parser
+
+
 def main(argv: list[str] | None = None) -> int:
-    del argv
+    import sys
+
     import uvicorn
 
-    uvicorn.run("isot.web:app", host="0.0.0.0", port=8000, reload=False)
+    args = build_parser().parse_args(argv)
+    if args.config:
+        os.environ["ISOT_CONFIG"] = str(args.config.expanduser().resolve())
+    if args.repo:
+        os.environ["ISOT_ROOT"] = str(args.repo.expanduser().resolve())
+    if args.edit:
+        os.environ["ISOT_EDIT"] = "1"
+    try:
+        resolved = isot_config.resolve()
+        print(f"ISoT: repositorio de datos {resolved.repo} ({resolved.origin})", file=sys.stderr)
+    except isot_config.ConfigMissing:
+        print(isot_config.missing_message(), file=sys.stderr)
+        print("\nLa UI mostrará estas instrucciones hasta que exista la configuración.", file=sys.stderr)
+    except isot_config.ConfigError as exc:
+        print(f"error de configuración: {exc}", file=sys.stderr)
+        print("La UI mostrará el error hasta que se corrija.", file=sys.stderr)
+    # La app del módulo se creó al importar; se recrea con las opciones ya aplicadas.
+    global app
+    app = create_app()
+    uvicorn.run(app, host=args.host, port=args.port, reload=False)
     return 0
 
 

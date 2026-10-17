@@ -29,7 +29,7 @@ from isot.inventory import (
     load_devices,
     load_templates,
 )
-from isot.paths import find_repo_root
+from isot.config import cli_resolve
 
 
 def render_index(entries: Any) -> str:
@@ -175,7 +175,11 @@ def index_targets(repo_root: Path) -> list[tuple[Path, Any]]:
             repo_root / "cluster-templates" / TEMPLATE_INDEX_NAME,
             build_template_index(
                 repo_root,
-                [doc for doc in load_templates(repo_root, sites) if doc.get("_site") == "global"],
+                [
+                    doc
+                    for doc in load_templates(repo_root, sites, include_library=False)
+                    if doc.get("_site") == "global"
+                ],
                 used_by,
             ),
         ),
@@ -183,7 +187,11 @@ def index_targets(repo_root: Path) -> list[tuple[Path, Any]]:
     for site in sites:
         targets.append((site.devices_dir / DEVICE_INDEX_NAME, build_device_index(repo_root, site)))
         targets.append((site.clusters_dir / CLUSTER_INDEX_NAME, build_cluster_index(repo_root, site)))
-        site_templates = [doc for doc in load_templates(repo_root, [site]) if doc.get("_site") == site.id]
+        site_templates = [
+            doc
+            for doc in load_templates(repo_root, [site], include_library=False)
+            if doc.get("_site") == site.id
+        ]
         if site_templates or site.templates_dir.is_dir():
             targets.append(
                 (
@@ -260,7 +268,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Genera índices ligeros (sitios, devices, clusters, cluster-templates)."
     )
-    parser.add_argument("--root", type=Path, default=None)
+    parser.add_argument(
+        "--repo", "--root", dest="root", type=Path, default=None,
+        help="Repositorio de datos (por defecto: data_repo.path de isot.yaml).",
+    )
+    parser.add_argument("--config", type=Path, default=None, help="Archivo de configuración isot.yaml.")
     parser.add_argument(
         "--check",
         action="store_true",
@@ -271,11 +283,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    try:
-        root = args.root.resolve() if args.root else find_repo_root()
-    except FileNotFoundError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
+    resolved = cli_resolve(args.root, args.config)
+    if resolved is None:
+        return 2
+    root = resolved.repo
 
     if args.check:
         ok, message = check_index(root)

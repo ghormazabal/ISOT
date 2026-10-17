@@ -1,22 +1,23 @@
-# Hooks locales: regeneran índices, validan integridad y patrones prohibidos.
+# Hooks locales del repo de la herramienta: índices y validador sobre la demo
+# (examples/demo-repo) y patrones prohibidos sobre todo el árbol.
 repos:
   - repo: local
     hooks:
       - id: isot-generate-index
-        name: Generar índices ISoT
+        name: Generar índices de la demo
         language: python
         additional_dependencies: ["."]
-        entry: isot-index
+        entry: isot-index --repo examples/demo-repo
         pass_filenames: false
-        files: '^(sites/|cluster-templates/|sites\.yaml)'
+        files: '^examples/demo-repo/'
         always_run: false
       - id: isot-validate
-        name: Validar integridad ISoT
+        name: Validar la demo
         language: python
         additional_dependencies: ["."]
-        entry: isot-validate
+        entry: isot-validate --repo examples/demo-repo
         pass_filenames: false
-        files: '^(sites/|cluster-templates/|sites\.yaml)'
+        files: '^examples/demo-repo/'
         always_run: false
       - id: isot-leakcheck
         name: Patrones prohibidos (anonimización)

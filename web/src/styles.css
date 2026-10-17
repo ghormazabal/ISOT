@@ -1950,3 +1950,148 @@ td {
 .link-endpoint .value-tag {
   justify-self: start;
 }
+
+/* ---- Repositorio de datos activo (cabecera) ---- */
+.topbar .brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.data-repo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.data-repo-icon {
+  color: var(--accent);
+}
+
+.data-repo-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+.data-repo-branch {
+  color: var(--accent);
+}
+
+.data-repo-branch.is-off {
+  color: #f0c674;
+}
+
+.data-repo-sha {
+  color: var(--muted);
+}
+
+.data-repo-dirty {
+  color: #f0c674;
+}
+
+.wizard-push.ok {
+  color: #8ee0c0;
+}
+
+.wizard-push.error {
+  color: var(--danger);
+}
+
+/* ---- Onboarding (sin repositorio de datos) ---- */
+.onboarding {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 32px 16px;
+  overflow: auto;
+}
+
+.onboarding-card {
+  width: min(760px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 24px 28px;
+  display: grid;
+  gap: 12px;
+}
+
+.onboarding-card h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.onboarding-lead {
+  margin: 0;
+  font-size: 15px;
+}
+
+.onboarding-error {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid #5a2424;
+  background: #2a1515;
+  color: #f0a0a0;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+
+.onboarding-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 12px;
+  line-height: 1.5;
+}
+
+.onboarding-steps pre {
+  margin: 6px 0;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+  overflow: auto;
+}
+
+.onboarding code {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px;
+  background: var(--panel-2);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+.onboarding-steps pre code {
+  background: none;
+  padding: 0;
+}
+
+.onboarding-demo {
+  border-left: 3px solid var(--accent);
+  padding-left: 8px;
+  margin-left: -11px;
+}
+
+.onboarding-card > button {
+  justify-self: start;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: #12352b;
+  cursor: pointer;
+}

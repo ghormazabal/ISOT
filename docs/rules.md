@@ -2,7 +2,7 @@
 
 El motor vive en `isot/rules/`. Cada regla tiene un **id estable**, severidad
 por defecto, entidad y recomendación. `python -m isot.validator` las evalúa
-sobre el inventario; sale distinto de 0 **solo si hay errores**. `--strict`
+sobre el repositorio de datos configurado (`isot.yaml` o `--repo DIR`); sale distinto de 0 **solo si hay errores**. `--strict`
 también falla por warnings. `--format json` imprime el payload.
 
 Overrides en YAML de clúster, device o `sites/<id>/topology/index.yaml`:

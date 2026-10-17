@@ -51,11 +51,28 @@ from isot.cabling import (
     role_matches,
     retarget_leafs,
 )
-from isot.gitdiff import diff_from_snapshots, git, snapshot_inventory
+from isot.gitdiff import diff_from_snapshots, git, is_git_toplevel, snapshot_inventory
 from isot.indexer import write_indexes
-from isot.inventory import load_catalog, load_clusters, load_devices, load_templates, load_topology, load_yaml, site_by_id
+from isot.inventory import (
+    find_global_template,
+    is_library_rel,
+    library_template_files,
+    load_catalog,
+    load_clusters,
+    load_devices,
+    load_templates,
+    load_topology,
+    load_yaml,
+    rel_path,
+    site_by_id,
+    template_dir,
+    template_stem,
+)
+from isot.paths import bundled_templates_dir
 
 PROTECTED_BRANCHES = {"main", "master", "HEAD"}
+SITE_TEMPLATE_PREFIX = "plantilla:"
+SITE_TEMPLATES_DIRNAME = "site-templates"
 KIND_DIRS = {"baremetal": "baremetal", "vm": "virtual-machines", "network": "network"}
 SAFE_ID = re.compile(r"^[a-z][a-z0-9-]{1,31}$")
 SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$")
@@ -878,11 +895,76 @@ def _remap_text(value: Any, src_name: str, dst_name: str, src_id: str, dst_id: s
     return value
 
 
+def _site_template_dirs(repo: Path | None) -> list[tuple[str, Path]]:
+    dirs: list[tuple[str, Path]] = []
+    if repo is not None:
+        dirs.append(("repo", repo / SITE_TEMPLATES_DIRNAME))
+    dirs.append(("isot", bundled_templates_dir() / "sites"))
+    return dirs
+
+
+def list_site_templates(repo: Path | None) -> list[dict[str, Any]]:
+    """Plantillas de sitio: `site-templates/` del repo de datos y las de la herramienta."""
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for source, folder in _site_template_dirs(repo):
+        if not folder.is_dir():
+            continue
+        for child in sorted(folder.iterdir()):
+            topo = child / "topology" / "index.yaml"
+            if not child.is_dir() or child.name in seen or not topo.is_file():
+                continue
+            seen.add(child.name)
+            try:
+                data = load_yaml(topo)
+            except yaml.YAMLError:
+                data = {}
+            meta = data.get("site") if isinstance(data, dict) and isinstance(data.get("site"), dict) else {}
+            out.append(
+                {
+                    "id": f"{SITE_TEMPLATE_PREFIX}{child.name}",
+                    "name": child.name,
+                    "description": meta.get("description"),
+                    "source": source,
+                }
+            )
+    return out
+
+
+def site_template_topology(repo: Path, template_id: str) -> dict[str, Any] | None:
+    name = template_id[len(SITE_TEMPLATE_PREFIX):]
+    if not SAFE_ID.fullmatch(name):
+        return None
+    for _source, folder in _site_template_dirs(repo):
+        topo = folder / name / "topology" / "index.yaml"
+        if topo.is_file():
+            data = load_yaml(topo)
+            return data if isinstance(data, dict) else {}
+    return None
+
+
+def _library_template_files(repo: Path, name: str, src: Path) -> list[dict[str, Any]]:
+    """Copia un template de la biblioteca a cluster-templates/ del repo de datos."""
+    files: list[dict[str, Any]] = []
+    folder = template_dir(src)
+    sources = sorted(path for path in folder.rglob("*") if path.is_file()) if src.name == "template.yaml" else [src]
+    for path in sources:
+        if path.name.startswith("_") or "__pycache__" in path.parts:
+            continue
+        if src.name == "template.yaml":
+            rel = f"cluster-templates/{name}/{path.relative_to(folder).as_posix()}"
+        else:
+            rel = f"cluster-templates/{path.name}"
+        content = path.read_text(encoding="utf-8")
+        files.append({"path": rel, "action": "create", "content": content, "diff": unified_diff(rel, "", content)})
+    return files
+
+
 def site_preview(repo: Path, body: dict[str, Any]) -> dict[str, Any]:
     new_id = str(body.get("id") or "").strip()
     new_name = str(body.get("name") or new_id.upper()).strip()
     description = str(body.get("description") or f"Sitio de ejemplo {new_name}")
-    template_site_id = str(body.get("template_site") or "site2")
+    template_site_id = str(body.get("template_site") or "")
     vlan_offset = int(body.get("vlan_offset") or 0)
     infra_range = str(body.get("infra_range") or "").strip()
     dci = bool(body.get("dci"))
@@ -895,10 +977,22 @@ def site_preview(repo: Path, body: dict[str, Any]) -> dict[str, Any]:
     sites, spaces = load_catalog(repo)
     if any(item.id == new_id for item in sites):
         raise WizardError(f"el sitio {new_id} ya existe")
-    template = next((item for item in sites if item.id == template_site_id), None)
-    if template is None:
-        raise WizardError(f"sitio plantilla desconocido: {template_site_id}")
-    topology = copy.deepcopy(load_topology(template))
+    if dci and not any(item.id == dci_peer for item in sites):
+        raise WizardError(f"DCI pedido hacia {dci_peer}, pero ese sitio no existe en el repositorio de datos")
+    if not template_site_id:
+        # Sin plantilla explícita: site2 (demo), el primer sitio, o la plantilla «edge».
+        fallback = next((item for item in sites if item.id == "site2"), sites[0] if sites else None)
+        template_site_id = fallback.id if fallback else f"{SITE_TEMPLATE_PREFIX}edge"
+    if template_site_id.startswith(SITE_TEMPLATE_PREFIX):
+        loaded = site_template_topology(repo, template_site_id)
+        if loaded is None:
+            raise WizardError(f"plantilla de sitio desconocida: {template_site_id}")
+        topology = copy.deepcopy(loaded)
+    else:
+        template = next((item for item in sites if item.id == template_site_id), None)
+        if template is None:
+            raise WizardError(f"sitio plantilla desconocido: {template_site_id}")
+        topology = copy.deepcopy(load_topology(template))
     src_range = str((topology.get("site") or {}).get("infra_range") or "")
     src_net = ipaddress.ip_network(src_range, strict=False) if src_range else None
     dst_net = ipaddress.ip_network(infra_range, strict=False) if infra_range else src_net
@@ -965,6 +1059,8 @@ def site_preview(repo: Path, body: dict[str, Any]) -> dict[str, Any]:
     template_names = {
         str(doc.get("template_name") or doc.get("_stem")) for doc in templates
     }
+    template_names |= {template_stem(path) for _prefix, path in library_template_files()}
+    copied_templates: set[str] = set()
 
     def _internal_ip(data: dict[str, Any]) -> str:
         preferred = {"APP_CTRL", "MGMT_SW", "mgmt", "CLOUD_MGMT_SW"}
@@ -1020,6 +1116,13 @@ def site_preview(repo: Path, body: dict[str, Any]) -> dict[str, Any]:
         tref = spec.get("template_ref")
         if tref and str(tref) not in template_names:
             raise WizardError(f"template_ref desconocido: {tref}")
+        if tref and str(tref) not in copied_templates:
+            located = find_global_template(repo, str(tref))
+            if located is not None and is_library_rel(rel_path(located, repo)):
+                # El template viene de la biblioteca: se copia al repo de datos
+                # para que el clúster nuevo quede versionado con su template.
+                files.extend(_library_template_files(repo, str(tref), located))
+                copied_templates.add(str(tref))
         workers = int(spec.get("workers") or spec.get("count") or 1)
         role = str(spec.get("role") or "worker")
         cluster_doc = {
@@ -1215,6 +1318,33 @@ def apply_files(repo: Path, files: list[dict[str, Any]]) -> list[Path]:
     return written
 
 
+def push_branch(repo: Path, branch: str, remote: str = "origin") -> dict[str, Any]:
+    """`git push -u <remote> <rama>` con las credenciales del usuario (credential helper,
+    ssh-agent…). ISoT no pide ni guarda tokens; sin prompt interactivo."""
+    import subprocess
+
+    if not branch.startswith("wizard/") or not SAFE_BRANCH.fullmatch(branch):
+        return {"ok": False, "remote": remote, "branch": branch, "message": "solo se publican ramas wizard/…"}
+    if not is_git_toplevel(repo):
+        return {"ok": False, "remote": remote, "branch": branch, "message": "el repo de datos no es un repo git"}
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(repo), "push", "-u", remote, f"{branch}:{branch}"],
+            check=False,
+            capture_output=True,
+            timeout=120,
+            env=env,
+        )
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "remote": remote, "branch": branch, "message": "git push excedió el tiempo"}
+    text = (proc.stderr or proc.stdout).decode("utf-8", errors="replace").strip()
+    return {"ok": proc.returncode == 0, "remote": remote, "branch": branch, "message": text[-600:]}
+
+
+SAFE_BRANCH = re.compile(r"^[A-Za-z0-9._/-]{1,120}$")
+
+
 def unique_wizard_branch(repo: Path, description: str) -> str:
     base = f"wizard/{slugify(description)}"
     name = base
@@ -1274,15 +1404,11 @@ def commit_preview(
             )
         git(repo, ["add", "-A"])
         message = f"wizard: {description}"
-        env_args = [
-            "-c",
-            "user.name=ISoT Wizard",
-            "-c",
-            "user.email=isot@example.net",
-            "commit",
-            "-m",
-            message,
-        ]
+        # Autor: la identidad git del propio usuario (su git config). Solo si no
+        # tiene ninguna configurada se usa una identidad genérica.
+        has_identity = git(repo, ["config", "user.email"]).returncode == 0
+        identity = [] if has_identity else ["-c", "user.name=ISoT Wizard", "-c", "user.email=isot@example.net"]
+        env_args = [*identity, "commit", "-m", message]
         committed = git(repo, env_args)
         if committed.returncode != 0:
             detail = (committed.stderr or committed.stdout).decode("utf-8", errors="replace")

@@ -1,0 +1,49 @@
+name: Validar repositorio de datos ISoT
+description: >-
+  Instala ISoT y corre el validador y el chequeo de índices sobre un
+  repositorio de datos (sites.yaml, sites/, cluster-templates/).
+inputs:
+  repo:
+    description: Ruta del repositorio de datos dentro del workspace.
+    default: "."
+  isot-ref:
+    description: Versión de ISoT a instalar (rama, tag o SHA de ghormazabal/ISOT).
+    default: main
+  strict:
+    description: '"true" para fallar también con avisos.'
+    default: "false"
+  install:
+    description: '"false" si ISoT ya está instalado en el job.'
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - name: Python
+      if: inputs.install == 'true'
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    # Checkout completo (no solo el paquete): el validador necesita templates/
+    # para resolver template_ref que el repo de datos no tenga.
+    - name: Checkout de ISoT
+      if: inputs.install == 'true'
+      uses: actions/checkout@v4
+      with:
+        repository: ghormazabal/ISOT
+        ref: ${{ inputs.isot-ref }}
+        path: .isot-tool
+    - name: Instalar ISoT
+      if: inputs.install == 'true'
+      shell: bash
+      run: |
+        pip install -e ./.isot-tool
+        echo "ISOT_HOME=$GITHUB_WORKSPACE/.isot-tool" >> "$GITHUB_ENV"
+    - name: Validador
+      shell: bash
+      run: |
+        args=(--repo "${{ inputs.repo }}")
+        if [ "${{ inputs.strict }}" = "true" ]; then args+=(--strict); fi
+        python -m isot.validator "${args[@]}"
+    - name: Índices al día
+      shell: bash
+      run: python -m isot.indexer --check --repo "${{ inputs.repo }}"

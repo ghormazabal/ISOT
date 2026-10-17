@@ -1,0 +1,55 @@
+# Plantilla de sitio ISoT «edge» (Sitio edge).
+# El wizard «Nuevo sitio» copia esta topología (subnets, VLANs, rangos) y la
+# reasigna al nuevo sitio. Un repo de datos puede sobrescribirla con
+# site-templates/edge/topology/index.yaml.
+site:
+  id: edge
+  operator: Operador-Ejemplo
+  description: 'Plantilla de sitio edge: MGMT OOB/in-band, servicios edge y DCI opcional.'
+  infra_range: 10.80.0.0/20
+  vlan_range: 2000-2199
+  dns_servers:
+  - 10.20.1.53
+  ntp_servers:
+  - 10.30.0.10
+subnets:
+- name: MGMT_HW
+  cidr: 10.80.0.0/24
+  vlan: 2002
+  gateway: 10.80.0.1
+  vrf: ''
+  description: OOB (VLAN 2002 reutilizada; CIDR distinto al de otro sitio)
+- name: MGMT_SW
+  cidr: 10.80.1.0/24
+  vlan: 2003
+  gateway: 10.80.1.1
+  vrf: VRF_OAM
+  description: Gestión in-band de baremetal
+- name: EDGE_SVC
+  cidr: 10.80.2.0/24
+  vlan: 2100
+  gateway: 10.80.2.1
+  vrf: VRF_OAM
+  description: Publicación de servicios del clúster edge
+- name: DCI
+  cidr: 192.0.2.0/24
+  vlan: 4094
+  gateway: ''
+  vrf: VRF_DCI
+  description: Enlace DCI a otro sitio (espacio compartido dci-overlay)
+vlans:
+- id: 2002
+  name: MGMT_HW
+  subnet: MGMT_HW
+- id: 2003
+  name: MGMT_SW
+  subnet: MGMT_SW
+- id: 2100
+  name: EDGE_SVC
+  subnet: EDGE_SVC
+- id: 4094
+  name: DCI
+  subnet: DCI
+clusters: []
+undocumented_peers: []
+gaps: []

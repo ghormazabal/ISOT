@@ -8,6 +8,7 @@ import type {
   GraphNode,
   GroupBy,
   SiteIndexEntry,
+  SiteTemplateOption,
   TemplateIndexEntry,
   WizardCommit,
   WizardField,
@@ -37,6 +38,10 @@ type Props = {
   sites: SiteIndexEntry[];
   clustersBySite: Record<string, ClusterIndexEntry[]>;
   templates: TemplateIndexEntry[];
+  /** Plantillas de sitio (site-templates/ del repo de datos y templates/sites de ISoT). */
+  siteTemplates?: SiteTemplateOption[];
+  /** Tras un commit del wizard (p.ej. para refrescar rama/HEAD del repo de datos). */
+  onAfterCommit?: (commit: WizardCommit) => void;
   onOpenCompare: (base: string, head: string) => void;
   initialDraft: WizardDraft;
   onDraftChange: (draft: WizardDraft) => void;
@@ -56,6 +61,8 @@ export function WizardsView({
   sites,
   clustersBySite,
   templates,
+  siteTemplates = [],
+  onAfterCommit,
   onOpenCompare,
   initialDraft,
   onDraftChange,
@@ -104,6 +111,7 @@ export function WizardsView({
         sites={sites}
         clustersBySite={clustersBySite}
         templates={templates}
+        siteTemplates={siteTemplates}
         onOpenCompare={onOpenCompare}
         initial={initial}
         onDraftChange={onDraftChange}
@@ -112,6 +120,7 @@ export function WizardsView({
           setSeed(null);
           setEpoch((value) => value + 1);
           onClearDraft();
+          onAfterCommit?.(commit);
         }}
         onDiscard={discard}
         lastCommit={lastCommit}
@@ -124,6 +133,7 @@ function WizardForms({
   sites,
   clustersBySite,
   templates,
+  siteTemplates,
   onOpenCompare,
   initial,
   onDraftChange,
@@ -134,6 +144,7 @@ function WizardForms({
   sites: SiteIndexEntry[];
   clustersBySite: Record<string, ClusterIndexEntry[]>;
   templates: TemplateIndexEntry[];
+  siteTemplates: SiteTemplateOption[];
   onOpenCompare: (base: string, head: string) => void;
   initial: WizardDraft;
   onDraftChange: (draft: WizardDraft) => void;
@@ -201,6 +212,7 @@ function WizardForms({
         <SiteWizard
           sites={sites}
           templates={templates}
+          siteTemplates={siteTemplates}
           onOpenCompare={onOpenCompare}
           initial={initial.site}
           onChange={setSiteDraft}
@@ -229,6 +241,14 @@ function DeviceWizard({
   const [site, setSite] = useState(initial.site);
   const [kind, setKind] = useState(initial.kind);
   const [cluster, setCluster] = useState(initial.cluster);
+  useEffect(() => {
+    // El borrador puede venir de otro repositorio de datos: si el sitio no existe, se usa el primero.
+    if (sites.length && !sites.some((item) => item.id === site)) {
+      const first = sites[0].id;
+      setSite(first);
+      setCluster(clustersBySite[first]?.[0]?.name ?? "");
+    }
+  }, [sites, site, clustersBySite]);
   const [role, setRole] = useState(initial.role);
   const [count, setCount] = useState(initial.count);
   const [preview, setPreview] = useState<WizardPreview | null>(initial.preview);
@@ -455,6 +475,7 @@ function emptyRule(): ConnectionRule {
 function SiteWizard({
   sites,
   templates,
+  siteTemplates,
   onOpenCompare,
   initial,
   onChange,
@@ -462,6 +483,7 @@ function SiteWizard({
 }: {
   sites: SiteIndexEntry[];
   templates: TemplateIndexEntry[];
+  siteTemplates: SiteTemplateOption[];
   onOpenCompare: (base: string, head: string) => void;
   initial: SiteDraftState;
   onChange: (draft: SiteDraftState) => void;
@@ -480,13 +502,26 @@ function SiteWizard({
   const [id, setId] = useState(initial.id);
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description);
-  const [templateSite, setTemplateSite] = useState(initial.templateSite || sites.find((item) => item.id === "site2")?.id || sites[0]?.id || "");
+  const [templateSite, setTemplateSite] = useState(
+    initial.templateSite || sites.find((item) => item.id === "site2")?.id || sites[0]?.id || siteTemplates[0]?.id || "",
+  );
+  useEffect(() => {
+    // Repo de datos vacío: en cuanto llegan las plantillas, se elige la primera.
+    // También si el borrador apunta a un sitio que no existe en este repositorio.
+    const known = sites.some((item) => item.id === templateSite) || siteTemplates.some((item) => item.id === templateSite);
+    if (known || (!sites.length && !siteTemplates.length)) return;
+    const fallback = sites.find((item) => item.id === "site2")?.id || sites[0]?.id || siteTemplates[0]?.id;
+    if (fallback && fallback !== templateSite) setTemplateSite(fallback);
+  }, [templateSite, sites, siteTemplates]);
   const [infraRange, setInfraRange] = useState(initial.infraRange);
   const [vlanOffset, setVlanOffset] = useState(initial.vlanOffset);
   const [templateRef, setTemplateRef] = useState(initial.templateRef);
   const [clusterName, setClusterName] = useState(initial.clusterName);
   const [workers, setWorkers] = useState(initial.workers);
-  const [dci, setDci] = useState(initial.dci);
+  const [dciWanted, setDci] = useState(initial.dci);
+  // Sin otros sitios en el repo de datos no hay contra quién levantar el DCI.
+  const dciAvailable = sites.length > 0;
+  const dci = dciWanted && dciAvailable;
   const [preview, setPreview] = useState<WizardPreview | null>(initial.preview);
   const [commit, setCommit] = useState<WizardCommit | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -623,7 +658,7 @@ function SiteWizard({
     infra_range: infraRange,
     vlan_offset: vlanOffset,
     dci,
-    dci_peer: "site1",
+    dci_peer: sites.find((item) => item.id === "site1")?.id ?? sites[0]?.id ?? "",
     clusters: [{ name: clusterName, template_ref: templateRef, workers, role: "worker" }],
     accept_warnings: acceptWarnings,
   };
@@ -742,6 +777,7 @@ function SiteWizard({
                     <option key={`${item.site}:${item.name}`} value={item.name}>
                       {item.scope === "site" ? `${item.site}/` : "global/"}
                       {item.name}
+                      {item.library ? " (biblioteca ISoT: se copia al repo)" : ""}
                     </option>
                   ))}
                 </select>
@@ -785,11 +821,24 @@ function SiteWizard({
             <label>
               Sitio plantilla
               <select value={templateSite} onChange={(event) => setTemplateSite(event.target.value)} id="wizard-site-template">
-                {sites.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
+                {sites.length ? (
+                  <optgroup label="Sitios del repositorio">
+                    {sites.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
+                {siteTemplates.length ? (
+                  <optgroup label="Plantillas">
+                    {siteTemplates.map((item) => (
+                      <option key={item.id} value={item.id} title={item.description ?? undefined}>
+                        {item.name} ({item.source === "repo" ? "site-templates/ del repo" : "ISoT"})
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
               </select>
             </label>
             <label>
@@ -950,8 +999,15 @@ function SiteWizard({
         ) : null}
         {step === 5 ? (
           <label className="check-row">
-            <input type="checkbox" checked={dci} onChange={(event) => setDci(event.target.checked)} /> Enlace DCI
-            (address_space dci-overlay)
+            <input
+              type="checkbox"
+              id="wizard-site-dci"
+              checked={dci}
+              disabled={!dciAvailable}
+              onChange={(event) => setDci(event.target.checked)}
+            />{" "}
+            Enlace DCI (address_space dci-overlay)
+            {dciAvailable ? null : <span className="muted"> · no hay otros sitios en el repositorio</span>}
           </label>
         ) : null}
         <div className="wizard-actions">
@@ -1442,6 +1498,13 @@ function CommitBanner({
       <button type="button" className="text-link" onClick={() => onOpenCompare(commit.base, commit.branch)}>
         Abrir Comparar
       </button>
+      {commit.push ? (
+        <span className={commit.push.ok ? "wizard-push ok" : "wizard-push error"} id="wizard-push-result">
+          {commit.push.ok
+            ? ` Publicada en ${commit.push.remote}.`
+            : ` No se pudo publicar en ${commit.push.remote}: ${commit.push.message || "git push falló"}`}
+        </span>
+      ) : null}
     </div>
   );
 }

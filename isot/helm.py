@@ -15,6 +15,9 @@ from typing import Any
 import yaml
 
 from isot.inventory import (
+    abs_path,
+    is_library_rel,
+    rel_path as inventory_rel_path,
     GLOBAL_SITE,
     load_yaml,
     parse_ref,
@@ -244,8 +247,8 @@ def cluster_values_diff(
     site = str(cluster.get("_site") or "")
     parsed = parse_ref(str(cluster.get("template_ref") or ""), site or GLOBAL_SITE)
     t_site, t_name = parsed if parsed else (GLOBAL_SITE, str(cluster.get("template_ref") or ""))
-    rel_path = template_path.relative_to(repo_root).as_posix()
-    if rel_path.startswith("cluster-templates/"):
+    rel_path = inventory_rel_path(template_path, repo_root)
+    if rel_path.startswith("cluster-templates/") or is_library_rel(rel_path):
         t_site = GLOBAL_SITE
     elif rel_path.startswith("sites/"):
         t_site = rel_path.split("/", 2)[1]
@@ -269,7 +272,7 @@ def collect_chart_issues(
 
     for doc in templates:
         rel = str(doc.get("_path") or "")
-        path = repo_root / rel
+        path = abs_path(repo_root, rel)
         charts = charts_from_doc(doc)
         names = [item["name"] for item in charts]
         dupes = {name for name in names if names.count(name) > 1}
@@ -308,7 +311,7 @@ def collect_chart_issues(
         expected = resolve_template_path(repo_root, sites, site_id, str(template_ref))
         if expected is None:
             continue
-        trel = expected.relative_to(repo_root).as_posix()
+        trel = inventory_rel_path(expected, repo_root)
         tdoc = templates_by_path.get(trel)
         if tdoc is None:
             try:

@@ -11,7 +11,7 @@ from typing import Any, Iterable, Iterator
 
 import yaml
 
-from isot.paths import CATALOG_NAME
+from isot.paths import CATALOG_NAME, bundled_templates_dir
 
 DEVICE_INDEX_NAME = "_device_index.json"
 CLUSTER_INDEX_NAME = "_cluster_index.json"
@@ -21,6 +21,94 @@ YAML_SUFFIXES = {".yaml", ".yml"}
 GLOBAL_SITE = "global"
 TEMPLATE_FILENAME = "template.yaml"
 VALUES_DIRNAME = "values"
+LIBRARY_PREFIX = "@"
+BUNDLED_LAYER = "@isot"
+
+# Biblioteca de cluster-templates fuera del repo de datos: carpetas `templates:`
+# de la configuración y, al final, las que trae la herramienta. Solo se usan para
+# resolver un template_ref que el repo de datos no tiene; sus rutas se exponen
+# como `@isot/<nombre>/template.yaml` o `@templatesN/...`.
+_LIBRARY: list[tuple[str, Path]] | None = None
+
+
+def set_template_library(extra: Iterable[Path] = ()) -> None:
+    global _LIBRARY
+    layers: list[tuple[str, Path]] = []
+    for index, folder in enumerate(extra, start=1):
+        nested = Path(folder) / "cluster-templates"
+        layers.append((f"@templates{index}", nested if nested.is_dir() else Path(folder)))
+    layers.append((BUNDLED_LAYER, bundled_templates_dir() / "cluster-templates"))
+    _LIBRARY = layers
+
+
+def template_library() -> list[tuple[str, Path]]:
+    if _LIBRARY is None:
+        set_template_library()
+    return list(_LIBRARY or [])
+
+
+def find_library_template(name: str) -> Path | None:
+    for _prefix, folder in template_library():
+        found = find_template_file(folder, name)
+        if found is not None:
+            return found
+    return None
+
+
+def library_template_files() -> list[tuple[str, Path]]:
+    """Todos los templates de la biblioteca (el primero de cada nombre gana)."""
+    seen: set[str] = set()
+    out: list[tuple[str, Path]] = []
+    for prefix, folder in template_library():
+        for path in iter_template_files(folder):
+            stem = template_stem(path)
+            if stem in seen:
+                continue
+            seen.add(stem)
+            out.append((prefix, path))
+    return out
+
+
+def is_library_rel(rel: str | None) -> bool:
+    return bool(rel) and str(rel).startswith(LIBRARY_PREFIX)
+
+
+def library_roots() -> list[Path]:
+    return [folder for _prefix, folder in template_library()]
+
+
+def rel_path(path: Path, repo_root: Path) -> str:
+    """Ruta relativa al repo de datos, o `@capa/...` si es de la biblioteca."""
+    for candidate in (path, path.resolve()):
+        for base in (repo_root, repo_root.resolve()):
+            try:
+                return candidate.relative_to(base).as_posix()
+            except ValueError:
+                continue
+    resolved = path.resolve()
+    for prefix, folder in template_library():
+        try:
+            return f"{prefix}/{resolved.relative_to(folder.resolve()).as_posix()}"
+        except ValueError:
+            continue
+    raise ValueError(f"{path} no está en el repositorio de datos ni en la biblioteca de templates")
+
+
+def abs_path(repo_root: Path, rel: str) -> Path:
+    """Inversa de rel_path."""
+    text = str(rel)
+    if is_library_rel(text):
+        prefix, _, rest = text.partition("/")
+        for layer, folder in template_library():
+            if layer == prefix:
+                return folder / rest
+        return repo_root / "__missing_library__" / rest
+    return repo_root / text
+
+
+def find_global_template(repo_root: Path, name: str) -> Path | None:
+    """Template global: el del repo de datos tiene prioridad sobre la biblioteca."""
+    return find_template_file(repo_root / "cluster-templates", name) or find_library_template(name)
 
 
 def parse_ref(value: str | None, default_site: str) -> tuple[str, str] | None:
@@ -389,7 +477,7 @@ def load_docs(
         if not isinstance(data, dict):
             data = {"_raw": data}
         data = dict(data)
-        data["_path"] = path.relative_to(repo_root).as_posix()
+        data["_path"] = rel_path(path, repo_root)
         data["_stem"] = template_stem(path) if files is not None else path.stem
         data["_site"] = site_id
         docs.append(data)
@@ -404,7 +492,14 @@ def load_clusters(repo_root: Path, sites: list[Site] | None = None) -> list[dict
     return docs
 
 
-def load_templates(repo_root: Path, sites: list[Site] | None = None) -> list[dict[str, Any]]:
+def load_templates(
+    repo_root: Path,
+    sites: list[Site] | None = None,
+    *,
+    include_library: bool = True,
+) -> list[dict[str, Any]]:
+    """Templates del repo de datos y, si se piden, los de la biblioteca que algún
+    clúster referencia sin que el repo los tenga (marcados con `_library`)."""
     sites = sites if sites is not None else load_catalog(repo_root)[0]
     global_dir = repo_root / "cluster-templates"
     docs = load_docs(global_dir, repo_root, GLOBAL_SITE, files=iter_template_files(global_dir))
@@ -417,7 +512,34 @@ def load_templates(repo_root: Path, sites: list[Site] | None = None) -> list[dic
                 files=iter_template_files(site.templates_dir),
             )
         )
+    if include_library:
+        docs.extend(referenced_library_templates(repo_root, sites))
     return docs
+
+
+def referenced_library_templates(repo_root: Path, sites: list[Site]) -> list[dict[str, Any]]:
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for site in sites:
+        for path in iter_yaml_files(site.clusters_dir):
+            try:
+                data = load_yaml(path)
+            except yaml.YAMLError:
+                continue
+            ref = data.get("template_ref") if isinstance(data, dict) else None
+            if not ref:
+                continue
+            found = resolve_template_path(repo_root, sites, site.id, str(ref))
+            if found is None:
+                continue
+            rel = rel_path(found, repo_root)
+            if not is_library_rel(rel) or rel in seen:
+                continue
+            seen.add(rel)
+            for doc in load_docs(found.parent, repo_root, GLOBAL_SITE, files=[found]):
+                doc["_library"] = rel.partition("/")[0]
+                out.append(doc)
+    return out
 
 
 def load_topology(site: Site) -> dict[str, Any]:
@@ -444,7 +566,7 @@ def template_file(repo_root: Path, site: Site | None, template_ref: str) -> Path
     if parsed:
         ref_site, name = parsed
         if ref_site == GLOBAL_SITE:
-            return find_template_file(repo_root / "cluster-templates", name)
+            return find_global_template(repo_root, name)
         if site is None or ref_site != site.id:
             return None
         target_site = site
@@ -452,7 +574,7 @@ def template_file(repo_root: Path, site: Site | None, template_ref: str) -> Path
         local = find_template_file(target_site.templates_dir, name)
         if local is not None:
             return local
-    return find_template_file(repo_root / "cluster-templates", name)
+    return find_global_template(repo_root, name)
 
 
 def resolve_template_path(
@@ -466,7 +588,7 @@ def resolve_template_path(
         return None
     ref_site, name = parsed
     if ref_site == GLOBAL_SITE:
-        return find_template_file(repo_root / "cluster-templates", name)
+        return find_global_template(repo_root, name)
     if ref_site != from_site:
         other = site_by_id(sites, ref_site)
         if other is None:
@@ -474,6 +596,6 @@ def resolve_template_path(
         candidate = find_template_file(other.templates_dir, name)
         if candidate is not None:
             return candidate
-        return find_template_file(repo_root / "cluster-templates", name)
+        return find_global_template(repo_root, name)
     here = site_by_id(sites, from_site)
     return template_file(repo_root, here, name)

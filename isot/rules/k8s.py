@@ -12,7 +12,7 @@ from typing import Any
 import yaml
 
 from isot.helm import charts_from_doc, load_chart_values
-from isot.inventory import Device
+from isot.inventory import Device, abs_path
 from isot.rules.context import RuleContext
 from isot.rules.model import Finding
 from isot.rules.registry import RULES, emit, rule
@@ -157,7 +157,7 @@ def _cluster_values(ctx: RuleContext, cluster: dict[str, Any]) -> dict[str, Any]
             merged.setdefault("cniConfig", {})
             if isinstance(merged["cniConfig"], dict):
                 merged["cniConfig"].update(defaults)
-        path = ctx.root / str(template.get("_path") or "")
+        path = abs_path(ctx.root, str(template.get("_path") or ""))
         for chart in charts_from_doc(template):
             values, _source, _rel, error = load_chart_values(path, chart)
             if error or not isinstance(values, dict):

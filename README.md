@@ -2,15 +2,174 @@
 
 Inventario de infraestructura con enfoque **Git-as-a-Database**: el estado se
 declara en YAML/JSON versionados, sin base de datos ni DCIM físico. El
-repositorio modela **varios sitios lógicos** (datacenters) y un catálogo de
-cluster-templates compartido. Los datos de ejemplo son ficticios y
+repositorio de datos modela **varios sitios lógicos** (datacenters) y un
+catálogo de cluster-templates compartido. Los datos de ejemplo son ficticios y
 anonimizados (SITE1 / SITE2, rangos RFC1918 y de documentación).
 
 ![Vista global: SITE1, SITE2 y el enlace DCI](docs/images/global-sites.png)
 
 *Vista global: dos sitios de ejemplo unidos por el enlace DCI (VLAN 4094).*
 
+ISoT es un **visualizador y editor de un repositorio de datos** que ya
+tienes clonado: no lee el inventario de su propia carpeta. Este repo trae la
+herramienta, plantillas (`templates/`) y un inventario de ejemplo
+(`examples/demo-repo/`); tu inventario vive en su propio repositorio, con sus
+propios permisos, revisiones y CI.
+
+## Configuración
+
+El repositorio de datos se declara en un YAML. Orden de búsqueda:
+`--config RUTA` → `$ISOT_CONFIG` → `./isot.yaml` → `~/.config/isot/config.yaml`.
+`--repo DIR` (o `ISOT_ROOT`) fuerza un repositorio sin archivo de
+configuración. `isot.yaml` está en `.gitignore`; la plantilla comentada es
+[`isot.example.yaml`](isot.example.yaml):
+
+```yaml
+version: 1
+data_repo:
+  path: ~/repos/mi-inventario   # clon local (admite ~ y rutas relativas al archivo)
+  remote: origin                # solo informativo: URL mostrada sin credenciales
+  branch: main                  # rama esperada; la UI avisa si el clon está en otra
+templates: []                   # carpetas extra de cluster-templates (opcional)
+edit:
+  enabled: false                # wizards (también --edit o ISOT_EDIT=1)
+  push: false                   # true: git push -u de la rama wizard/… con tus credenciales
+  push_remote: origin
+ui:
+  title: null
+```
+
+Para varios repositorios se usa la forma general `repos: [{id, name, path,
+remote?, branch?}]` más `default_repo`; `data_repo` es la abreviatura de una
+lista de un elemento (id = nombre de la carpeta). Hoy se sirve
+`default_repo`; la cabecera y `/api/config` ya exponen `repos[]` y
+`active_repo`.
+
+El archivo se valida al arrancar con mensajes concretos (clave desconocida,
+`path` ausente o inexistente, carpeta que no parece un repositorio de datos,
+`id` duplicado, `default_repo` desconocido). `isot config` muestra qué
+archivo y qué repositorio se están usando.
+
+Resolución de `template_ref`: `cluster-templates/` del repo de datos >
+carpetas de `templates:` (en orden) > `templates/cluster-templates/` de ISoT.
+Solo se agregan los templates de biblioteca que algún clúster referencia y
+el repo no tiene; no entran en el `_template_index.json` del repo de datos.
+
+Sin configuración, `serve.sh`, `isot web`, el validador y el indexer no
+fallan con una traza: imprimen
+
+```
+No hay repositorio de datos configurado. Copia isot.example.yaml a isot.yaml y define data_repo.path, o ejecuta `isot init`.
+```
+
+y la UI muestra una pantalla de bienvenida con las tres opciones:
+
+![Pantalla de bienvenida sin repositorio configurado](docs/images/onboarding.png)
+
+Con un repositorio configurado, la cabecera muestra cuál está activo
+(carpeta, rama, SHA corto de HEAD y «● sin commit» si hay cambios sin
+confirmar; el tooltip trae ruta, remote sin credenciales y origen de la
+configuración). Lo mismo expone `GET /api/config` (`/api/health` incluye
+`configured` y el nombre del repo):
+
+![Cabecera con el repositorio de datos activo](docs/images/data-repo-header.png)
+
+## Empezar desde cero
+
+```bash
+pip install -e .                                   # en el clon de ISoT
+isot init --path ~/repos/mi-inventario             # ya tengo un repo: escribe isot.yaml
+isot init --scaffold ~/repos/mi-inventario --edit  # repo vacío + isot.yaml
+./scripts/serve.sh                                 # http://localhost:8000
+```
+
+`--scaffold` crea `sites.yaml` (`sites: []`), `sites/`, `cluster-templates/`,
+`site-templates/edge/` (copia de `templates/sites/edge`), un README, un
+`.gitignore` y `.github/workflows/isot-validate.yml`; regenera índices, hace
+`git init` y un commit inicial con **tu** identidad git (si no la tienes
+configurada, deja los archivos en stage y lo dice). El primer sitio se crea
+con el wizard **Nuevo sitio**: con el repo vacío ofrece las plantillas de
+sitio (`site-templates/` del repo > `templates/sites/` de ISoT) y copia al
+repo el cluster-template de biblioteca que use. `--site-template cloud`
+elige la otra plantilla; `--output` cambia dónde se escribe `isot.yaml`.
+
+## Demo
+
+```bash
+isot demo                        # copia examples/demo-repo a un directorio temporal y lo sirve
+isot demo --dir ~/TMP/isot-demo --no-serve   # solo prepararla, luego apuntar isot.yaml ahí
+```
+
+La copia tiene su propio `git init` (commit «Inventario de ejemplo ISoT») y
+la rama `demo/diff-example` para **Comparar**: `cniConfig.mtu` 1440 → 1500,
+VLAN 2099 `LAB_NET` en SITE1 y se quita `site1-jump001`. Es reproducible con
+`isot demo-diff DIR` o `./scripts/demo-diff-example.sh DIR`. La demo se sirve
+en modo edición; los wizards crean ramas en la copia, nunca en este repo.
+
+`examples/demo-repo/` también se puede usar directamente con
+`data_repo.path`, pero al estar dentro del clon de ISoT no es la raíz de un
+repositorio git: Comparar y los wizards se desactivan para no tocar el repo
+de la herramienta. Para eso está `isot demo`.
+
+## Modelo de seguridad
+
+- ISoT **no guarda credenciales**, no clona con tokens y no tiene usuarios
+  propios. Lee el clon local con los permisos del usuario que lo ejecuta.
+- Toda operación git (`rev-parse`, `archive`, `log`, ramas `wizard/…`,
+  commit y el push opcional) corre en el repositorio de datos con tu
+  `git config` y tu credential helper / ssh-agent. El push está apagado por
+  defecto, solo publica ramas `wizard/*` y corre con
+  `GIT_TERMINAL_PROMPT=0` (nunca pide contraseñas).
+- Quién puede leer, aprobar o fusionar cambios lo decide el repositorio de
+  datos (permisos, ramas protegidas, revisiones, CI). ISoT nunca escribe en
+  `main` ni en la rama de trabajo.
+- La API sirve solo archivos dentro del repositorio de datos y de las
+  carpetas de templates configuradas. `/api/config` y la cabecera muestran
+  la URL del remote **sin** usuario ni token.
+- Escucha en `0.0.0.0:8000` con `serve.sh`; en una máquina compartida usa
+  `isot web --host 127.0.0.1`.
+- `isot leakcheck` es un chequeo del repo de la herramienta (que no se
+  cuelen datos reales en ejemplos); para un repo de datos es opcional:
+  `isot leakcheck --repo DIR --patterns MIS_PATRONES.json`.
+
+## CI del repositorio de datos
+
+Workflow reutilizable (solo `contents: read`, sin secretos):
+
+```yaml
+# .github/workflows/isot-validate.yml en el repo de datos
+on: [push, pull_request]
+jobs:
+  isot:
+    uses: ghormazabal/ISOT/.github/workflows/validate-data-repo.yml@main
+    with:
+      strict: false
+```
+
+O la acción compuesta en un job propio:
+`uses: ghormazabal/ISOT/.github/actions/validate@main` (`repo`, `isot-ref`,
+`strict`, `install`). Instala ISoT desde un checkout (para tener
+`templates/`) y corre `isot-validate --repo` e `isot-index --check --repo`.
+Hooks de [pre-commit](https://pre-commit.com): `isot-index` e
+`isot-validate` en [`.pre-commit-hooks.yaml`](.pre-commit-hooks.yaml).
+
 ## Arquitectura
+
+Herramienta (este repositorio):
+
+```
+.
+├── isot/                               # Validador, indexer, leakcheck, API, CLI `isot`
+├── web/                                # SPA React (Vite + TypeScript)
+├── templates/
+│   ├── cluster-templates/<nombre>/     # Biblioteca de cluster-templates (fallback)
+│   └── sites/{edge,cloud}/             # Plantillas de sitio del wizard «Nuevo sitio»
+├── examples/demo-repo/                 # Inventario de ejemplo autocontenido
+├── isot.example.yaml                   # Plantilla de configuración (isot.yaml va en .gitignore)
+└── .github/{actions/validate,workflows/validate-data-repo.yml}  # CI para repos de datos
+```
+
+Repositorio de datos (el tuyo; `examples/demo-repo/` tiene esta forma):
 
 ```
 .
@@ -27,8 +186,7 @@ anonimizados (SITE1 / SITE2, rangos RFC1918 y de documentación).
 │   ├── template.yaml                   # distro, CNI, node pools, charts[]
 │   ├── values/<release>.yaml           # Helm values (lazy-load)
 │   └── _template_index.json            # (en cluster-templates/)
-├── isot/                               # Validador, indexer, leakcheck, API
-└── web/                                # SPA React (Vite + TypeScript)
+└── site-templates/<nombre>/            # Opcional: plantillas de sitio propias
 ```
 
 Tres patrones:
@@ -67,7 +225,7 @@ FastAPI + Vite/React/TypeScript + React Flow. El arranque pide
 
 ## Inventario de ejemplo
 
-Dos sitios ficticios. SITE1 reutiliza una topología de nube privada (VLANs
+`examples/demo-repo/`: dos sitios ficticios. SITE1 reutiliza una topología de nube privada (VLANs
 2000–2011, RKE2, Calico, Multus, MetalLB, Ceph). SITE2 es un edge reducido
 que **comparte** el template `rke2-rancher-hybrid-calico` y un enlace DCI
 (`192.0.2.0/24`, VLAN 4094, address_space `dci-overlay`). Las VLANs 2002/2003
@@ -124,10 +282,12 @@ válido. El backend resuelve cada ref con `git rev-parse --verify` y
 devuelve el SHA en `base.sha` / `head.sha`. Lee los árboles con `git archive`
 (sin checkout).
 
-Demo con cambios ficticios (`demo/diff-example` vs el tip de esta rama):
+Demo con cambios ficticios (`demo/diff-example` vs `main` del repo demo,
+ver [Demo](#demo)):
 
 ```bash
-# Comparar → Base HEAD de esta rama → Head demo/diff-example
+isot demo
+# Comparar → Base main → Head demo/diff-example
 # VLAN 2099 LAB / LAB_NET, se quita site1-jump001, cniConfig.mtu 1440 → 1500
 ```
 
@@ -158,7 +318,7 @@ extremos (atenúa el resto). El panel **Detalle** muestra la vista
 La UI no escribe YAML hasta que confirmas. Para encender los wizards:
 
 ```bash
-ISOT_EDIT=1 ./scripts/serve.sh --edit
+ISOT_EDIT=1 ./scripts/serve.sh --edit   # o edit.enabled: true en isot.yaml
 ```
 
 Aparece el botón **Editar** (ausente en solo lectura). Es un toggle: entra al
@@ -167,9 +327,12 @@ mismo sitio**.
 
 ### Flujo Git
 
-El preview corre en memoria (nada se escribe). **Confirmar** crea una rama
-`wizard/<descripcion>` desde HEAD, escribe YAML + índices, corre el validador
-y hace commit. Si el validador falla: `git reset --hard`, se borra la rama y
+El preview corre en memoria (nada se escribe). **Confirmar** crea, en el
+repositorio de datos, una rama `wizard/<descripcion>` desde HEAD, escribe
+YAML + índices, corre el validador y hace commit con tu identidad git
+(`user.name` / `user.email`; si no hay, «ISoT Wizard»). Con `edit.push: true`
+la rama se publica con `git push -u` y tus credenciales; si el push falla el
+commit queda local y la UI lo informa. Si el validador falla: `git reset --hard`, se borra la rama y
 no queda rastro. Nunca escribe en `main` ni en la rama de trabajo. Después
 abre **Comparar** con base = la rama actual y head = `wizard/…` (verde
 agregado, amarillo afectado).
@@ -305,9 +468,9 @@ en el YAML del clúster, device o `topology/index.yaml`. Sin `reason` el
 override se ignora (`RULE-OVR-001`).
 
 ```bash
-python -m isot.validator              # exit ≠ 0 solo con errores
-python -m isot.validator --strict     # también falla por warnings
-python -m isot.validator --format json
+isot validate                         # exit ≠ 0 solo con errores (2: sin repo configurado)
+isot validate --strict                # también falla por warnings
+isot validate --format json --repo ~/repos/mi-inventario
 ```
 
 En GitHub Actions el validador emite annotations para avisos e infos.
@@ -378,7 +541,7 @@ Clúster vs template: heredado, sobrescrito y efectivo, filtrado por `cniConfig`
 
 ![Modo Comparar en el grafo SITE1 vs demo](docs/images/compare-graph.png)
 
-Diff gráfico entre el tip de esta rama y `demo/diff-example`: SITE1 en amarillo con badge `+2 −1`.
+Diff gráfico entre `main` del repo demo y `demo/diff-example`: SITE1 en amarillo con badge `+2 −1`.
 
 ### Comparar (values)
 
@@ -389,23 +552,32 @@ Diff gráfico entre el tip de esta rama y `demo/diff-example`: SITE1 en amarillo
 ## Cómo usarlo
 
 ```bash
-./scripts/serve.sh          # http://localhost:8000  (solo lectura)
+./scripts/serve.sh          # http://localhost:8000  (solo lectura; repo de isot.yaml)
 ISOT_EDIT=1 ./scripts/serve.sh --edit
-# o: docker compose up --build
+./scripts/serve.sh --repo ~/repos/mi-inventario --config otra.yaml
+# o: ISOT_DATA_REPO=~/repos/mi-inventario docker compose up --build
 ```
 
 Desarrollo: `./scripts/dev.sh` (API :8000, Vite :5173).
 
 ```bash
-python -m isot.validator
-python -m isot.indexer          # sitios + devices + clusters + templates
-python -m isot.indexer --check
+isot config                                 # qué configuración y repo se usan
+isot validate  [--repo DIR] [--config F]    # = python -m isot.validator
+isot index     [--repo DIR] [--check]       # sitios + devices + clusters + templates
+isot leakcheck                              # repo de la herramienta
+```
+
+CI de este repo (contra el inventario de ejemplo):
+
+```bash
+python -m isot.validator --repo examples/demo-repo
+python -m isot.indexer --check --repo examples/demo-repo
 python -m isot.leakcheck
 pytest
 cd web && npm ci && npm test && npm run build
 ```
 
-API de solo lectura: `/api/sites`, `/api/sites/{id}/devices`,
+API de solo lectura: `/api/health`, `/api/config`, `/api/sites`, `/api/sites/{id}/devices`,
 `/api/sites/{id}/clusters`, `/api/sites/{id}/graph?view=network|kubernetes`,
 `/api/graph?view=global`, `/api/templates`, detalle bajo demanda,
 `/api/templates/{name}/values/{release}` (lazy),

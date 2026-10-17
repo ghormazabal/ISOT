@@ -2,6 +2,7 @@ import type {
   ChartValues,
   ClusterDetail,
   ClusterIndexEntry,
+  ConfigInfo,
   ConnectionPolicy,
   DeviceDetail,
   DeviceIndexEntry,
@@ -19,6 +20,7 @@ import type {
   FindingsPayload,
   WizardCommit,
   WizardPreview,
+  WizardStatus,
 } from "./types";
 
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
@@ -102,7 +104,8 @@ export const api = {
   },
   linkPreview: (source: string, target: string, files: Array<{ path: string; content: string }>) =>
     postJSON<LinkResponse>("/api/link/preview", { source, target, files }),
-  wizardStatus: () => fetchJSON<{ edit: boolean }>("/api/wizard/status"),
+  wizardStatus: () => fetchJSON<WizardStatus>("/api/wizard/status"),
+  config: () => fetchJSON<ConfigInfo>("/api/config"),
   wizardCablingDefaults: (architecture: string, extra?: Record<string, string | number>) => {
     const params = new URLSearchParams({ architecture });
     if (extra) {

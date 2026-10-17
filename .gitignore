@@ -13,6 +13,9 @@ build/
 venv/
 .env
 
+# Configuración local (rutas de tu máquina al repo de datos)
+isot.yaml
+
 # Frontend
 web/node_modules/
 web/dist/

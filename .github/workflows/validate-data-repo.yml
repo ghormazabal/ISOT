@@ -1,0 +1,43 @@
+# Workflow reutilizable para repositorios de datos ISoT. En el repo de datos:
+#
+#   jobs:
+#     isot:
+#       uses: ghormazabal/ISOT/.github/workflows/validate-data-repo.yml@main
+#       with:
+#         strict: false
+#
+# Solo lee el repo de datos (permissions: contents: read). No necesita secretos.
+name: Validar repositorio de datos ISoT
+
+on:
+  workflow_call:
+    inputs:
+      repo:
+        description: Ruta del repositorio de datos dentro del checkout.
+        type: string
+        default: "."
+      isot-ref:
+        description: Versión de ISoT (rama, tag o SHA).
+        type: string
+        default: main
+      strict:
+        description: Fallar también con avisos.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validador ISoT
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del repo de datos
+        uses: actions/checkout@v4
+      - name: Validar
+        uses: ghormazabal/ISOT/.github/actions/validate@main
+        with:
+          repo: ${{ inputs.repo }}
+          isot-ref: ${{ inputs.isot-ref }}
+          strict: ${{ inputs.strict && 'true' || 'false' }}

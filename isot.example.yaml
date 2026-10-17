@@ -1,0 +1,50 @@
+# Configuración de ISoT. Copia este archivo a isot.yaml (está en .gitignore)
+# o a ~/.config/isot/config.yaml, o genera uno con `isot init`.
+#
+# ISoT es un visualizador y editor del repositorio de datos que tú ya tienes
+# clonado: no guarda credenciales ni clona con tokens. Lee el clon local con tus
+# permisos y todas las operaciones git (refs, diff, ramas wizard/…, push
+# opcional) usan tu git config y tu credential helper. Quién puede leer o
+# aprobar cambios lo decide el propio repositorio de datos.
+#
+# Orden de búsqueda: --config RUTA, $ISOT_CONFIG, ./isot.yaml,
+# ~/.config/isot/config.yaml. `--repo DIR` fuerza un repositorio sin archivo.
+version: 1
+
+data_repo:
+  # Obligatorio: clon local del repositorio de datos (sites.yaml, sites/,
+  # cluster-templates/). Admite ~ y rutas relativas a este archivo.
+  path: ~/repos/mi-inventario
+  # Opcionales, solo informativos (cabecera de la UI y /api/config):
+  remote: origin        # remote git cuya URL se muestra (sin credenciales)
+  branch: main          # rama esperada; la UI avisa si el clon está en otra
+
+# Forma general (varios repositorios; hoy se usa default_repo y la UI muestra
+# cuál está activo). Usa data_repo O repos, no ambos: data_repo equivale a una
+# lista de un elemento con id = nombre de la carpeta.
+# repos:
+#   - id: norte
+#     name: Inventario norte
+#     path: ~/repos/inventario-norte
+#     branch: main
+#   - id: sur
+#     path: ~/repos/inventario-sur
+# default_repo: norte
+
+# Opcional: carpetas extra de cluster-templates (cada una con <nombre>/template.yaml,
+# o con una subcarpeta cluster-templates/). Orden de prioridad para un template_ref:
+# cluster-templates/ del repo de datos > estas carpetas (en orden) > templates/ de ISoT.
+templates: []
+#  - ~/repos/plantillas-k8s
+
+edit:
+  # Wizards de alta (devices y sitios). También: `isot web --edit` o ISOT_EDIT=1.
+  enabled: false
+  # true: tras confirmar, la rama wizard/… se publica con `git push -u` usando
+  # tus credenciales (credential helper, ssh-agent). Por defecto queda local.
+  push: false
+  push_remote: origin
+
+ui:
+  # Título de la cabecera (por defecto «ISoT»).
+  title: null

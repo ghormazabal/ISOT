@@ -5,6 +5,7 @@ import { CompareValues } from "./components/CompareValues";
 import { DetailPanel } from "./components/DetailPanel";
 import { FindingsBell, FindingsPanel } from "./components/FindingsPanel";
 import { LinkDetailView } from "./components/LinkDetail";
+import { DataRepoBadge } from "./components/DataRepoBadge";
 import { RefPicker, effectiveRef } from "./components/RefPicker";
 import { Splitter, useMediaQuery, usePanelSize, useViewport } from "./components/Splitter";
 import { Sidebar } from "./components/Sidebar";
@@ -16,6 +17,7 @@ import { api } from "./api";
 import { countFindings, scopeFindings, selectionFromFinding } from "./findings";
 import { appPanelSpecs, clampSize, layoutKey } from "./resize";
 import { edgeSelection, fallbackDetail, relatedFindings } from "./links";
+import { mergeLibraryTemplates } from "./dataRepo";
 import {
   applyEditToggle,
   defaultBrowse,
@@ -29,6 +31,8 @@ import {
   type WizardDraft,
 } from "./wizardDraft";
 import type {
+  ConfigInfo,
+  WizardStatus,
   AppView,
   CanvasMode,
   ClusterDetail,
@@ -59,7 +63,13 @@ import type {
 
 const savedSession = loadSession();
 
-export default function App() {
+type AppProps = {
+  /** Repositorio de datos activo (de /api/config); se refresca periódicamente. */
+  config?: Extract<ConfigInfo, { configured: true }> | null;
+  onRefreshConfig?: () => void;
+};
+
+export default function App({ config = null, onRefreshConfig }: AppProps = {}) {
   const [view, setView] = useState<AppView>(() => (savedSession?.editing ? "wizards" : savedSession?.lastBrowse.view ?? "network"));
   const [siteFilter, setSiteFilter] = useState<SiteFilter>(() => savedSession?.lastBrowse.siteFilter ?? "all");
   const [lastBrowse, setLastBrowse] = useState<BrowseSnapshot>(() => savedSession?.lastBrowse ?? defaultBrowse());
@@ -84,6 +94,7 @@ export default function App() {
   const [linkLoading, setLinkLoading] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
+  const [wizardInfo, setWizardInfo] = useState<WizardStatus | null>(null);
   const [canvas, setCanvas] = useState<CanvasMode>("graph");
   const [compare, setCompare] = useState(() => Boolean(savedSession && !savedSession.editing && savedSession.lastBrowse.compare));
   const [refs, setRefs] = useState<RefsPayload | null>(null);
@@ -189,6 +200,7 @@ export default function App() {
           setHeadBranch(pick.head);
         }
         if (findingsPayload) setFindings(findingsPayload);
+        setWizardInfo(wizard);
         const canEdit = Boolean(wizard?.edit);
         setEditEnabled(canEdit);
         if (!canEdit && view === "wizards") {
@@ -434,6 +446,8 @@ export default function App() {
 
   // Sitio al que pertenecen la campana y el panel: el filtro de sitio o, en Editar,
   // el sitio del wizard activo. "all" = vista global agrupada por sitio.
+  // Wizard: templates del repo + los de la biblioteca de ISoT que el repo no tiene.
+  const wizardTemplates = mergeLibraryTemplates(templates, wizardInfo?.template_library ?? []);
   const findingsScope: string = (() => {
     if (view !== "wizards") return siteFilter;
     if (wizardDraft.mode === "device") return wizardDraft.device.site || "all";
@@ -624,7 +638,10 @@ export default function App() {
     >
       <header className="topbar" ref={topbarRef}>
         <div>
-          <p className="brand">ISoT</p>
+          <p className="brand">
+            {config?.ui.title || "ISoT"}
+            {config ? <DataRepoBadge info={config} /> : null}
+          </p>
           <p className="tagline">
             {siteFilter === "all"
               ? `${sites.length} sitios · vista global`
@@ -768,7 +785,9 @@ export default function App() {
           hidden={view !== "wizards"}
           sites={sites}
           clustersBySite={clustersBySite}
-          templates={templates}
+          templates={wizardTemplates}
+          siteTemplates={wizardInfo?.site_templates ?? []}
+          onAfterCommit={() => onRefreshConfig?.()}
           initialDraft={wizardDraft}
           onDraftChange={persistDraft}
           onClearDraft={clearDraft}

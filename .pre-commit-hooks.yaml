@@ -1,0 +1,20 @@
+# Hooks reutilizables para repositorios de datos ISoT:
+#
+#   repos:
+#     - repo: https://github.com/ghormazabal/ISOT
+#       rev: main
+#       hooks:
+#         - id: isot-index
+#         - id: isot-validate
+- id: isot-index
+  name: Regenerar índices ISoT
+  language: python
+  entry: isot-index --repo .
+  pass_filenames: false
+  files: '^(sites/|cluster-templates/|sites\.yaml)'
+- id: isot-validate
+  name: Validar inventario ISoT
+  language: python
+  entry: isot-validate --repo .
+  pass_filenames: false
+  files: '^(sites/|cluster-templates/|sites\.yaml)'

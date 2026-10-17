@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from isot.inventory import (
+    rel_path,
     AddressSpace,
     Device,
     Site,
@@ -48,7 +49,7 @@ class RuleContext:
         path = resolve_template_path(self.root, self.sites, site_id, str(ref))
         if path is None:
             return None
-        rel = path.relative_to(self.root).as_posix()
+        rel = rel_path(path, self.root)
         for doc in self.templates:
             if str(doc.get("_path")) == rel:
                 return doc

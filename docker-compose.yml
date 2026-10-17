@@ -4,7 +4,12 @@ services:
     ports:
       - "8000:8000"
     environment:
-      ISOT_ROOT: /app
+      # Clon local de tu repositorio de datos, montado en /data. Sin montaje,
+      # cambia ISOT_ROOT a /app/examples/demo-repo para ver la demo.
+      ISOT_ROOT: /data
+      ISOT_HOME: /app
+    volumes:
+      - ${ISOT_DATA_REPO:-./examples/demo-repo}:/data
     healthcheck:
       test:
         [

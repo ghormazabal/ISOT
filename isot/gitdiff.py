@@ -25,6 +25,7 @@ from isot.indexer import (
     build_template_index_all,
 )
 from isot.inventory import (
+    abs_path,
     load_catalog,
     load_clusters,
     load_devices,
@@ -61,9 +62,44 @@ def validate_ref(value: str) -> str:
     return text
 
 
+_TOPLEVEL_OK: set[str] = set()
+NOT_TOPLEVEL = (
+    "el repositorio de datos no es la raíz de un repo git "
+    "(ejecuta `git init` en él o apunta data_repo.path a la raíz del clon)"
+)
+
+
+def is_git_toplevel(repo: Path) -> bool:
+    """¿`repo` es la raíz de un repo git? Evita operar sobre un repo que lo contiene
+    (p.ej. la propia herramienta cuando se apunta a examples/demo-repo)."""
+    key = str(repo.resolve())
+    if key in _TOPLEVEL_OK:
+        return True
+    try:
+        proc = subprocess.run(
+            ["git", "-C", key, "rev-parse", "--show-toplevel"],
+            check=False,
+            capture_output=True,
+            timeout=GIT_TIMEOUT,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    if proc.returncode != 0:
+        return False
+    top = Path(proc.stdout.decode("utf-8", errors="replace").strip()).resolve()
+    if top == Path(key):
+        _TOPLEVEL_OK.add(key)
+        return True
+    return False
+
+
 def git(repo: Path, args: list[str], *, timeout: int = GIT_TIMEOUT) -> subprocess.CompletedProcess[bytes]:
+    """git sobre el repositorio de datos, con la configuración y credenciales del usuario."""
+    command = ["git", "-C", str(repo), *args]
+    if not is_git_toplevel(repo):
+        return subprocess.CompletedProcess(command, 128, b"", NOT_TOPLEVEL.encode("utf-8"))
     return subprocess.run(
-        ["git", "-C", str(repo), *args],
+        command,
         check=False,
         capture_output=True,
         timeout=timeout,
@@ -119,8 +155,14 @@ def list_commits(repo: Path, rev: str, *, limit: int = COMMIT_LOG_LIMIT) -> dict
 
 
 def list_refs(repo: Path) -> dict[str, Any]:
-    if not (repo / ".git").exists() and git(repo, ["rev-parse", "--is-inside-work-tree"]).returncode != 0:
-        raise RefError("el directorio no es un repositorio git")
+    if not is_git_toplevel(repo):
+        inside = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "--is-inside-work-tree"],
+            check=False,
+            capture_output=True,
+            timeout=GIT_TIMEOUT,
+        )
+        raise RefError(NOT_TOPLEVEL if inside.returncode == 0 else "el directorio no es un repositorio git")
     branches: list[dict[str, Any]] = []
     tags: list[dict[str, Any]] = []
     proc = git(
@@ -290,7 +332,7 @@ def snapshot_inventory(root: Path) -> dict[str, Any]:
         name = str(tmpl.get("template_name") or tmpl.get("_stem"))
         site_id = str(tmpl.get("_site") or "global")
         rel = str(tmpl.get("_path") or "")
-        path = root / rel
+        path = abs_path(root, rel)
         charts = charts_from_doc(tmpl)
         meta = {key: value for key, value in _clean_doc(tmpl).items() if key not in {"charts", "values_inline"}}
         meta["chart_names"] = [item["name"] for item in charts]

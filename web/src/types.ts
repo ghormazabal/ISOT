@@ -56,6 +56,71 @@ export type TemplateIndexEntry = {
   chart_count?: number;
   charts?: string[];
   used_by: string[];
+  /** Capa de la biblioteca (`@isot`, `@templates1`…) si no está en el repo de datos. */
+  library?: string | null;
+};
+
+export type DataRepoStatus = {
+  id: string;
+  name: string;
+  path: string;
+  git: boolean;
+  branch: string | null;
+  head: string | null;
+  short: string | null;
+  dirty: boolean;
+  remote: string | null;
+  remote_url: string | null;
+  expected_branch: string | null;
+};
+
+export type ConfigInfo =
+  | {
+      configured: false;
+      error: string | null;
+      message: string;
+      hints: string[];
+      search: string[];
+      edit: boolean;
+    }
+  | {
+      configured: true;
+      origin: string;
+      config_file: string | null;
+      data_repo: DataRepoStatus;
+      /** Repos declarados en la configuración (preparado para un selector). */
+      repos: { id: string; name: string; active: boolean }[];
+      active_repo: string;
+      templates: string[];
+      edit: boolean;
+      push: boolean;
+      push_remote: string;
+      ui: { title: string | null };
+    };
+
+export type SiteTemplateOption = {
+  id: string;
+  name: string;
+  description: string | null;
+  source: "repo" | "isot";
+};
+
+export type LibraryTemplate = {
+  name: string;
+  site: string;
+  scope: "global";
+  library: string;
+  distro: string | null;
+  version: string | null;
+  path: string;
+  in_repo: boolean;
+};
+
+export type WizardStatus = {
+  edit: boolean;
+  push?: boolean;
+  site_templates?: SiteTemplateOption[];
+  template_library?: LibraryTemplate[];
 };
 
 export type SiteIndexEntry = {
@@ -462,6 +527,8 @@ export type WizardCommit = {
   message: string;
   files: string[];
   preview?: WizardPreview;
+  /** Solo con edit.push: resultado de `git push -u` con las credenciales del usuario. */
+  push?: { ok: boolean; remote: string; branch: string; message: string };
 };
 export type SiteFilter = "all" | string;
 

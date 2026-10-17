@@ -1,0 +1,10 @@
+template_name: hosted-controlplane-baremetal
+# [AI-Context]: Familia del catálogo. No usada en SITE1 ni SITE2.
+version: "1.30.x"
+distro: hosted-controlplane
+cni:
+  primary: calico
+note: no usado en SITE1
+used_in_inventory: false
+charts: []
+charts_note: ningún Helm release documentado en el inventario

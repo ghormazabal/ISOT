@@ -1,6 +1,10 @@
 # Instrucciones para agentes de IA (ISoT)
 
-Este repositorio es la **fuente de verdad** de varios sitios lógicos. El
+ISoT es una herramienta: el inventario vive en un **repositorio de datos**
+aparte (configurado en `isot.yaml` → `data_repo.path`, o `--repo DIR`; ver
+`isot config`). Ese repositorio es la **fuente de verdad** de varios sitios
+lógicos; en este repo el inventario de ejemplo está en `examples/demo-repo/`.
+Todas las rutas de abajo son relativas a la raíz del repositorio de datos. El
 estado vive en Git como YAML/JSON. Si un objeto no está en estos archivos,
 **no existe**. Los campos vacíos y `topology/index.yaml` → `gaps` /
 `undocumented_peers` son huecos reales: no los rellenes.
@@ -28,7 +32,7 @@ Abre el YAML de detalle **solo bajo demanda**:
 
 - Host: `path` del índice de dispositivos.
 - Clúster: `sites/<id>/clusters/<nombre>.yaml`.
-- Template global: `cluster-templates/<nombre>/template.yaml` (legacy: `<nombre>.yaml` en el primer nivel).
+- Template global: `cluster-templates/<nombre>/template.yaml` (legacy: `<nombre>.yaml` en el primer nivel). Si el repo de datos no lo tiene, se resuelve en las carpetas `templates:` de `isot.yaml` y luego en `templates/cluster-templates/` de ISoT (ruta virtual `@isot/<nombre>/template.yaml`).
 - Template de sitio: `sites/<id>/cluster-templates/<nombre>/template.yaml`.
 - Values de un chart: **no** están en el YAML del template si usa `values_ref`. Abre `cluster-templates/<nombre>/values/<archivo>.yaml` (o el `values_inline` del chart) **solo al expandir ese release**.
 - No indexar ni tratar `values/*.yaml` como templates.
@@ -72,9 +76,9 @@ campo `k8s_name` guarda el nombre k8s.
 
 ## 5. Tras editar YAML
 
-1. `python -m isot.validator`
-2. `python -m isot.indexer`
-3. `python -m isot.leakcheck`
+1. `python -m isot.validator --repo <repo de datos>` (sin `--repo` usa `isot.yaml`)
+2. `python -m isot.indexer --repo <repo de datos>`
+3. `python -m isot.leakcheck` (si tocaste el repo de la herramienta o `examples/`)
 4. No hagas commit si alguno falla o si un `_*_index.json` quedó desfasado.
 5. Altas por UI: wizard (rama `wizard/…`), no commits directos en main.
 

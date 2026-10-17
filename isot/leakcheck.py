@@ -6,6 +6,10 @@ y cada candidato (token, IP, prefijo, bigrama, nombre de archivo) se hashea
 con la misma receta. Si coincide, CI/pre-commit fallan.
 
 No recorre .git: el historial puede contener datos reales a propósito.
+
+Por defecto revisa la propia herramienta (su CI lo exige). Contra un repo de
+datos es opcional (`--repo DIR`, y `--patterns` para una lista propia): ISoT no
+impone estos patrones a los inventarios de los usuarios.
 """
 
 from __future__ import annotations
@@ -19,7 +23,7 @@ import unicodedata
 from pathlib import Path
 from typing import Iterable
 
-from isot.paths import find_repo_root
+from isot.paths import tool_root
 
 OK_EXIT = 0
 FAIL_EXIT = 1
@@ -68,9 +72,9 @@ def digest(value: str, salt: str) -> str:
     return hashlib.sha256(f"{salt}\n{norm}".encode("utf-8")).hexdigest()
 
 
-def load_config(repo_root: Path) -> dict:
-    path = Path(__file__).resolve().parent / CONFIG_NAME
-    if not path.is_file():
+def load_config(repo_root: Path, patterns: Path | None = None) -> dict:
+    path = patterns or Path(__file__).resolve().parent / CONFIG_NAME
+    if patterns is None and not path.is_file():
         path = repo_root / "isot" / CONFIG_NAME
     if not path.is_file():
         raise FileNotFoundError(f"No existe {CONFIG_NAME}")
@@ -123,8 +127,8 @@ def iter_files(repo_root: Path) -> Iterable[Path]:
         yield path
 
 
-def scan(repo_root: Path) -> list[str]:
-    config = load_config(repo_root)
+def scan(repo_root: Path, patterns: Path | None = None) -> list[str]:
+    config = load_config(repo_root, patterns)
     salt = str(config.get("salt") or "")
     forbidden = {str(item) for item in config["hashes"]}
     hits: list[str] = []
@@ -166,18 +170,34 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Falla si reaparecen identificadores prohibidos (hashes)."
     )
-    parser.add_argument("--root", type=Path, default=None)
+    parser.add_argument(
+        "--repo",
+        "--root",
+        dest="root",
+        type=Path,
+        default=None,
+        help="Árbol a revisar (por defecto: la propia herramienta). Sirve también para un repo de datos.",
+    )
+    parser.add_argument(
+        "--patterns",
+        type=Path,
+        default=None,
+        help="Otro archivo de hashes (mismo formato que forbidden_patterns.json).",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    root = args.root.expanduser().resolve() if args.root else tool_root()
+    if not root.is_dir():
+        print(f"error: {root} no es un directorio", file=sys.stderr)
+        return FAIL_EXIT
     try:
-        root = args.root.resolve() if args.root else find_repo_root()
-    except FileNotFoundError as exc:
+        hits = scan(root, args.patterns.expanduser().resolve() if args.patterns else None)
+    except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return FAIL_EXIT
-    hits = scan(root)
     sys.stdout.write(format_report(root, hits))
     return FAIL_EXIT if hits else OK_EXIT
 

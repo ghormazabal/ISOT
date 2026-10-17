@@ -27,7 +27,7 @@ def _client(root: Path, *, edit: bool) -> TestClient:
 def test_wizard_disabled_without_flag(tmp_path: Path) -> None:
     root = _prepared(tmp_path)
     client = _client(root, edit=False)
-    assert client.get("/api/wizard/status").json() == {"edit": False}
+    assert client.get("/api/wizard/status").json()["edit"] is False
     denied = client.post("/api/wizard/device/preview", json={"site": "site-a", "kind": "baremetal", "cluster": "k8s-prod", "role": "k8s-worker"})
     assert denied.status_code == 403
 

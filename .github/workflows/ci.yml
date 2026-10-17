@@ -21,11 +21,17 @@ jobs:
       - name: Instalar el paquete
         run: pip install -e ".[dev]"
 
-      - name: Validar integridad del inventario
-        run: python -m isot.validator
+      - name: Validar el repo de datos de ejemplo
+        run: python -m isot.validator --repo examples/demo-repo
 
-      - name: Verificar que el índice está al día
-        run: python -m isot.indexer --check
+      - name: Verificar que sus índices están al día
+        run: python -m isot.indexer --check --repo examples/demo-repo
+
+      - name: Acción reutilizable (validate) sobre la demo
+        uses: ./.github/actions/validate
+        with:
+          repo: examples/demo-repo
+          install: "false"
 
       - name: Patrones prohibidos (anonimización)
         run: python -m isot.leakcheck

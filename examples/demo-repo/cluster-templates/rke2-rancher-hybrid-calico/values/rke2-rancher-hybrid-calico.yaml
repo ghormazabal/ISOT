@@ -1,0 +1,11 @@
+# Values por defecto del chart umbral. Solo claves documentadas en el template
+# (cni.defaults y addons_default.storage.longhorn). El resto es faltante.
+cniConfig:
+  podCIDR: 10.42.0.0/16
+  serviceCIDR: 10.43.0.0/16
+  mtu: 1440
+  tunnelProtocol: IPIP
+  bgp: true
+  multusEnabled: false
+storage:
+  longhorn: enabled

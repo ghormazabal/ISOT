@@ -10,13 +10,25 @@ from typing import Any
 import pytest
 import yaml
 
-from isot.paths import find_repo_root
+from isot.paths import demo_repo_dir
+
+TOOL_ROOT = Path(__file__).resolve().parent.parent
 
 
 @pytest.fixture
 def repo_root() -> Path:
-    """Raíz del clon con el inventario de ejemplo."""
-    return find_repo_root(Path(__file__).resolve().parent)
+    """Repositorio de datos de ejemplo (examples/demo-repo) que trae la herramienta."""
+    return demo_repo_dir()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_config(monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory) -> None:
+    """Ningún test lee el isot.yaml de la máquina: sin config salvo que el test la cree."""
+    for name in ("ISOT_CONFIG", "ISOT_ROOT", "ISOT_EDIT"):
+        monkeypatch.delenv(name, raising=False)
+    home = tmp_path_factory.mktemp("home")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(home)
 
 
 def write_yaml(path: Path, data: Any) -> None:

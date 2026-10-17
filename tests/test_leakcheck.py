@@ -5,14 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from isot.leakcheck import scan
+from isot.paths import tool_root
 
 
 def test_working_tree_has_no_forbidden_patterns(repo_root: Path) -> None:
-    assert scan(repo_root) == []
+    assert scan(tool_root()) == []
 
 
 def test_scan_detects_hashed_token(tmp_path: Path, repo_root: Path) -> None:
-    config = (repo_root / "isot" / "forbidden_patterns.json").read_text(encoding="utf-8")
+    config = (tool_root() / "isot" / "forbidden_patterns.json").read_text(encoding="utf-8")
     (tmp_path / "isot").mkdir()
     (tmp_path / "isot" / "forbidden_patterns.json").write_text(config, encoding="utf-8")
     (tmp_path / "sites.yaml").write_text("sites: []\n", encoding="utf-8")
@@ -26,7 +27,7 @@ def test_scan_detects_hashed_token(tmp_path: Path, repo_root: Path) -> None:
 
 
 def test_scan_detects_legacy_cluster_host_tokens(tmp_path: Path, repo_root: Path) -> None:
-    config = (repo_root / "isot" / "forbidden_patterns.json").read_text(encoding="utf-8")
+    config = (tool_root() / "isot" / "forbidden_patterns.json").read_text(encoding="utf-8")
     (tmp_path / "isot").mkdir()
     (tmp_path / "isot" / "forbidden_patterns.json").write_text(config, encoding="utf-8")
     (tmp_path / "sites.yaml").write_text("sites: []\n", encoding="utf-8")
@@ -42,7 +43,7 @@ def test_scan_detects_legacy_cluster_host_tokens(tmp_path: Path, repo_root: Path
 
 
 def test_scan_detects_legacy_platform_cluster_token(tmp_path: Path, repo_root: Path) -> None:
-    config = (repo_root / "isot" / "forbidden_patterns.json").read_text(encoding="utf-8")
+    config = (tool_root() / "isot" / "forbidden_patterns.json").read_text(encoding="utf-8")
     (tmp_path / "isot").mkdir()
     (tmp_path / "isot" / "forbidden_patterns.json").write_text(config, encoding="utf-8")
     (tmp_path / "sites.yaml").write_text("sites: []\n", encoding="utf-8")
@@ -56,7 +57,7 @@ def test_scan_detects_legacy_platform_cluster_token(tmp_path: Path, repo_root: P
 
 
 def test_scan_does_not_flag_infrastructure_or_claims(tmp_path: Path, repo_root: Path) -> None:
-    config = (repo_root / "isot" / "forbidden_patterns.json").read_text(encoding="utf-8")
+    config = (tool_root() / "isot" / "forbidden_patterns.json").read_text(encoding="utf-8")
     (tmp_path / "isot").mkdir()
     (tmp_path / "isot" / "forbidden_patterns.json").write_text(config, encoding="utf-8")
     (tmp_path / "sites.yaml").write_text("sites: []\n", encoding="utf-8")
@@ -72,7 +73,7 @@ def test_scan_does_not_flag_infrastructure_or_claims(tmp_path: Path, repo_root: 
 
 
 def test_scan_detects_product_and_vendor_tokens(tmp_path: Path, repo_root: Path) -> None:
-    config = (repo_root / "isot" / "forbidden_patterns.json").read_text(encoding="utf-8")
+    config = (tool_root() / "isot" / "forbidden_patterns.json").read_text(encoding="utf-8")
     (tmp_path / "isot").mkdir()
     (tmp_path / "isot" / "forbidden_patterns.json").write_text(config, encoding="utf-8")
     (tmp_path / "sites.yaml").write_text("sites: []\n", encoding="utf-8")
@@ -95,7 +96,7 @@ def test_scan_detects_product_and_vendor_tokens(tmp_path: Path, repo_root: Path)
 
 
 def test_scan_detects_product_namespace_and_doc_tokens(tmp_path: Path, repo_root: Path) -> None:
-    config = (repo_root / "isot" / "forbidden_patterns.json").read_text(encoding="utf-8")
+    config = (tool_root() / "isot" / "forbidden_patterns.json").read_text(encoding="utf-8")
     (tmp_path / "isot").mkdir()
     (tmp_path / "isot" / "forbidden_patterns.json").write_text(config, encoding="utf-8")
     (tmp_path / "sites.yaml").write_text("sites: []\n", encoding="utf-8")
@@ -115,7 +116,7 @@ def test_scan_detects_product_namespace_and_doc_tokens(tmp_path: Path, repo_root
 
 
 def test_scan_detects_legacy_storage_prefix(tmp_path: Path, repo_root: Path) -> None:
-    config = (repo_root / "isot" / "forbidden_patterns.json").read_text(encoding="utf-8")
+    config = (tool_root() / "isot" / "forbidden_patterns.json").read_text(encoding="utf-8")
     (tmp_path / "isot").mkdir()
     (tmp_path / "isot" / "forbidden_patterns.json").write_text(config, encoding="utf-8")
     (tmp_path / "sites.yaml").write_text("sites: []\n", encoding="utf-8")
