@@ -10,11 +10,14 @@ desordenadas (planillas, CSV, notas, configs), la guía es
 [docs/llm/INGEST.md](docs/llm/INGEST.md): formato esperado, procedimiento,
 convenciones de `_ingest/` y prompt. Índice de guías: [AGENTS.md](AGENTS.md).
 
-ISoT es una herramienta: el inventario vive en un **repositorio de datos**
-aparte (configurado en `isot.yaml` → `data_repo.path` o la lista `repos`, o
-`--repo DIR`; ver `isot config`). Con varios repositorios, cada uno es una
-fuente de verdad independiente: no mezcles sitios ni referencias entre ellos. Ese repositorio es la **fuente de verdad** de varios sitios
-lógicos; en este repo el inventario de ejemplo está en `examples/demo-repo/`.
+ISoT es un visualizador/editor local: el inventario vive en uno o varios
+**repositorios de datos** aparte, clonados por el usuario (lista `repos` en
+`isot.yaml`, o `data_repo.path` para uno solo, o `--repo DIR`; ver
+`isot config`). Cada repositorio es una fuente de verdad independiente de
+varios sitios lógicos, con sus propios permisos y CI: no mezcles sitios ni
+referencias entre ellos. La API de datos de cada uno cuelga de
+`/api/repos/{id}/…`. Este repositorio no contiene inventario; solo ejemplos
+ficticios (`examples/demo-repo/`, `examples/messy-source/`).
 Todas las rutas de abajo son relativas a la raíz del repositorio de datos. El
 estado vive en Git como YAML/JSON. Si un objeto no está en estos archivos,
 **no existe**. Los campos vacíos y `topology/index.yaml` → `gaps` /

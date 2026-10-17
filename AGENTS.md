@@ -1,6 +1,13 @@
 # AGENTS.md
 
 Punto de entrada para agentes de IA (cualquier modelo) que trabajan con ISoT.
+
+ISoT es un visualizador/editor **local** de uno o varios repositorios Git de
+datos que el usuario ya tiene clonados. Este repositorio no guarda inventario:
+solo código, plantillas (`templates/`), schemas (`schemas/`) y ejemplos
+ficticios (`examples/`). Los datos, los permisos y la CI viven en cada
+repositorio de datos.
+
 Elige la guía según la tarea:
 
 | Tarea | Guía |
@@ -15,4 +22,6 @@ Reglas comunes:
 - Sin secretos.
 - Este repositorio es público: sus ejemplos son ficticios y genéricos, y
   `isot leakcheck` debe quedar en verde.
+- Con varios repositorios de datos (`repos:` en `isot.yaml`), cada uno es
+  una fuente de verdad independiente: trabaja en uno a la vez.
 - Trabaja en una rama y abre un PR. No hagas merge.

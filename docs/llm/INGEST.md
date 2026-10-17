@@ -11,6 +11,11 @@ mantenerlo al día cuando las fuentes cambian.
 - Schemas: [`schemas/`](../../schemas) (generados desde el código; ver §1.13).
 - Ejemplo completo: [`examples/messy-source/`](../../examples/messy-source).
 
+ISoT no guarda inventario: el resultado de la ingesta es un repositorio de
+datos propio (uno por inventario), con sus permisos y su CI. Si `isot.yaml`
+lista varios repositorios, ingiere en uno a la vez; cada uno lleva su propio
+`_ingest/`.
+
 Los nombres de campo van tal como los lee el código (`cluster_ref`,
 `leaf_pc`, ...). Todo lo que se cita aquí sale de `isot/inventory.py`,
 `isot/validator.py`, `isot/cabling.py`, `isot/links.py`, `isot/rules/` y
