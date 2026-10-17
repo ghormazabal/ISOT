@@ -1,0 +1,36 @@
+! export manual de los leafs del lab1 (pseudo-config, ficticia)
+! ---------- lab1-leaf01 ----------
+hostname lab1-leaf01
+username admin secret 0 NoEsUnSecretoReal
+snmp-server community lab-ro-ejemplo ro
+interface Management1
+  ip address 10.60.0.21/24
+interface Eth1
+  description uplink lab1-spine01 Eth1
+interface Eth11
+  description lab1-node01
+  channel-group 11 mode active
+interface Port-Channel11
+  description lab1-node01 bond0
+  switchport trunk allowed vlan 100,200
+interface Port-Channel12
+  description lab1-node02 bond0
+  switchport trunk allowed vlan 100,200
+interface Port-Channel13
+  description lab1-node03 bond0
+  switchport trunk allowed vlan 100,200
+! ---------- lab1-leaf02 ----------
+hostname lab1-leaf02
+interface Management1
+  ip address 10.60.0.22/24
+interface Eth1
+  description uplink lab1-spine01 Eth2
+interface Port-Channel11
+  description lab1-node01 bond0
+  switchport trunk allowed vlan 100,200
+interface Port-Channel12
+  description lab1-node02 bond0
+  switchport trunk allowed vlan 100,200
+interface Port-Channel13
+  description lab1-node03 bond0
+  switchport trunk allowed vlan 100,200

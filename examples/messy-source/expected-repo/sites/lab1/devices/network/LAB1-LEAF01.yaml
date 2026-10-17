@@ -1,0 +1,13 @@
+hostname: LAB1-LEAF01
+role: leaf
+kind: network
+model: switch-48p
+os: nos
+pair: LAB1-LEAF02
+leaf_pair: PAIR1
+networking:
+  - interface: Management1
+    vlan: 10
+    ip: 10.60.0.21/24
+  - interface: Ethernet1
+    connected_to: {device: LAB1-SPINE01, port: Ethernet1}

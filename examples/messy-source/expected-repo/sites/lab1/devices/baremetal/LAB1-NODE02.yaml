@@ -1,0 +1,22 @@
+hostname: LAB1-NODE02
+role: worker
+k8s_roles: [worker]
+kind: baremetal
+model: server-2u
+os: Linux 22.04
+cluster_ref: lab1-k8s
+leaf_pair: PAIR1
+oob:
+  ip: 10.60.0.32/24
+  switch: LAB1-MGMT01
+  port: GigabitEthernet2
+  vlan: 10
+bonds:
+  - name: bond0
+    leaf_pc: {LAB1-LEAF01: PortChannel12, LAB1-LEAF02: PortChannel12}
+    allowed_vlans: [100, 200]
+networking:
+  - interface: HOST_MGMT
+    parent: bond0
+    vlan: 100
+    ip: 10.60.1.12/24

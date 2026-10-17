@@ -17,6 +17,7 @@ import { api } from "./api";
 import { countFindings, scopeFindings, selectionFromFinding } from "./findings";
 import { appPanelSpecs, clampSize, layoutKey } from "./resize";
 import { edgeSelection, fallbackDetail, relatedFindings } from "./links";
+import { pickDefaultRefs } from "./compareRefs";
 import { mergeLibraryTemplates } from "./dataRepo";
 import {
   applyEditToggle,
@@ -1011,17 +1012,7 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
   );
 }
 
-function pickDefaultRefs(payload: RefsPayload): { base: string; head: string } {
-  const branches = payload.branches.map((item) => item.name);
-  const prefer = (names: string[]): string =>
-    names.find((name) => branches.includes(name)) || branches[0] || payload.commits[0]?.sha || "";
-  const demo = prefer(["demo/diff-example", "origin/demo/diff-example", "cursor/demo-diff-example-9fbc"]);
-  const main = prefer(["origin/main", "main", "master"]);
-  const head = demo && demo !== main ? demo : branches.find((name) => name !== main) || main;
-  return { base: main, head };
-}
-
-function selectionFromEntity(entity: DiffEntity, siteFilter: string): Selection {
+function selectionFromEntity(entity: DiffEntity, siteFilter: string): Selection | null {
   if (entity.kind === "site") return { type: "site", id: entity.site || entity.id };
   if (entity.kind === "cluster") {
     const [site, name] = entity.id.split(":");
@@ -1039,5 +1030,6 @@ function selectionFromEntity(entity: DiffEntity, siteFilter: string): Selection 
       hostname: entity.id.slice(idx + 1),
     };
   }
-  return { type: "site", id: entity.site || siteFilter || "site1" };
+  const site = entity.site || (siteFilter !== "all" ? siteFilter : "");
+  return site ? { type: "site", id: site } : null;
 }

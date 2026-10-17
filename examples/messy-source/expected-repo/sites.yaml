@@ -1,0 +1,6 @@
+# Generado desde examples/messy-source/source (ver _ingest/). Datos ficticios.
+sites:
+  - id: lab1
+    name: lab1
+    path: sites/lab1
+    description: Laboratorio del ejemplo de ingesta (datos ficticios)

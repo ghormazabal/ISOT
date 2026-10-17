@@ -86,7 +86,7 @@ export function WizardsView({
   const blank = emptyWizardDraft({
     site: sites[0]?.id,
     cluster: clustersBySite[sites[0]?.id ?? ""]?.[0]?.name,
-    templateSite: sites.find((item) => item.id === "site2")?.id ?? sites[0]?.id,
+    templateSite: sites[0]?.id,
   });
   const initial = epoch === 0 ? initialDraft : (seed ?? blank);
 
@@ -503,14 +503,14 @@ function SiteWizard({
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description);
   const [templateSite, setTemplateSite] = useState(
-    initial.templateSite || sites.find((item) => item.id === "site2")?.id || sites[0]?.id || siteTemplates[0]?.id || "",
+    initial.templateSite || sites[0]?.id || siteTemplates[0]?.id || "",
   );
   useEffect(() => {
     // Repo de datos vacío: en cuanto llegan las plantillas, se elige la primera.
     // También si el borrador apunta a un sitio que no existe en este repositorio.
     const known = sites.some((item) => item.id === templateSite) || siteTemplates.some((item) => item.id === templateSite);
     if (known || (!sites.length && !siteTemplates.length)) return;
-    const fallback = sites.find((item) => item.id === "site2")?.id || sites[0]?.id || siteTemplates[0]?.id;
+    const fallback = sites[0]?.id || siteTemplates[0]?.id;
     if (fallback && fallback !== templateSite) setTemplateSite(fallback);
   }, [templateSite, sites, siteTemplates]);
   const [infraRange, setInfraRange] = useState(initial.infraRange);
@@ -658,7 +658,7 @@ function SiteWizard({
     infra_range: infraRange,
     vlan_offset: vlanOffset,
     dci,
-    dci_peer: sites.find((item) => item.id === "site1")?.id ?? sites[0]?.id ?? "",
+    dci_peer: sites[0]?.id ?? "",
     clusters: [{ name: clusterName, template_ref: templateRef, workers, role: "worker" }],
     accept_warnings: acceptWarnings,
   };

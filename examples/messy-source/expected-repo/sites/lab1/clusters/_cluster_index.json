@@ -1,0 +1,13 @@
+[
+  {
+    "name": "lab1-k8s",
+    "site": "lab1",
+    "kind": "kubernetes",
+    "template_ref": null,
+    "distro": null,
+    "version": null,
+    "path": "sites/lab1/clusters/lab1-k8s.yaml",
+    "node_count": 3,
+    "override_count": 0
+  }
+]

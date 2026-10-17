@@ -1,0 +1,18 @@
+# Última revisión procesada de cada fuente (ver docs/llm/INGEST.md, «Seguimiento de cambios»).
+version: 1
+isot_version: 0.10.0
+processed_at: "2026-10-17"
+sources:
+  - id: messy
+    # Ruta relativa al repositorio de ISoT; en un caso real, la URL del repo de origen (sin credenciales).
+    repo: examples/messy-source/source
+    ref: null
+    # La fuente del ejemplo no tiene git propio: se usa sha256 por archivo.
+    commit: null
+    files:
+      - path: hosts.csv
+        sha256: 157a7bebd30824b5b9c93ba13db388cba969b39926e3f46684867977b816aa13
+      - path: notes.md
+        sha256: 7c1f84bf1df8ec24b195557e07f2975e229c8bfa24499c90c030611c267b2812
+      - path: switch-config.txt
+        sha256: 468400820bcec379534d3a48b783c6ce9b0b2b1ed2c5b03333627e42e0947d52

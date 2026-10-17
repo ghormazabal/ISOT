@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "isot:schemas/ingest-provenance",
+  "title": "_ingest/provenance.yaml: de dónde sale cada entidad",
+  "type": "object",
+  "required": [
+    "version",
+    "entities"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "entities": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^(?:(?:site|address_space):[A-Za-z0-9][A-Za-z0-9._-]*|template:(?:[A-Za-z0-9][A-Za-z0-9._-]*/)?[A-Za-z0-9][A-Za-z0-9._-]*|(?:device|cluster|subnet|vlan):[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*)$"
+      },
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "$ref": "#/$defs/source_ref"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "source_ref": {
+      "type": "object",
+      "required": [
+        "source",
+        "file"
+      ],
+      "properties": {
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "id de una fuente de _ingest/state.yaml."
+        },
+        "file": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "description": "Ruta del archivo dentro de la fuente."
+        },
+        "locator": {
+          "type": [
+            "string",
+            "integer"
+          ],
+          "description": "Línea, fila, hoja!celda o sección."
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "note": {
+          "type": [
+            "string",
+            "integer",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

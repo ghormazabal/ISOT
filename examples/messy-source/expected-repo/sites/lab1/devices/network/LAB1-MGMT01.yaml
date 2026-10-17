@@ -1,0 +1,10 @@
+hostname: LAB1-MGMT01
+role: mgmt
+kind: network
+model: switch-24p-1g
+os: nos
+leaf_pair: mgmt
+networking:
+  - interface: OOB
+    vlan: 10
+    ip: 10.60.0.2/24

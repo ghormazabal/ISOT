@@ -1,0 +1,10 @@
+hostname: LAB1-SPINE01
+role: spine
+kind: network
+model: switch-32p
+os: nos
+leaf_pair: spines
+networking:
+  - interface: OOB
+    vlan: 10
+    ip: 10.60.0.11/24

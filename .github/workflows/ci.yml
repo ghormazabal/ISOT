@@ -27,6 +27,13 @@ jobs:
       - name: Verificar que sus índices están al día
         run: python -m isot.indexer --check --repo examples/demo-repo
 
+      - name: Schemas al día y ejemplo de ingesta
+        run: |
+          python -m isot.schemas --check
+          python -m isot.validator --repo examples/messy-source/expected-repo --schemas
+          python -m isot.indexer --check --repo examples/messy-source/expected-repo
+          python -m isot ingest status --repo examples/messy-source/expected-repo --source examples/messy-source/source
+
       - name: Acción reutilizable (validate) sobre la demo
         uses: ./.github/actions/validate
         with:

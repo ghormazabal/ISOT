@@ -1,0 +1,179 @@
+[
+  {
+    "hostname": "LAB1-NODE01",
+    "site": "lab1",
+    "role": "control-plane",
+    "ip": "10.60.1.11/24",
+    "path": "sites/lab1/devices/baremetal/LAB1-NODE01.yaml",
+    "kind": "baremetal",
+    "cluster_ref": "lab1-k8s",
+    "cluster_ref_site": "lab1",
+    "links": [
+      {
+        "interface": "bond0",
+        "device": "LAB1-LEAF01",
+        "port": "PortChannel11",
+        "vlan": null,
+        "site": "lab1"
+      },
+      {
+        "interface": "bond0",
+        "device": "LAB1-LEAF02",
+        "port": "PortChannel11",
+        "vlan": null,
+        "site": "lab1"
+      },
+      {
+        "interface": "oob",
+        "device": "LAB1-MGMT01",
+        "port": "GigabitEthernet1",
+        "vlan": 10,
+        "site": "lab1"
+      }
+    ],
+    "leaf_pair": "PAIR1"
+  },
+  {
+    "hostname": "LAB1-NODE02",
+    "site": "lab1",
+    "role": "worker",
+    "ip": "10.60.1.12/24",
+    "path": "sites/lab1/devices/baremetal/LAB1-NODE02.yaml",
+    "kind": "baremetal",
+    "cluster_ref": "lab1-k8s",
+    "cluster_ref_site": "lab1",
+    "links": [
+      {
+        "interface": "bond0",
+        "device": "LAB1-LEAF01",
+        "port": "PortChannel12",
+        "vlan": null,
+        "site": "lab1"
+      },
+      {
+        "interface": "bond0",
+        "device": "LAB1-LEAF02",
+        "port": "PortChannel12",
+        "vlan": null,
+        "site": "lab1"
+      },
+      {
+        "interface": "oob",
+        "device": "LAB1-MGMT01",
+        "port": "GigabitEthernet2",
+        "vlan": 10,
+        "site": "lab1"
+      }
+    ],
+    "leaf_pair": "PAIR1"
+  },
+  {
+    "hostname": "LAB1-NODE03",
+    "site": "lab1",
+    "role": "worker",
+    "ip": null,
+    "path": "sites/lab1/devices/baremetal/LAB1-NODE03.yaml",
+    "kind": "baremetal",
+    "cluster_ref": "lab1-k8s",
+    "cluster_ref_site": "lab1",
+    "links": [
+      {
+        "interface": "bond0",
+        "device": "LAB1-LEAF01",
+        "port": "PortChannel13",
+        "vlan": null,
+        "site": "lab1"
+      },
+      {
+        "interface": "bond0",
+        "device": "LAB1-LEAF02",
+        "port": "PortChannel13",
+        "vlan": null,
+        "site": "lab1"
+      },
+      {
+        "interface": "oob",
+        "device": "LAB1-MGMT01",
+        "port": "GigabitEthernet3",
+        "vlan": 10,
+        "site": "lab1"
+      }
+    ],
+    "leaf_pair": "PAIR1"
+  },
+  {
+    "hostname": "LAB1-NODE04",
+    "site": "lab1",
+    "role": "worker",
+    "ip": "10.60.1.14/24",
+    "path": "sites/lab1/devices/baremetal/LAB1-NODE04.yaml",
+    "kind": "baremetal",
+    "cluster_ref": null,
+    "cluster_ref_site": null,
+    "links": []
+  },
+  {
+    "hostname": "LAB1-LEAF01",
+    "site": "lab1",
+    "role": "leaf",
+    "ip": "10.60.0.21/24",
+    "path": "sites/lab1/devices/network/LAB1-LEAF01.yaml",
+    "kind": "network",
+    "cluster_ref": null,
+    "cluster_ref_site": null,
+    "links": [
+      {
+        "interface": "Ethernet1",
+        "device": "LAB1-SPINE01",
+        "port": "Ethernet1",
+        "vlan": null,
+        "site": "lab1"
+      }
+    ],
+    "leaf_pair": "PAIR1"
+  },
+  {
+    "hostname": "LAB1-LEAF02",
+    "site": "lab1",
+    "role": "leaf",
+    "ip": "10.60.0.22/24",
+    "path": "sites/lab1/devices/network/LAB1-LEAF02.yaml",
+    "kind": "network",
+    "cluster_ref": null,
+    "cluster_ref_site": null,
+    "links": [
+      {
+        "interface": "Ethernet1",
+        "device": "LAB1-SPINE01",
+        "port": "Ethernet2",
+        "vlan": null,
+        "site": "lab1"
+      }
+    ],
+    "leaf_pair": "PAIR1"
+  },
+  {
+    "hostname": "LAB1-MGMT01",
+    "site": "lab1",
+    "role": "mgmt",
+    "ip": "10.60.0.2/24",
+    "path": "sites/lab1/devices/network/LAB1-MGMT01.yaml",
+    "kind": "network",
+    "cluster_ref": null,
+    "cluster_ref_site": null,
+    "links": [],
+    "leaf_pair": "mgmt"
+  },
+  {
+    "hostname": "LAB1-SPINE01",
+    "site": "lab1",
+    "role": "spine",
+    "ip": "10.60.0.11/24",
+    "path": "sites/lab1/devices/network/LAB1-SPINE01.yaml",
+    "kind": "network",
+    "cluster_ref": null,
+    "cluster_ref_site": null,
+    "links": [],
+    "leaf_pair": "spines"
+  }
+]

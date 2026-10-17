@@ -7,13 +7,15 @@ import sys
 USAGE = """uso: isot <comando> [opciones]
 
   web         sirve la API y la UI (--config, --repo repetible, --edit, --host, --port)
-  validate    valida repositorios de datos (--repo, --repo-id, --all, --config)
+  validate    valida repositorios de datos (--repo, --repo-id, --all, --config, --schemas, --format json)
   index       regenera los _*_index.json (--check para CI; --repo-id, --all)
   init        crea isot.yaml (--path DIR) o un repo de datos vacío (--scaffold DIR)
   demo        copia la demo a un directorio aparte con git init y la sirve
   demo-diff   crea la rama demo/diff-example en un repo demo
   config      muestra la configuración y el estado de cada repositorio
   leakcheck   patrones prohibidos (repo de la herramienta; --repo para otro árbol)
+  ingest      ayudas de ingesta: status (cambios en la fuente), hash, check (docs/llm/INGEST.md)
+  schemas     JSON Schema del repo de datos: --repo DIR, --check, --write
 """
 
 
@@ -96,6 +98,14 @@ def main(argv: list[str] | None = None) -> int:
         return int(bootstrap.diff_example_main(rest))
     if command == "config":
         return _config_main(rest)
+    if command == "ingest":
+        from isot import ingest
+
+        return int(ingest.main(rest))
+    if command == "schemas":
+        from isot import schemas
+
+        return int(schemas.main(rest))
     print(f"comando desconocido: {command}", file=sys.stderr)
     print(USAGE, file=sys.stderr)
     return 2

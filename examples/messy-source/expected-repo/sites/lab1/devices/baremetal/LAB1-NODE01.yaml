@@ -1,0 +1,23 @@
+hostname: LAB1-NODE01
+role: control-plane
+k8s_roles: [control-plane]
+kind: baremetal
+model: server-1u
+os: Linux 22.04
+cluster_ref: lab1-k8s
+leaf_pair: PAIR1
+oob:
+  ip: 10.60.0.31/24
+  switch: LAB1-MGMT01
+  port: GigabitEthernet1
+  vlan: 10
+bonds:
+  - name: bond0
+    mode: lacp
+    leaf_pc: {LAB1-LEAF01: PortChannel11, LAB1-LEAF02: PortChannel11}
+    allowed_vlans: [100, 200]
+networking:
+  - interface: HOST_MGMT
+    parent: bond0
+    vlan: 100
+    ip: 10.60.1.11/24

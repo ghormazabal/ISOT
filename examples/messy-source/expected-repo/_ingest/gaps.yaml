@@ -1,0 +1,62 @@
+# Datos desconocidos y conflictos. Un hueco no se rellena: se pregunta a una persona.
+version: 1
+gaps:
+  - id: GAP-001
+    entity: site:lab1
+    field: vlans
+    kind: ambiguous
+    status: needs-human
+    detail: "VLAN 300 «era para pruebas, ya no se usa (¿borrar?)»: no se incluye en la topología hasta confirmarlo."
+    sources:
+      - {source: messy, file: notes.md, locator: "línea 10"}
+  - id: GAP-002
+    entity: device:lab1/LAB1-NODE03
+    field: networking[HOST_MGMT].ip
+    kind: conflict
+    status: needs-human
+    detail: "IP de gestión distinta en el CSV y en las notas; se deja sin IP hasta que una persona decida."
+    candidates:
+      - value: 10.60.1.13/24
+        source: {source: messy, file: hosts.csv, locator: "línea 8"}
+      - value: 10.60.1.23/24
+        source: {source: messy, file: notes.md, locator: "línea 19"}
+  - id: GAP-003
+    entity: device:lab1/LAB1-NODE04
+    field: oob
+    kind: unknown
+    status: open
+    detail: "BMC IP «?» y sin switch/puerto BMC."
+    sources:
+      - {source: messy, file: hosts.csv, locator: "línea 9"}
+  - id: GAP-004
+    entity: device:lab1/LAB1-NODE04
+    field: cluster_ref
+    kind: unknown
+    status: open
+    detail: "Clúster «?» en el CSV; las notas no lo incluyen en lab1-k8s."
+    sources:
+      - {source: messy, file: hosts.csv, locator: "línea 9"}
+      - {source: messy, file: notes.md, locator: "línea 14"}
+  - id: GAP-005
+    entity: device:lab1/LAB1-NODE04
+    field: bonds
+    kind: unknown
+    status: open
+    detail: "Sin cableado a los leafs («todavía sin cablear»); no hay Port-Channel en la config."
+    sources:
+      - {source: messy, file: notes.md, locator: "línea 20"}
+      - {source: messy, file: switch-config.txt, locator: "líneas 13-21"}
+  - id: GAP-006
+    entity: cluster:lab1/lab1-k8s
+    field: service_cidr
+    kind: unknown
+    status: open
+    detail: "«El service CIDR no lo tengo anotado»."
+    sources:
+      - {source: messy, file: notes.md, locator: "línea 15"}
+  - id: GAP-007
+    entity: cluster:lab1/lab1-k8s
+    field: template_ref
+    kind: unknown
+    status: open
+    detail: "Ninguna fuente indica distro, versión ni template del clúster."

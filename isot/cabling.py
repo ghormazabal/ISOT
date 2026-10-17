@@ -18,6 +18,9 @@ ARCH_CUSTOM = "custom"
 COMPUTE_ROLES = {"worker", "apps-worker", "k8s-worker", "tenant", "compute", "edge-server"}
 LEAF_ROLES = {"server-leaf", "leaf", "tor", "pair-leaf"}
 SPINE_ROLES = {"spine"}
+# Valores que entiende check_device / el wizard (connection_rules).
+ATTACH_KINDS: tuple[str, ...] = ("leaf-pair", "all-spines", "mgmt")
+PAIR_POLICIES: tuple[str, ...] = ("fill-first", "round-robin")
 
 
 def default_policy(
@@ -84,7 +87,7 @@ def default_policy(
         )
     return {
         "architecture": arch,
-        "pair_policy": pair_policy if pair_policy in {"fill-first", "round-robin"} else "fill-first",
+        "pair_policy": pair_policy if pair_policy in PAIR_POLICIES else "fill-first",
         "ports_per_leaf": int(ports_per_leaf) or 48,
         "fabric": {
             "spines": max(0, int(spines)),

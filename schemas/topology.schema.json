@@ -1,0 +1,443 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "isot:schemas/topology",
+  "title": "Topología de sitio: sites/<sitio>/topology/index.yaml (y site-templates/<id>/topology/index.yaml)",
+  "type": "object",
+  "properties": {
+    "site": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/name"
+        },
+        "operator": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "infra_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/cidr"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "const": ""
+            }
+          ]
+        },
+        "vlan_range": {
+          "anyOf": [
+            {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Rango de VLANs del sitio, p.ej. \"2000-2099\"."
+            },
+            {
+              "type": "null"
+            },
+            {
+              "const": ""
+            }
+          ],
+          "description": "Rango de VLANs del sitio, p.ej. \"2000-2099\"."
+        },
+        "dns_servers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ip"
+          }
+        },
+        "ntp_servers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ip"
+          }
+        }
+      }
+    },
+    "architecture": {
+      "enum": [
+        "spine-leaf",
+        "collapsed-core",
+        "custom"
+      ]
+    },
+    "subnets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Clave de la subred (la citan vlans[].subnet, NADs y pools)."
+          },
+          "cidr": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/cidr"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "const": ""
+              }
+            ]
+          },
+          "vlan": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/vlan"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "const": ""
+              }
+            ]
+          },
+          "gateway": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ip"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "const": ""
+              }
+            ]
+          },
+          "vrrp": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ip"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "const": ""
+              }
+            ]
+          },
+          "vrrp_ip": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ip"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "const": ""
+              }
+            ]
+          },
+          "vrf": {
+            "anyOf": [
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              {
+                "type": "null"
+              },
+              {
+                "const": ""
+              }
+            ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "vlans": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/vlan"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "subnet": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "name de una subred de esta topología."
+          }
+        }
+      }
+    },
+    "clusters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "undocumented_peers": {
+      "type": "array"
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Huecos en texto libre (se muestran en la ficha del sitio)."
+    },
+    "connection_rules": {
+      "type": "object",
+      "description": "Política de cableado. Solo si las fuentes la documentan; activa INV-CAB-001.",
+      "properties": {
+        "architecture": {
+          "enum": [
+            "spine-leaf",
+            "collapsed-core",
+            "custom"
+          ]
+        },
+        "pair_policy": {
+          "enum": [
+            "fill-first",
+            "round-robin"
+          ]
+        },
+        "ports_per_leaf": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fabric": {
+          "type": "object",
+          "properties": {
+            "spines": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "leaf_pairs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unpaired_leafs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "mgmt_switches": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "dcgw": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "pairs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "leafs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "attach"
+            ],
+            "properties": {
+              "id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "roles": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "attach": {
+                "enum": [
+                  "leaf-pair",
+                  "all-spines",
+                  "mgmt"
+                ]
+              },
+              "leafs_per_node": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "bond": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "bond_name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "via": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "purpose": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "rule_overrides": {
+      "$ref": "#/$defs/rule_overrides"
+    }
+  },
+  "$defs": {
+    "name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "ip": {
+      "type": "string",
+      "pattern": "^[0-9A-Fa-f:.]+(/[0-9]{1,3})?$",
+      "description": "IPv4/IPv6, con o sin prefijo (10.0.0.5 o 10.0.0.5/24)."
+    },
+    "cidr": {
+      "type": "string",
+      "pattern": "^[0-9A-Fa-f:.]+/[0-9]{1,3}$",
+      "description": "Red en notación CIDR (10.0.0.0/24)."
+    },
+    "vlan": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4094,
+      "description": "VLAN 802.1Q (1-4094)."
+    },
+    "ref": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "`nombre` (mismo sitio) o `sitio/nombre`."
+    },
+    "rule_overrides": {
+      "type": "array",
+      "description": "Cambia la severidad de una regla en este alcance. Sin reason no aplica (RULE-OVR-001).",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "severity",
+          "reason"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id de regla, p.ej. K8S-CP-001 (ver docs/rules.md)."
+          },
+          "severity": {
+            "enum": [
+              "error",
+              "warning",
+              "info",
+              "off"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Por qué se acepta la desviación (obligatorio)."
+          }
+        }
+      }
+    }
+  }
+}

@@ -95,7 +95,7 @@ export type StorageLike = {
   removeItem(key: string): void;
 };
 
-export function emptyDeviceDraft(site = "site1", cluster = "site1-apps"): DeviceDraftState {
+export function emptyDeviceDraft(site = "", cluster = ""): DeviceDraftState {
   return {
     site,
     kind: "baremetal",
@@ -141,7 +141,7 @@ export function draftFromFinding(finding: Finding, base: WizardDraft): WizardDra
   return { ...base, mode: "device", device };
 }
 
-export function emptySiteDraft(templateSite = "site2"): SiteDraftState {
+export function emptySiteDraft(templateSite = ""): SiteDraftState {
   return {
     step: 1,
     architecture: "spine-leaf",

@@ -24,6 +24,10 @@ on:
         description: Fallar también con avisos.
         type: boolean
         default: false
+      schemas:
+        description: Validar también contra los JSON Schema de ISoT.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -41,3 +45,4 @@ jobs:
           repo: ${{ inputs.repo }}
           isot-ref: ${{ inputs.isot-ref }}
           strict: ${{ inputs.strict && 'true' || 'false' }}
+          schemas: ${{ inputs.schemas && 'true' || 'false' }}

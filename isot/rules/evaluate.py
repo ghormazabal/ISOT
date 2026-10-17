@@ -18,6 +18,7 @@ from isot.rules.registry import RULES, catalog as registry_catalog
 from isot.rules.remediation import fill_default_remediations
 
 # Import side effects: register rules.
+import isot.rules.ingest  # noqa: F401
 import isot.rules.inventory  # noqa: F401
 import isot.rules.k8s  # noqa: F401
 

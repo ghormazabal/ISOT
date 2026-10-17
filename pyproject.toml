@@ -19,6 +19,11 @@ dev = [
     "pytest>=8.0",
     "pre-commit>=3.7",
     "httpx>=0.27",
+    "jsonschema>=4.18",
+]
+# `isot validate --schemas` / `isot schemas --repo`
+schemas = [
+    "jsonschema>=4.18",
 ]
 
 [project.scripts]

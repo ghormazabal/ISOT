@@ -1,0 +1,10 @@
+cluster_name: lab1-k8s
+kind: kubernetes
+pod_cidr: 10.244.0.0/16
+nodes:
+  - hostname: LAB1-NODE01
+    roles: [control-plane]
+  - hostname: LAB1-NODE02
+    roles: [worker]
+  - hostname: LAB1-NODE03
+    roles: [worker]

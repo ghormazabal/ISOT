@@ -12,6 +12,9 @@ inputs:
   strict:
     description: '"true" para fallar también con avisos.'
     default: "false"
+  schemas:
+    description: '"true" para validar también contra schemas/*.schema.json (instala jsonschema).'
+    default: "false"
   install:
     description: '"false" si ISoT ya está instalado en el job.'
     default: "true"
@@ -36,13 +39,14 @@ runs:
       if: inputs.install == 'true'
       shell: bash
       run: |
-        pip install -e ./.isot-tool
+        if [ "${{ inputs.schemas }}" = "true" ]; then pip install -e "./.isot-tool[schemas]"; else pip install -e ./.isot-tool; fi
         echo "ISOT_HOME=$GITHUB_WORKSPACE/.isot-tool" >> "$GITHUB_ENV"
     - name: Validador
       shell: bash
       run: |
         args=(--repo "${{ inputs.repo }}")
         if [ "${{ inputs.strict }}" = "true" ]; then args+=(--strict); fi
+        if [ "${{ inputs.schemas }}" = "true" ]; then args+=(--schemas); fi
         python -m isot.validator "${args[@]}"
     - name: Índices al día
       shell: bash

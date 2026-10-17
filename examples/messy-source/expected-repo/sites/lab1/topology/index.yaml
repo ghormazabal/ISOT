@@ -1,0 +1,31 @@
+site:
+  id: lab1
+  description: Laboratorio del ejemplo de ingesta (datos ficticios)
+subnets:
+  - name: OOB
+    cidr: 10.60.0.0/24
+    vlan: 10
+    gateway: 10.60.0.1
+    description: OOB / BMC y gestión de switches
+  - name: HOST_MGMT
+    cidr: 10.60.1.0/24
+    vlan: 100
+    gateway: 10.60.1.1
+    description: Gestión de hosts
+  - name: STORAGE
+    cidr: 10.60.2.0/24
+    vlan: 200
+    gateway: ""
+    description: Storage; sin gateway según la fuente (L2 puro)
+vlans:
+  - {id: 10, name: OOB, subnet: OOB}
+  - {id: 100, name: HOST_MGMT, subnet: HOST_MGMT}
+  - {id: 200, name: STORAGE, subnet: STORAGE}
+clusters:
+  - {name: lab1-k8s, kind: kubernetes, path: sites/lab1/clusters/lab1-k8s.yaml}
+undocumented_peers: []
+gaps:
+  - "VLAN 300: la fuente la da por en desuso; no se incluye hasta que una persona lo confirme (GAP-001)."
+  - "LAB1-NODE03: IP de gestión en conflicto entre fuentes (GAP-002)."
+  - "LAB1-NODE04: sin BMC, clúster ni cableado documentados (GAP-003..005)."
+  - "lab1-k8s: service_cidr, distro y template desconocidos (GAP-006, GAP-007)."

@@ -1,4 +1,14 @@
-# Instrucciones para agentes de IA (ISoT)
+# Instrucciones para agentes de IA (ISoT): herramienta y edición de datos
+
+Alcance de este archivo:
+
+- **§1-9**: navegar y editar un repositorio de datos que **ya existe**.
+- **§10**: desarrollo de la herramienta.
+
+Para **construir o actualizar** un repositorio de datos a partir de fuentes
+desordenadas (planillas, CSV, notas, configs), la guía es
+[docs/llm/INGEST.md](docs/llm/INGEST.md): formato esperado, procedimiento,
+convenciones de `_ingest/` y prompt. Índice de guías: [AGENTS.md](AGENTS.md).
 
 ISoT es una herramienta: el inventario vive en un **repositorio de datos**
 aparte (configurado en `isot.yaml` → `data_repo.path` o la lista `repos`, o
@@ -183,3 +193,32 @@ Overrides: `rule_overrides: [{id, severity, reason}]` en clúster, device o
 La vista previa del wizard evalúa el estado propuesto. Errores **nuevos**
 bloquean Confirmar; warnings nuevos exigen checkbox `accept_warnings`.
 Comparar distingue hallazgos añadidos y resueltos entre refs.
+
+## 10. Desarrollo de la herramienta
+
+Lo que corre CI (`.github/workflows/ci.yml`); córrelo antes de abrir un PR:
+
+```bash
+pip install -e ".[dev]"
+python -m isot.validator --repo examples/demo-repo
+python -m isot.indexer --check --repo examples/demo-repo
+python -m isot.leakcheck
+pytest
+cd web && npm ci && npm test && npm run build
+```
+
+- **Schemas** (`schemas/*.schema.json`): se generan desde `isot/schemas.py`,
+  que importa las constantes de los módulos que validan (severidades de
+  override, `connection_rules`, formato de `_ingest/`). Si cambias un campo que
+  el validador o la UI leen, actualiza `isot/schemas.py` y ejecuta
+  `python -m isot.schemas --write`. `tests/test_schemas.py` falla si los
+  archivos quedan desfasados o si un repo de ejemplo (demo, demo-sur, salida
+  del wizard, `examples/messy-source/expected-repo`) deja de cumplirlos.
+- **Reglas**: una regla nueva se registra con `@rule` en `isot/rules/` y va al
+  catálogo de [docs/rules.md](docs/rules.md). Las de ingesta (`ING-*`) viven
+  en `isot/rules/ingest.py` y su lógica en `isot/ingest.py`.
+- **Ejemplos**: datos ficticios y genéricos (RFC 1918, sin nombres de
+  fabricantes, clientes ni productos reales). Si cambias
+  `examples/messy-source/source/`, regenera `files[]` de
+  `expected-repo/_ingest/state.yaml` con `isot ingest hash --source ...`.
+- Mensajes de commit en español. Sin rutas locales en archivos versionados.

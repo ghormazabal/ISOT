@@ -212,14 +212,45 @@ jobs:
     uses: ghormazabal/ISOT/.github/workflows/validate-data-repo.yml@main
     with:
       strict: false
+      schemas: true   # opcional: también JSON Schema (schemas/*.schema.json)
 ```
 
 O la acción compuesta en un job propio:
 `uses: ghormazabal/ISOT/.github/actions/validate@main` (`repo`, `isot-ref`,
-`strict`, `install`). Instala ISoT desde un checkout (para tener
+`strict`, `schemas`, `install`). Instala ISoT desde un checkout (para tener
 `templates/`) y corre `isot-validate --repo` e `isot-index --check --repo`.
 Hooks de [pre-commit](https://pre-commit.com): `isot-index` e
 `isot-validate` en [`.pre-commit-hooks.yaml`](.pre-commit-hooks.yaml).
+
+## Ingesta con LLM
+
+Para construir un repositorio de datos a partir de fuentes desordenadas
+(planillas, CSV, notas, configs de switches, inventarios Ansible) y
+mantenerlo al día, cualquier LLM o agente puede seguir
+[`docs/llm/INGEST.md`](docs/llm/INGEST.md). La guía trae:
+
+- el formato que espera ISoT, con schemas generados desde el código en
+  [`schemas/`](schemas);
+- el procedimiento en 8 pasos;
+- reglas duras: no inventar, sin secretos, conflictos a una persona;
+- las convenciones de `_ingest/`:
+  - `state.yaml`: revisión procesada;
+  - `provenance.yaml`: de dónde sale cada entidad;
+  - `gaps.yaml`: desconocidos y conflictos;
+- la reingesta incremental en una rama `ingest/<fecha>`;
+- un prompt listo para pegar y un checklist.
+
+Ejemplo trabajado: [`examples/messy-source/`](examples/messy-source).
+
+```bash
+isot validate --repo DIR --schemas --format json    # + JSON Schema (INV-SCH-001)
+isot ingest status --repo DIR --source FUENTE       # qué cambió desde la última ingesta (exit 1 si hay cambios)
+isot ingest hash --source FUENTE                    # sha256 por archivo para _ingest/state.yaml
+```
+
+El validador valida `_ingest/` (ING-FMT-001, ING-REF-001), muestra los huecos
+abiertos (ING-GAP-001) y falla si encuentra secretos en el inventario
+(ING-SEC-001).
 
 ## Arquitectura
 
@@ -661,4 +692,6 @@ y `global`), `/api/findings?base=&head=[&site=]`, `/api/rules`,
 Con edición: `GET /api/wizard/status`, `GET /api/wizard/cabling-defaults`,
 `POST /api/wizard/device/preview|commit`, `POST /api/wizard/site/preview|commit`.
 
-Convenciones para agentes: [LLM_INSTRUCTIONS.md](LLM_INSTRUCTIONS.md).
+Convenciones para agentes: [AGENTS.md](AGENTS.md) (herramienta y edición de datos en
+[LLM_INSTRUCTIONS.md](LLM_INSTRUCTIONS.md); ingesta desde fuentes en
+[docs/llm/INGEST.md](docs/llm/INGEST.md)).

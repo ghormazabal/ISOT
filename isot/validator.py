@@ -439,10 +439,26 @@ def format_report(
     return "\n".join(header) + "\n"
 
 
-def findings_json(repo_root: Path) -> dict:
+def findings_json(repo_root: Path, findings: list | None = None) -> dict:
     from isot.rules.evaluate import payload as findings_payload, evaluate
 
-    return findings_payload(evaluate(repo_root))
+    return findings_payload(evaluate(repo_root) if findings is None else findings)
+
+
+def schema_findings(repo_root: Path) -> list:
+    """Hallazgos INV-SCH-001 (requiere jsonschema)."""
+    from isot.rules.registry import RULES, emit
+    from isot.schemas import schema_issues
+
+    spec = RULES["INV-SCH-001"]
+    out = []
+    for rel, message in schema_issues(repo_root):
+        parts = rel.split("/")
+        site = parts[1] if len(parts) > 2 and parts[0] == "sites" else None
+        out.append(
+            emit(spec, entity_kind="site" if site else "template", entity_id=rel, site=site, path=rel, message=message)
+        )
+    return out
 
 
 def github_annotations(repo_root: Path) -> str:
@@ -467,16 +483,24 @@ def github_annotations(repo_root: Path) -> str:
     return "\n".join(lines) + ("\n" if lines else "")
 
 
-def validate(repo_root: Path, *, strict: bool = False, fmt: str = "text") -> int:
+def validate(repo_root: Path, *, strict: bool = False, fmt: str = "text", schemas: bool = False) -> int:
     from isot.rules.evaluate import evaluate, finding_counts
 
     devices = load_devices(repo_root)
     findings = evaluate(repo_root)
+    if schemas:
+        from isot.schemas import SchemasUnavailable
+
+        try:
+            findings.extend(schema_findings(repo_root))
+        except SchemasUnavailable as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return CONFIG_EXIT
     counts = finding_counts(findings)
     if fmt == "json":
         import json
 
-        sys.stdout.write(json.dumps(findings_json(repo_root), ensure_ascii=False, indent=2) + "\n")
+        sys.stdout.write(json.dumps(findings_json(repo_root, findings), ensure_ascii=False, indent=2) + "\n")
     else:
         issues = [item.message for item in findings if item.severity == "error"]
         warnings = [item.message for item in findings if item.severity == "warning"]
@@ -503,6 +527,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="También falla si hay warnings.",
     )
     parser.add_argument(
+        "--schemas",
+        action="store_true",
+        help="También valida cada YAML contra schemas/*.schema.json (requiere jsonschema).",
+    )
+    parser.add_argument(
         "--format",
         dest="fmt",
         choices=("text", "json"),
@@ -518,7 +547,7 @@ def main(argv: list[str] | None = None) -> int:
     if targets is None:
         return CONFIG_EXIT
     if len(targets) == 1 and not targets[0].error:
-        return validate(targets[0].path, strict=args.strict, fmt=args.fmt)
+        return validate(targets[0].path, strict=args.strict, fmt=args.fmt, schemas=args.schemas)
     if args.fmt == "json":
         print("error: --all con --format json no está soportado; usa --repo-id", file=sys.stderr)
         return CONFIG_EXIT
@@ -529,7 +558,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[ERROR] no disponible: {target.error}")
             worst = max(worst, FAIL_EXIT)
             continue
-        worst = max(worst, validate(target.path, strict=args.strict, fmt=args.fmt))
+        worst = max(worst, validate(target.path, strict=args.strict, fmt=args.fmt, schemas=args.schemas))
     return worst
 
 

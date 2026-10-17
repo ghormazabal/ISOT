@@ -102,6 +102,17 @@ def rule_cabling(ctx: RuleContext) -> list[Finding]:
 
 
 @rule(
+    "INV-SCH-001",
+    severity="error",
+    description="YAML que no cumple su JSON Schema (schemas/*.schema.json). Solo con isot validate --schemas.",
+    entity="device",
+    recommendation="Corrige el tipo o el formato del campo indicado (IP/CIDR, VLAN entera 1-4094, listas, campos obligatorios).",
+)
+def rule_schema(_ctx: RuleContext) -> list[Finding]:
+    return []
+
+
+@rule(
     "RULE-OVR-001",
     severity="warning",
     description="rule_overrides inválido (sin reason, severity desconocida o tipo incorrecto).",

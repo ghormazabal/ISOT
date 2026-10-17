@@ -1,0 +1,9 @@
+hostname: LAB1-NODE04
+role: worker
+kind: baremetal
+model: server-2u
+os: Linux 22.04
+networking:
+  - interface: HOST_MGMT
+    vlan: 100
+    ip: 10.60.1.14/24

@@ -1,0 +1,2 @@
+# Las fuentes del ejemplo de ingesta se comparan por sha256: sin conversión de fin de línea.
+examples/messy-source/source/** -text

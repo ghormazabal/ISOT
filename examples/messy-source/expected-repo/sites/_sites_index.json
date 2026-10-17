@@ -1,0 +1,12 @@
+[
+  {
+    "id": "lab1",
+    "name": "lab1",
+    "path": "sites/lab1",
+    "description": "Laboratorio del ejemplo de ingesta (datos ficticios)",
+    "device_count": 8,
+    "cluster_count": 1,
+    "address_spaces": [],
+    "inter_site_links": []
+  }
+]

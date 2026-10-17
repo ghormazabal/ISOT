@@ -968,7 +968,7 @@ def site_preview(repo: Path, body: dict[str, Any]) -> dict[str, Any]:
     vlan_offset = int(body.get("vlan_offset") or 0)
     infra_range = str(body.get("infra_range") or "").strip()
     dci = bool(body.get("dci"))
-    dci_peer = str(body.get("dci_peer") or "site1")
+    dci_peer = str(body.get("dci_peer") or "")
     clusters_spec = body.get("clusters") or []
     if not SAFE_ID.fullmatch(new_id):
         raise WizardError("id de sitio inválido (minúsculas, números y guiones)")
@@ -977,12 +977,13 @@ def site_preview(repo: Path, body: dict[str, Any]) -> dict[str, Any]:
     sites, spaces = load_catalog(repo)
     if any(item.id == new_id for item in sites):
         raise WizardError(f"el sitio {new_id} ya existe")
+    if dci and not dci_peer and sites:
+        dci_peer = sites[0].id
     if dci and not any(item.id == dci_peer for item in sites):
         raise WizardError(f"DCI pedido hacia {dci_peer}, pero ese sitio no existe en el repositorio de datos")
     if not template_site_id:
-        # Sin plantilla explícita: site2 (demo), el primer sitio, o la plantilla «edge».
-        fallback = next((item for item in sites if item.id == "site2"), sites[0] if sites else None)
-        template_site_id = fallback.id if fallback else f"{SITE_TEMPLATE_PREFIX}edge"
+        # Sin plantilla explícita: el primer sitio del catálogo o la plantilla «edge».
+        template_site_id = sites[0].id if sites else f"{SITE_TEMPLATE_PREFIX}edge"
     if template_site_id.startswith(SITE_TEMPLATE_PREFIX):
         loaded = site_template_topology(repo, template_site_id)
         if loaded is None:

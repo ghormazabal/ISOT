@@ -1,0 +1,297 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "isot:schemas/cluster",
+  "title": "Clúster: sites/<sitio>/clusters/<cluster_name>.yaml",
+  "description": "El nombre del archivo debe ser cluster_name: cluster_ref lo resuelve así.",
+  "type": "object",
+  "required": [
+    "cluster_name",
+    "kind"
+  ],
+  "properties": {
+    "cluster_name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "kind": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "kubernetes, ceph, ... (solo kubernetes entra en la vista Kubernetes y en las reglas K8S-*)."
+    },
+    "template_ref": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ref"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "const": ""
+        }
+      ]
+    },
+    "distro": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "version": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Versión de Kubernetes (v1.30.4+rke2r1, 1.30, ...)."
+    },
+    "kubernetes_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "pod_cidr": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/cidr"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "const": ""
+        }
+      ]
+    },
+    "service_cidr": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/cidr"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "const": ""
+        }
+      ]
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "anyOf": [
+          {
+            "required": [
+              "hostname"
+            ]
+          },
+          {
+            "required": [
+              "name"
+            ]
+          }
+        ],
+        "properties": {
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Hostname de un device del sitio con cluster_ref a este clúster."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "internal_ip": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ip"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "const": ""
+              }
+            ]
+          }
+        }
+      }
+    },
+    "hosts": {
+      "type": "array"
+    },
+    "hosts_missing": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Nodos conocidos por nombre sin YAML de device todavía (no fallan INV-REF-001)."
+    },
+    "nads": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vlan": {
+            "$ref": "#/$defs/vlan"
+          },
+          "subnet": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "name de una subred de la topología."
+          }
+        }
+      }
+    },
+    "metallb": {
+      "type": "object",
+      "properties": {
+        "pools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "subnet": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "addresses": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "vips": {
+          "type": [
+            "array",
+            "object"
+          ]
+        }
+      }
+    },
+    "values_overrides": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "release"
+        ],
+        "properties": {
+          "release": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "name de un chart del template."
+          },
+          "values_inline": {},
+          "values_ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "rule_overrides": {
+      "$ref": "#/$defs/rule_overrides"
+    }
+  },
+  "$defs": {
+    "name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "ip": {
+      "type": "string",
+      "pattern": "^[0-9A-Fa-f:.]+(/[0-9]{1,3})?$",
+      "description": "IPv4/IPv6, con o sin prefijo (10.0.0.5 o 10.0.0.5/24)."
+    },
+    "cidr": {
+      "type": "string",
+      "pattern": "^[0-9A-Fa-f:.]+/[0-9]{1,3}$",
+      "description": "Red en notación CIDR (10.0.0.0/24)."
+    },
+    "vlan": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4094,
+      "description": "VLAN 802.1Q (1-4094)."
+    },
+    "ref": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "`nombre` (mismo sitio) o `sitio/nombre`."
+    },
+    "rule_overrides": {
+      "type": "array",
+      "description": "Cambia la severidad de una regla en este alcance. Sin reason no aplica (RULE-OVR-001).",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "severity",
+          "reason"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id de regla, p.ej. K8S-CP-001 (ver docs/rules.md)."
+          },
+          "severity": {
+            "enum": [
+              "error",
+              "warning",
+              "info",
+              "off"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Por qué se acepta la desviación (obligatorio)."
+          }
+        }
+      }
+    }
+  }
+}

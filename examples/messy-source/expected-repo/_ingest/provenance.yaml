@@ -1,0 +1,41 @@
+# De dónde sale cada entidad. locator: «línea N» (texto/CSV, encabezado = línea 1) u «Hoja!A5» (planillas).
+version: 1
+entities:
+  site:lab1:
+    - {source: messy, file: hosts.csv, locator: "líneas 2-9", fields: [id]}
+  subnet:lab1/OOB:
+    - {source: messy, file: notes.md, locator: "línea 7"}
+  subnet:lab1/HOST_MGMT:
+    - {source: messy, file: notes.md, locator: "línea 8"}
+  subnet:lab1/STORAGE:
+    - {source: messy, file: notes.md, locator: "línea 9"}
+  vlan:lab1/10:
+    - {source: messy, file: notes.md, locator: "línea 7"}
+  vlan:lab1/100:
+    - {source: messy, file: notes.md, locator: "línea 8"}
+  vlan:lab1/200:
+    - {source: messy, file: notes.md, locator: "línea 9"}
+  device:lab1/LAB1-SPINE01:
+    - {source: messy, file: hosts.csv, locator: "línea 2"}
+  device:lab1/LAB1-LEAF01:
+    - {source: messy, file: hosts.csv, locator: "línea 3", fields: [hostname, role, model, os, pair]}
+    - {source: messy, file: switch-config.txt, locator: "líneas 3-9", fields: [networking]}
+  device:lab1/LAB1-LEAF02:
+    - {source: messy, file: hosts.csv, locator: "línea 4", fields: [hostname, role, model, os, pair]}
+    - {source: messy, file: switch-config.txt, locator: "líneas 23-27", fields: [networking]}
+  device:lab1/LAB1-MGMT01:
+    - {source: messy, file: hosts.csv, locator: "línea 5"}
+  device:lab1/LAB1-NODE01:
+    - {source: messy, file: hosts.csv, locator: "línea 6", fields: [hostname, role, model, os, cluster_ref, oob, networking]}
+    - {source: messy, file: switch-config.txt, locator: "líneas 10-15, 28-30", fields: [bonds]}
+  device:lab1/LAB1-NODE02:
+    - {source: messy, file: hosts.csv, locator: "línea 7", fields: [hostname, role, model, os, cluster_ref, oob, networking]}
+    - {source: messy, file: switch-config.txt, locator: "líneas 16-18, 31-33", fields: [bonds]}
+  device:lab1/LAB1-NODE03:
+    - {source: messy, file: hosts.csv, locator: "línea 8", fields: [hostname, role, model, os, cluster_ref, oob]}
+    - {source: messy, file: switch-config.txt, locator: "líneas 19-21, 34-36", fields: [bonds]}
+  device:lab1/LAB1-NODE04:
+    - {source: messy, file: hosts.csv, locator: "línea 9", fields: [hostname, role, model, os, networking]}
+  cluster:lab1/lab1-k8s:
+    - {source: messy, file: notes.md, locator: "líneas 14-15", fields: [cluster_name, nodes, pod_cidr]}
+    - {source: messy, file: hosts.csv, locator: "líneas 6-8", fields: [nodes]}

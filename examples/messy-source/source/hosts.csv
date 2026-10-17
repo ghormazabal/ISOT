@@ -1,0 +1,9 @@
+Hostname,Tipo,Rol,IP gestion,BMC IP,Switch BMC,Puerto BMC,Modelo,SO,Cluster,Notas
+lab1-spine01,switch,spine,10.60.0.11,,,,switch-32p,nos,,
+lab1-leaf01,switch,leaf,10.60.0.21,,,,switch-48p,nos,,par con leaf02
+lab1-leaf02,switch,leaf,10.60.0.22,,,,switch-48p,nos,,par con leaf01
+lab1-mgmt01,switch,mgmt,10.60.0.2,,,,switch-24p-1g,nos,,switch OOB
+lab1-node01,servidor,control-plane,10.60.1.11,10.60.0.31,lab1-mgmt01,Gi1,server-1u,Linux 22.04,lab1-k8s,
+LAB1-NODE02 ,servidor,worker,10.60.1.12,10.60.0.32,lab1-mgmt01,Gi2,server-2u,Linux 22.04,lab1-k8s,
+lab1-node03,servidor,worker,10.60.1.13,10.60.0.33,lab1-mgmt01,Gi3,server-2u,Linux 22.04,lab1-k8s,
+lab1-node04,servidor,worker,10.60.1.14,?,,,server-2u,Linux 22.04,?,recién llegado; falta cablear

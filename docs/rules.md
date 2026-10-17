@@ -129,3 +129,11 @@ conserva al salir de Editar y al recargar.
 | INV-HELM-001 | error | `values_ref` inválido, chart duplicado, override a release inexistente. | — |
 | INV-CAB-001 | warning | Device no cumple `connection_rules`. | override o corrige el cableado |
 | RULE-OVR-001 | warning | Override sin `reason` o severity inválida (se ignora). | añade `reason` |
+| INV-SCH-001 | error | YAML que no cumple `schemas/*.schema.json`. Solo con `isot validate --schemas`. | — (corrige el campo) |
+| ING-FMT-001 | error | `_ingest/state.yaml`, `gaps.yaml` o `provenance.yaml` con formato inválido (warning: YAML desconocido en `_ingest/`). | — |
+| ING-REF-001 | warning | `_ingest/` cita una entidad o una fuente que no existe. | corrige la clave `<tipo>:<sitio>/<nombre>` |
+| ING-GAP-001 | info / warning | Hueco abierto (info) o pendiente de una persona (`needs-human`, warning) en `_ingest/gaps.yaml`. | resuelve el hueco (`status: resolved` + `resolution`) |
+| ING-SEC-001 | error | Posible secreto (password, community, token, clave privada) en el repo de datos. | — (quítalo; usa `${VAR}`, `<secreto>`, `vault:`) |
+
+Las reglas `ING-*` y el formato de `_ingest/` se describen en
+[docs/llm/INGEST.md](llm/INGEST.md).
