@@ -135,6 +135,7 @@ conserva al salir de Editar y al recargar.
 | ING-REF-001 | warning | `_ingest/` cita una entidad o una fuente que no existe. | corrige la clave `<tipo>:<sitio>/<nombre>` |
 | ING-GAP-001 | info / warning | Hueco abierto (info) o pendiente de una persona (`needs-human`, warning) en `_ingest/gaps.yaml`. | resuelve el hueco (`status: resolved` + `resolution`) |
 | ING-SEC-001 | error | Posible secreto (password, community, token, clave privada) en el repo de datos. | — (quítalo; usa `${VAR}`, `<secreto>`, `vault:`) |
+| IDX-001 | warning | El índice commiteado (`sites/_sites_index.json`, `_device_index.json`, `_cluster_index.json`, `_template_index.json`, `_artifacts_index.json`, `_index_manifest.json`) falta o no refleja los archivos del repo. La web lo recalcula en memoria (más lento) y el CI (`isot index --check`) falla. | `isot index` (o «Reindexar» en la web) y confirma el índice en el mismo commit |
 | REN-001 | error | Instancia de render que no se puede generar: template inexistente, `template.yaml` inválido, variable indefinida (StrictUndefined), error de sintaxis Jinja, ruta de salida inválida o `renders.yaml` mal formado. El mensaje trae archivo:línea. | corrige el template o la instancia (Renders → Plantillas) |
 | REN-002 | warning | La salida de un render parece contener un secreto (password, token, community, clave privada). | usa una referencia (`${VAR}`, `<secreto>`, `vault:`) |
 

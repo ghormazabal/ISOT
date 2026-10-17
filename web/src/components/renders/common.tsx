@@ -17,6 +17,8 @@ export const STATUS_LABEL: Record<string, string> = {
   unchanged: "igual",
   orphaned: "huérfano",
   deleted: "se borra",
+  added: "añadido",
+  removed: "eliminado",
   ok: "ok",
   error: "error",
   disabled: "deshabilitado",
@@ -137,15 +139,25 @@ export function UnifiedDiff({ diff }: { diff: string }) {
   );
 }
 
-export function SideBySideDiff({ before, after }: { before: string | null; after: string | null }) {
+export function SideBySideDiff({
+  before,
+  after,
+  leftLabel = "Destino (actual)",
+  rightLabel = "Render (nuevo)",
+}: {
+  before: string | null;
+  after: string | null;
+  leftLabel?: string;
+  rightLabel?: string;
+}) {
   const rows = useMemo(() => sideBySide(before, after), [before, after]);
   let left = 0;
   let right = 0;
   return (
     <div className="render-sbs" role="table">
       <div className="render-sbs-head" role="row">
-        <span>Destino (actual)</span>
-        <span>Render (nuevo)</span>
+        <span>{leftLabel}</span>
+        <span>{rightLabel}</span>
       </div>
       {rows.map((row, index) => {
         if (row.left !== null) left += 1;

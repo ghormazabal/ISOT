@@ -22,6 +22,7 @@ import isot.rules.ingest  # noqa: F401
 import isot.rules.inventory  # noqa: F401
 import isot.rules.k8s  # noqa: F401
 import isot.rules.renders  # noqa: F401
+import isot.rules.index  # noqa: F401
 
 
 class FindingList(list):
@@ -202,6 +203,10 @@ def evaluate_overlay(
         dest = Path(tmp)
         _copy_inventory(root, dest)
         apply_files(dest, files)
+        # Como el commit real: el índice se regenera junto con los archivos.
+        from isot.indexer import write_indexes
+
+        write_indexes(dest, incremental=False)
         head = evaluate(dest, as_of=as_of)
     added, resolved = diff_findings(base, head)
     added = wizard_scope(added, site)
@@ -225,13 +230,12 @@ def wizard_scope(findings: Iterable[Finding], site: str | None) -> list[Finding]
 
 
 def evaluate_ref(repo: Path, ref: str, *, site: str | None = None, as_of: date | None = None) -> FindingList:
-    from isot.gitdiff import _materialize
+    """Hallazgos en una ref: `local` (working tree) o rama/tag/commit (árbol cacheado por SHA)."""
+    from isot.refs import resolve_ref, tree_for
 
-    name = validate_ref(ref)
-    sha = resolve_sha(repo, name)
-    for tree in _materialize(repo, sha):
+    spec = resolve_ref(repo, ref)
+    with tree_for(repo, spec) as tree:
         return evaluate(tree, site=site, as_of=as_of)
-    raise RefError(f"no se pudo materializar {name}")
 
 
 def diff_findings(base: Iterable[Finding], head: Iterable[Finding]) -> tuple[list[Finding], list[Finding]]:

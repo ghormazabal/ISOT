@@ -15,11 +15,14 @@ Elige la guía según la tarea:
 | Construir o actualizar un **repositorio de datos** desde fuentes desordenadas (planillas, CSV, notas, configs, inventarios) | [docs/llm/INGEST.md](docs/llm/INGEST.md) |
 | Navegar o editar un repositorio de datos que ya existe (índices, referencias, wizards, reglas) | [LLM_INSTRUCTIONS.md](LLM_INSTRUCTIONS.md) §1-9 |
 | Escribir o modificar **templates de render** (Netplan, manifiestos…) e instancias en `renders.yaml` | [docs/llm/RENDERS.md](docs/llm/RENDERS.md) (personas: [docs/renders/GUIDE.md](docs/renders/GUIDE.md)) |
+| Revisar cambios entre **Local (working tree), ramas y commits** del repo de datos | [docs/compare/GUIDE.md](docs/compare/GUIDE.md) |
 | Cambiar la **herramienta** (código Python/React, schemas, CI) | [LLM_INSTRUCTIONS.md](LLM_INSTRUCTIONS.md) §10 y [docs/dev/](docs/dev/README.md) (arquitectura, mapa de archivos, cómo añadir reglas/rutas/pestañas) |
 
 Reglas comunes:
 
 - No inventes inventario; lo desconocido se marca, no se rellena.
+- Tras añadir o cambiar archivos del repo de datos, ejecuta `isot index` y
+  commitea los índices en el mismo commit (`isot index --check`, regla IDX-001).
 - Sin secretos.
 - Este repositorio es público: sus ejemplos son ficticios y genéricos, y
   `isot leakcheck` debe quedar en verde.

@@ -10,6 +10,10 @@ import type {
   GraphPayload,
   LinkResponse,
   CommitsPayload,
+  CompareFilePayload,
+  CompareFilesPayload,
+  IndexStatus,
+  RefMeta,
   RefsPayload,
   SemanticDiff,
   SiteIndexEntry,
@@ -105,6 +109,16 @@ export const api = {
     const params = rev ? `?rev=${encodeURIComponent(rev)}` : "";
     return fetchJSON<RefsPayload>(`/api/refs${params}`);
   },
+  resolveRef: (ref: string) => fetchJSON<RefMeta>(`/api/refs/resolve?${new URLSearchParams({ ref }).toString()}`),
+  compareFiles: (base: string, head: string, prefix?: string[]) => {
+    const params = new URLSearchParams({ base, head });
+    for (const item of prefix ?? []) params.append("prefix", item);
+    return fetchJSON<CompareFilesPayload>(`/api/compare/files?${params.toString()}`);
+  },
+  compareFile: (base: string, head: string, path: string) =>
+    fetchJSON<CompareFilePayload>(`/api/compare/file?${new URLSearchParams({ base, head, path }).toString()}`),
+  indexStatus: () => fetchJSON<IndexStatus>("/api/index/status"),
+  reindex: () => postJSON<{ ok: boolean; branch: string | null; message?: string }>("/api/index/reindex", {}),
   commits: (rev: string, limit = 80) => {
     const params = new URLSearchParams({ rev, limit: String(limit) });
     return fetchJSON<CommitsPayload>(`/api/commits?${params.toString()}`);

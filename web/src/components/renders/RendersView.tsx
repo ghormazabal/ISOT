@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
-import { api } from "../../api";
+import { isLocalRef, refLabel, type CompareRefs } from "../../compare";
 import { RENDER_SUBTAB_LABELS, RENDER_SUBTABS, type RenderSubTab } from "../../renders";
-import type { RefsPayload, SiteIndexEntry } from "../../types";
+import type { SiteIndexEntry } from "../../types";
 import type { WriteMode } from "./common";
 import { RendersDiffTab } from "./RendersDiffTab";
 import { RendersGuideTab } from "./RendersGuideTab";
@@ -14,47 +14,40 @@ type Props = {
   onSub: (sub: RenderSubTab) => void;
   sites: SiteIndexEntry[];
   editEnabled: boolean;
+  /** Comparar global: los datos que se ven son los de head; null = working tree sin comparar. */
+  compare: CompareRefs | null;
+  onCompare: (refs: CompareRefs) => void;
   onAfterCommit?: () => void;
 };
 
 /** Sección Renders: sub-pestañas Resumen · Plantillas · Diff · Guía (`?tab=renders&sub=…`). */
-export function RendersView({ sub, onSub, sites, editEnabled, onAfterCommit }: Props) {
-  const [ref, setRef] = useState<string>("");
-  const [refs, setRefs] = useState<RefsPayload | null>(null);
+export function RendersView({ sub, onSub, sites, editEnabled, compare, onCompare, onAfterCommit }: Props) {
+  // Una sola fuente de refs: el control Comparar de la barra superior (head = lo que se ve).
+  const ref = compare && !isLocalRef(compare.head) ? compare.head : "";
   const [version, setVersion] = useState(0);
   const [focusTemplate, setFocusTemplate] = useState<{ id: string; source?: "repo" | "bundled"; key: number } | null>(null);
   const [focusInstance, setFocusInstance] = useState<string | null>(null);
-
-  const loadRefs = useCallback(() => {
-    api
-      .refs()
-      .then(setRefs)
-      .catch(() => setRefs(null));
-  }, []);
-  useEffect(loadRefs, [loadRefs]);
-
-  const branches = useMemo(() => (refs?.branches ?? []).filter((item) => !item.remote).map((item) => item.name), [refs]);
 
   const write: WriteMode = useMemo(() => {
     if (!editEnabled) return { canWrite: false, branch: null, reason: "Solo lectura: arranca ISoT con --edit (ISOT_EDIT=1) para escribir." };
     if (!ref) return { canWrite: true, branch: null, reason: "Los cambios se guardan en una rama wizard/… nueva." };
     if (ref.startsWith("wizard/")) return { canWrite: true, branch: ref, reason: `Los cambios continúan la rama ${ref}.` };
-    return { canWrite: false, branch: null, reason: `Viendo ${ref}: solo se escribe sobre el working tree o una rama wizard/….` };
+    return { canWrite: false, branch: null, reason: `Viendo ${refLabel(ref)}: solo se escribe con head = Local o una rama wizard/….` };
   }, [editEnabled, ref]);
 
   const afterCommit = useCallback(() => {
     setVersion((value) => value + 1);
-    loadRefs();
     onAfterCommit?.();
-  }, [loadRefs, onAfterCommit]);
+  }, [onAfterCommit]);
 
+  // «Ver la rama»: head = la rama nueva, base = Local (qué añade la rama).
   const viewBranch = useCallback(
     (branch: string) => {
-      setRef(branch);
+      onCompare({ base: "local", head: branch });
       setVersion((value) => value + 1);
-      loadRefs();
+      onAfterCommit?.();
     },
-    [loadRefs],
+    [onCompare, onAfterCommit],
   );
 
   return (
@@ -68,18 +61,10 @@ export function RendersView({ sub, onSub, sites, editEnabled, onAfterCommit }: P
           ))}
         </nav>
         {sub !== "guia" ? (
-          <label className="site-picker">
-            <span>Datos</span>
-            <select id="renders-ref" value={ref} onChange={(event) => setRef(event.target.value)}>
-              <option value="">working tree</option>
-              {branches.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-              {ref && !branches.includes(ref) ? <option value={ref}>{ref}</option> : null}
-            </select>
-          </label>
+          <span className="muted renders-ref" id="renders-ref" title="Cambia la ref con «Comparar» en la barra superior">
+            Datos: <strong>{ref ? refLabel(ref) : "Local (working tree)"}</strong>
+            {compare ? ` · base ${refLabel(compare.base)}` : ""}
+          </span>
         ) : null}
         <p className={`badge${write.canWrite ? "" : " is-readonly"}`} title={write.reason}>
           {write.canWrite ? (write.branch ? `edición · ${write.branch}` : "edición · rama nueva") : "solo lectura"}
@@ -117,8 +102,9 @@ export function RendersView({ sub, onSub, sites, editEnabled, onAfterCommit }: P
       {sub === "diff" ? (
         <RendersDiffTab
           refName={ref || null}
+          compare={compare}
+          onCompare={onCompare}
           version={version}
-          branches={branches}
           write={write}
           instance={focusInstance}
           onInstance={setFocusInstance}

@@ -1,0 +1,29 @@
+{
+  "manifest_templates": [],
+  "renders": {
+    "path": "renders.yaml",
+    "exists": false,
+    "instances": [],
+    "target_dir": "rendered",
+    "errors": 0
+  },
+  "rendered": [],
+  "ingest": [
+    {
+      "path": "_ingest/README.md",
+      "size": 3135
+    },
+    {
+      "path": "_ingest/gaps.yaml",
+      "size": 2188
+    },
+    {
+      "path": "_ingest/provenance.yaml",
+      "size": 2407
+    },
+    {
+      "path": "_ingest/state.yaml",
+      "size": 767
+    }
+  ]
+}

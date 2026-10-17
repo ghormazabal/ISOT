@@ -26,6 +26,8 @@ type Props = {
   onShowDiff?: () => void;
   diffEntity?: DiffEntity | null;
   onSelectDiffEntity?: (id: string) => void;
+  /** Abre el diff del archivo YAML de la entidad (pestaña Archivos de Comparar). */
+  onShowFileDiff?: (path: string) => void;
   /** Vista «Conexión» de una arista seleccionada; reemplaza al resto del detalle. */
   linkView?: ReactNode;
 };
@@ -57,6 +59,7 @@ export function DetailPanel({
   onShowExplorer,
   onShowDiff,
   diffEntity = null,
+  onShowFileDiff,
   onSelectDiffEntity,
   linkView = null,
 }: Props) {
@@ -65,7 +68,7 @@ export function DetailPanel({
     <section className="detail">
       <header>
         <h2>Detalle</h2>
-        <p>{linkView ? "Arista seleccionada · Esc para cerrar" : diffEntity ? "Diff entre refs de git" : "YAML cargado bajo demanda"}</p>
+        <p>{linkView ? "Arista seleccionada · Esc para cerrar" : diffEntity ? "Diff entre refs (base → head)" : "YAML cargado bajo demanda"}</p>
       </header>
       {linkView}
       {linkView ? null : (
@@ -78,7 +81,7 @@ export function DetailPanel({
           pedirá ahora.
         </p>
       ) : null}
-      {diffEntity ? <DiffEntityBody entity={diffEntity} onSelectChild={onSelectDiffEntity} /> : null}
+      {diffEntity ? <DiffEntityBody entity={diffEntity} onSelectChild={onSelectDiffEntity} onShowFile={onShowFileDiff} /> : null}
       {!diffEntity && selectedSite ? <SiteBody site={selectedSite} onOpenSite={onOpenSite} /> : null}
       {!diffEntity && selection?.type === "device" && device ? (
         <DeviceBody
@@ -491,9 +494,11 @@ function TemplateBody({
 function DiffEntityBody({
   entity,
   onSelectChild,
+  onShowFile,
 }: {
   entity: DiffEntity;
   onSelectChild?: (id: string) => void;
+  onShowFile?: (path: string) => void;
 }) {
   const counts = entity.child_counts;
   const children = entity.children ?? [];
@@ -503,6 +508,13 @@ function DiffEntityBody({
       <p className="mono muted">
         {entity.kind} · {entity.site || "global"} · {entity.id}
       </p>
+      {entity.path && onShowFile ? (
+        <p>
+          <button type="button" className="text-link" id="diff-entity-file" onClick={() => onShowFile(entity.path as string)}>
+            Ver diff del YAML ({entity.path})
+          </button>
+        </p>
+      ) : null}
       <dl className="facts">
         <div>
           <dt>Estado</dt>

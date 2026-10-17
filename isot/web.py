@@ -22,7 +22,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from isot.gitdiff import RefError, clear_caches, list_commits, list_refs, resolve_sha, semantic_diff, snapshot_ref, validate_ref
+from isot.compare import changed_files, file_diff
+from isot.indexer import ARTIFACTS_INDEX_NAME, build_artifacts_index, cached_status, live_indexes, pending_index_writes
+from isot.gitdiff import RefError, clear_caches, list_commits, list_refs, semantic_diff, snapshot_for
+from isot.refs import describe_ref, resolve_ref
 from isot.helm import (
     chart_meta,
     charts_from_doc,
@@ -87,7 +90,14 @@ def _json_file(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _load_list_index(path: Path, label: str) -> list[dict[str, Any]]:
+def _load_list_index(path: Path, label: str, root: Path | None = None) -> list[dict[str, Any]]:
+    """Lee un índice escrito; si el índice del repo está desactualizado, usa el calculado
+    en memoria (`indexer.live_indexes`): la web nunca sirve datos viejos."""
+    if root is not None:
+        overlay = live_indexes(root)
+        if overlay is not None and str(path) in overlay:
+            data = overlay[str(path)]
+            return data if isinstance(data, list) else []
     if not path.is_file():
         raise HTTPException(
             status_code=503,
@@ -100,7 +110,7 @@ def _load_list_index(path: Path, label: str) -> list[dict[str, Any]]:
 
 
 def load_sites_index(root: Path) -> list[dict[str, Any]]:
-    return _load_list_index(index_path(root), "sites/_sites_index.json")
+    return _load_list_index(index_path(root), "sites/_sites_index.json", root)
 
 
 def load_device_index(root: Path, site_id: str) -> list[dict[str, Any]]:
@@ -111,6 +121,7 @@ def load_device_index(root: Path, site_id: str) -> list[dict[str, Any]]:
     return _load_list_index(
         site.devices_dir / DEVICE_INDEX_NAME,
         f"{site.rel_path}/devices/{DEVICE_INDEX_NAME}",
+        root,
     )
 
 
@@ -120,9 +131,10 @@ def load_cluster_index(root: Path, site_id: str) -> list[dict[str, Any]]:
     if site is None:
         raise HTTPException(status_code=404, detail=f"Sitio no encontrado: {site_id}")
     path = site.clusters_dir / CLUSTER_INDEX_NAME
-    if not path.is_file():
+    overlay = live_indexes(root)
+    if not path.is_file() and (overlay is None or str(path) not in overlay):
         return []
-    return _load_list_index(path, f"{site.rel_path}/clusters/{CLUSTER_INDEX_NAME}")
+    return _load_list_index(path, f"{site.rel_path}/clusters/{CLUSTER_INDEX_NAME}", root)
 
 
 def load_site_template_index(root: Path, site_id: str) -> list[dict[str, Any]]:
@@ -131,16 +143,19 @@ def load_site_template_index(root: Path, site_id: str) -> list[dict[str, Any]]:
     if site is None:
         raise HTTPException(status_code=404, detail=f"Sitio no encontrado: {site_id}")
     path = site.templates_dir / TEMPLATE_INDEX_NAME
-    if not path.is_file():
+    overlay = live_indexes(root)
+    if not path.is_file() and (overlay is None or str(path) not in overlay):
         return []
-    return _load_list_index(path, f"{site.rel_path}/cluster-templates/{TEMPLATE_INDEX_NAME}")
+    return _load_list_index(path, f"{site.rel_path}/cluster-templates/{TEMPLATE_INDEX_NAME}", root)
 
 
 def load_global_template_index(root: Path) -> list[dict[str, Any]]:
     """Índice global del repo de datos + templates de la biblioteca que algún
     clúster referencia (se calculan al vuelo; no se escriben en el repo)."""
     path = root / "cluster-templates" / TEMPLATE_INDEX_NAME
-    entries = _load_list_index(path, f"cluster-templates/{TEMPLATE_INDEX_NAME}") if path.is_file() else []
+    overlay = live_indexes(root)
+    present = path.is_file() or (overlay is not None and str(path) in overlay)
+    entries = _load_list_index(path, f"cluster-templates/{TEMPLATE_INDEX_NAME}", root) if present else []
     return entries + library_template_index(root)
 
 
@@ -750,6 +765,7 @@ def create_app(
                 scope_ids = [site_id] if site_id else known
                 return {
                     "scope": site_id or "all",
+                    "refs": {"base": resolve_ref(resolved_root(), base).meta(), "head": resolve_ref(resolved_root(), head).meta()},
                     "base": findings_payload(base_findings, site=site_id),
                     "head": findings_payload(head_findings, site=site_id),
                     "added": [item.to_dict() for item in added],
@@ -887,6 +903,73 @@ def create_app(
         except RefError as exc:
             raise HTTPException(status_code=400 if rev else 503, detail=str(exc)) from exc
 
+    @app.get("/api/index/status")
+    def index_status_route() -> dict[str, Any]:
+        """¿El índice del working tree está al día? (huellas por grupo de fuentes)."""
+        root = resolved_root()
+        status = dict(cached_status(root, ttl=0))
+        status.pop("groups", None)
+        status["can_reindex"] = bool(registry.configured and edit_for(registry.entry()))
+        status["live"] = not status["fresh"]
+        return status
+
+    @app.get("/api/index/artifacts")
+    def index_artifacts() -> dict[str, Any]:
+        """Índice de artefactos (manifest-templates/, renders.yaml, rendered/, _ingest/)."""
+        root = resolved_root()
+        overlay = live_indexes(root)
+        path = root / ARTIFACTS_INDEX_NAME
+        if overlay is not None and str(path) in overlay:
+            return overlay[str(path)]
+        data = _json_file(path) if path.is_file() else build_artifacts_index(root)
+        return data if isinstance(data, dict) else {}
+
+    @app.post("/api/index/reindex")
+    def index_reindex() -> dict[str, Any]:
+        """Regenera el índice en una rama wizard/… nueva (nunca en main ni en el working tree)."""
+        if not edit_globally() or not (registry.configured and edit_for(registry.entry())):
+            raise HTTPException(status_code=403, detail="edición deshabilitada")
+        root = resolved_root()
+        from isot.renders import commit_files
+
+        writes = pending_index_writes(root)
+        if not writes:
+            return {"ok": True, "branch": None, "message": "El índice ya está al día"}
+        try:
+            result = commit_files(root, writes, [], "reindexar")
+        except WizardError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        clear_caches(root)
+        return maybe_push(result)
+
+    @app.get("/api/refs/resolve")
+    def git_resolve(ref: str = Query(...)) -> dict[str, Any]:
+        """Valida y resuelve una ref (`local`, rama, tag, SHA completo o corto)."""
+        try:
+            return describe_ref(resolved_root(), ref)
+        except RefError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/compare/files")
+    def compare_files(
+        base: str = Query(...),
+        head: str = Query(...),
+        prefix: list[str] | None = Query(default=None),
+    ) -> dict[str, Any]:
+        """Archivos que cambian de base a head (cualquiera puede ser `local`). Solo lectura."""
+        try:
+            return changed_files(resolved_root(), base, head, prefix)
+        except RefError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/compare/file")
+    def compare_file(base: str = Query(...), head: str = Query(...), path: str = Query(...)) -> dict[str, Any]:
+        """Contenido de un archivo en base y en head + diff unificado. Solo lectura."""
+        try:
+            return file_diff(resolved_root(), base, head, path)
+        except RefError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.get("/api/commits")
     def git_commits(rev: str = Query(...), limit: int = Query(default=80)) -> dict[str, Any]:
         try:
@@ -921,10 +1004,10 @@ def create_app(
         root = resolved_root()
         if base and head:
             try:
-                base_sha = resolve_sha(root, validate_ref(base))
-                head_sha = resolve_sha(root, validate_ref(head))
-                before = link_details(view_from_snapshot(snapshot_ref(root, base_sha)), source, target)
-                after = link_details(view_from_snapshot(snapshot_ref(root, head_sha)), source, target)
+                base_spec = resolve_ref(root, base)
+                head_spec = resolve_ref(root, head)
+                before = link_details(view_from_snapshot(snapshot_for(root, base_spec)), source, target)
+                after = link_details(view_from_snapshot(snapshot_for(root, head_spec)), source, target)
             except RefError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
             if before is None and after is None:
@@ -934,7 +1017,7 @@ def create_app(
                 "base": before,
                 "head": after,
                 "diff": diff_details(before, after),
-                "refs": {"base": {"ref": base, "sha": base_sha}, "head": {"ref": head, "sha": head_sha}},
+                "refs": {"base": base_spec.meta(), "head": head_spec.meta()},
             }
         detail = link_details(view_from_tree(root), source, target)
         if detail is None:

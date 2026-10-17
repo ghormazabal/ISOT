@@ -48,6 +48,6 @@ runs:
         if [ "${{ inputs.strict }}" = "true" ]; then args+=(--strict); fi
         if [ "${{ inputs.schemas }}" = "true" ]; then args+=(--schemas); fi
         python -m isot.validator "${args[@]}"
-    - name: Índices al día
+    - name: Índices al día (inventario, artefactos y manifiesto; ver IDX-001)
       shell: bash
       run: python -m isot.indexer --check --repo "${{ inputs.repo }}"

@@ -132,6 +132,17 @@ destinos con `..`, absolutos, por `.git`, enlaces simbólicos que escapan del
 repo y cualquier ruta dentro de la instalación de ISoT. No intentes
 saltarte estas comprobaciones.
 
+Con **Comparar** (barra superior, `?base=&head=`), la pestaña Diff ofrece
+destino en base vs render en head, salida base → head
+(`GET /api/renders/compare?base=&head=`) y diff de `manifest-templates/` +
+`renders.yaml`. Cualquier lado puede ser `local` (working tree).
+
+**Índice (obligatorio)**: si añades o cambias archivos fuera de la UI
+(`manifest-templates/`, `renders.yaml`, `rendered/`), ejecuta
+`isot index --repo <repo>` y commitea los `_*_index.json` y
+`_index_manifest.json` en el mismo commit. `isot index --check` debe pasar;
+si no, la regla `IDX-001` avisa y la CI falla.
+
 ## 7. Procedimiento para escribir un template desde una descripción
 
 1. Identifica el **alcance** (sitio, clúster, por equipo) y la **unidad de
@@ -146,7 +157,8 @@ saltarte estas comprobaciones.
 5. Propón la instancia para `renders.yaml` (§5).
 6. Pide al usuario que pegue los archivos en Renders → Plantillas (o que los
    commitee en `manifest-templates/<id>/`) y revise la preview, los errores
-   (archivo:línea) y la pestaña Diff antes de aplicar.
+   (archivo:línea) y la pestaña Diff antes de aplicar. Si los commiteas tú,
+   corre `isot index --repo <repo>` antes del commit.
 
 ## 8. Ejemplo completo: NADs de Multus en un solo YAML
 
@@ -183,6 +195,7 @@ ver `templates/manifests/netplan-node/` en ISoT. Ejemplo de salida no YAML:
 
 ## 9. Reglas
 
+- `IDX-001` aviso: índice commiteado ausente o desactualizado (ejecuta `isot index`).
 - `REN-001` error: `renders.yaml` inválido, sitio/template/clúster
   desconocido o error de render (archivo:línea).
 - `REN-002` aviso: salida con aspecto de secreto.

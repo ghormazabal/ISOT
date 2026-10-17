@@ -1367,6 +1367,64 @@ def diff_files(rendered: dict[str, str], existing: dict[str, str], *, nested: It
     return out
 
 
+COMPARE_STATUS = {"new": "added", "orphaned": "removed", "modified": "modified", "unchanged": "unchanged"}
+
+
+def compare_outputs(base_root: Path, head_root: Path, *, instance_id: str | None = None) -> dict[str, Any]:
+    """Salida renderizada en base vs en head (dos árboles del mismo repo, p.ej. `local` y un commit).
+
+    Renderiza en memoria cada instancia en ambos lados y compara por ruta final
+    (`<carpeta destino>/<archivo>`): added / removed / modified / unchanged.
+    """
+
+    def outputs(root: Path) -> tuple[dict[str, tuple[str, str]], dict[str, dict[str, Any]], list[str]]:
+        svc = RenderService(root)
+        files: dict[str, tuple[str, str]] = {}
+        meta: dict[str, dict[str, Any]] = {}
+        for inst in svc.instances():
+            if instance_id and inst.id != instance_id:
+                continue
+            result, _ = svc.render(inst)
+            folder, _error = svc.folder_for(inst)
+            prefix = folder or f"{svc.config.target_dir}/{inst.out_dir}"
+            for item in result.files:
+                files[f"{prefix}/{item['path']}"] = (inst.id, str(item.get("content") or ""))
+            meta[inst.id] = {
+                "id": inst.id,
+                "template": inst.template,
+                "version": result.version,
+                "dir": prefix,
+                "errors": result.errors,
+            }
+        return files, meta, list(svc.config.errors)
+
+    base_files, base_meta, base_errors = outputs(base_root)
+    head_files, head_meta, head_errors = outputs(head_root)
+    entries = diff_files({k: v[1] for k, v in head_files.items()}, {k: v[1] for k, v in base_files.items()})
+    by_instance: dict[str, dict[str, int]] = {}
+    for entry in entries:
+        entry["status"] = COMPARE_STATUS[entry["status"]]
+        owner = (head_files.get(entry["path"]) or base_files.get(entry["path"]) or ("?", ""))[0]
+        entry["instance"] = owner
+        bucket = by_instance.setdefault(owner, {"added": 0, "removed": 0, "modified": 0, "unchanged": 0})
+        bucket[entry["status"]] += 1
+    instances = []
+    for inst_id in sorted(set(base_meta) | set(head_meta)):
+        counts = by_instance.get(inst_id, {"added": 0, "removed": 0, "modified": 0, "unchanged": 0})
+        if inst_id not in base_meta:
+            status = "added"
+        elif inst_id not in head_meta:
+            status = "removed"
+        elif counts["added"] or counts["removed"] or counts["modified"] or base_meta[inst_id]["version"] != head_meta[inst_id]["version"]:
+            status = "modified"
+        else:
+            status = "unchanged"
+        info = head_meta.get(inst_id) or base_meta[inst_id]
+        instances.append({**info, "status": status, "counts": counts, "base_version": (base_meta.get(inst_id) or {}).get("version")})
+    counts = {key: sum(1 for e in entries if e["status"] == key) for key in ("added", "removed", "modified", "unchanged")}
+    return {"files": entries, "instances": instances, "counts": counts, "errors": {"base": base_errors, "head": head_errors}}
+
+
 def count_status(entries: Iterable[dict[str, Any]]) -> dict[str, int]:
     counts = {"new": 0, "modified": 0, "unchanged": 0, "orphaned": 0}
     for entry in entries:
@@ -1382,8 +1440,10 @@ def count_status(entries: Iterable[dict[str, Any]]) -> dict[str, int]:
 class RenderService:
     """Templates, instancias, render y diff contra carpetas del mismo repositorio de datos."""
 
-    def __init__(self, root: Path, ctx: Any | None = None) -> None:
+    def __init__(self, root: Path, ctx: Any | None = None, *, git_root: Path | None = None) -> None:
         self.root = root
+        # Repo git real (para leer la carpeta destino en otra ref cuando `root` es un árbol materializado).
+        self.git_root = git_root or root
         self._ctx = ctx
         self.config = load_render_config(root)
         self.repo_error: str | None = None
@@ -1458,7 +1518,7 @@ class RenderService:
                 payload_instances.append(entry)
                 continue
             try:
-                existing, skipped = read_target_tree(self.root, folder, ref)
+                existing, skipped = read_target_tree(self.git_root, folder, ref)
             except Exception as exc:  # noqa: BLE001 - ref inválida, ruta fuera…
                 entry["target_error"] = str(exc)
                 payload_instances.append(entry)
@@ -1677,6 +1737,10 @@ def commit_files(
             path = root / rel
             if path.is_file() and not path.is_symlink() and path.resolve().is_relative_to(root):
                 path.unlink()
+        # El índice (incluidos manifest-templates/, renders.yaml y rendered/) va en el mismo commit.
+        from isot.indexer import write_indexes
+
+        write_indexes(root)
         git(repo, ["add", "-A"])
         if not git(repo, ["status", "--porcelain"]).stdout.strip():
             rollback()

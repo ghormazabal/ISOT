@@ -1,29 +1,24 @@
-"""Diff semántico entre dos refs de Git (sin checkout).
+"""Diff semántico entre dos refs del repo de datos (sin checkout).
 
-Lee cada árbol con `git archive` (lista de argumentos, sin shell),
-materializa un directorio temporal de solo lectura y compara entidades
-del inventario: sitios, devices, VLANs/redes, clústeres, templates,
-releases Helm y values. El resultado se cachea por par de SHAs.
+Cada lado es `local` (working tree) o una rama/tag/commit. Los commits se leen
+con `git archive` (lista de argumentos, sin shell) en un árbol temporal de solo
+lectura cacheado por SHA (`isot.refs.TREES`); se comparan entidades del
+inventario: sitios, devices, VLANs/subredes y espacios IPAM, clústeres,
+templates, releases Helm y values. El resultado se cachea por par de claves
+(SHA o huella del working tree).
 """
 
 from __future__ import annotations
 
-import io
+import dataclasses
 import re
 import subprocess
-import tarfile
-import tempfile
 from collections import OrderedDict, deque
 from pathlib import Path
 from typing import Any, Iterator
 
 from isot.helm import charts_from_doc, flatten_values, load_chart_values
-from isot.indexer import (
-    build_cluster_index_all,
-    build_device_index_all,
-    build_sites_index,
-    build_template_index_all,
-)
+from isot.indexer import build_sites_index, build_template_index_all
 from isot.inventory import (
     abs_path,
     load_catalog,
@@ -223,6 +218,7 @@ def _entity(
     site: str | None,
     payload: Any,
     graph_ids: list[str] | None = None,
+    path: str | None = None,
 ) -> dict[str, Any]:
     return {
         "kind": kind,
@@ -231,12 +227,13 @@ def _entity(
         "site": site,
         "payload": _jsonable(payload),
         "graph_ids": list(graph_ids or []),
+        "path": path,
     }
 
 
 def snapshot_inventory(root: Path) -> dict[str, Any]:
     """Índices + entidades canónicas de un árbol materializado."""
-    sites, _spaces = load_catalog(root)
+    sites, spaces = load_catalog(root)
     devices = load_devices(root, sites)
     clusters = load_clusters(root, sites)
     templates = load_templates(root, sites)
@@ -251,6 +248,7 @@ def snapshot_inventory(root: Path) -> dict[str, Any]:
                 site.id,
                 {"name": site.name, "description": site.description, "path": site.rel_path},
                 graph_ids=[f"site:{site.id}"],
+                path="sites.yaml",
             )
         )
         topology = load_topology(site)
@@ -266,6 +264,7 @@ def snapshot_inventory(root: Path) -> dict[str, Any]:
                     site.id,
                     vlan,
                     graph_ids=[f"network:{site.id}:vlan:{vid}"],
+                    path=f"{site.rel_path}/topology/index.yaml",
                 )
             )
         for subnet in topology.get("subnets") or []:
@@ -280,8 +279,16 @@ def snapshot_inventory(root: Path) -> dict[str, Any]:
                     site.id,
                     subnet,
                     graph_ids=[f"network:{site.id}:subnet:{name}"],
+                    path=f"{site.rel_path}/topology/index.yaml",
                 )
             )
+
+    for space in spaces:
+        raw = dataclasses.asdict(space) if dataclasses.is_dataclass(space) else {"id": str(space)}
+        space_id = str(raw.get("id") or "")
+        if not space_id:
+            continue
+        entities.append(_entity("network", f"global:space:{space_id}", f"IPAM {space_id}", "global", raw, path="sites.yaml"))
 
     for device in devices:
         payload = _clean_doc(device.data)
@@ -293,6 +300,7 @@ def snapshot_inventory(root: Path) -> dict[str, Any]:
                 device.site_id,
                 payload,
                 graph_ids=[f"{device.site_id}:{device.hostname}"],
+                path=device.rel_path,
             )
         )
 
@@ -308,6 +316,7 @@ def snapshot_inventory(root: Path) -> dict[str, Any]:
                 site_id,
                 payload,
                 graph_ids=[f"cluster:{site_id}:{name}"],
+                path=str(cluster.get("_path") or "") or None,
             )
         )
         for item in cluster.get("values_overrides") or []:
@@ -344,6 +353,7 @@ def snapshot_inventory(root: Path) -> dict[str, Any]:
                 site_id,
                 meta,
                 graph_ids=[f"template:{site_id}:{name}"],
+                path=rel or None,
             )
         )
         for chart in charts:
@@ -385,25 +395,50 @@ def snapshot_inventory(root: Path) -> dict[str, Any]:
                 )
             )
 
+    # Índices por ref: si el árbol trae un índice al día (manifiesto), se reutiliza;
+    # el snapshot entero queda cacheado por SHA (o huella del working tree).
+    from isot.indexer import plan_builder
+
+    builder = plan_builder(root)
+    device_index = sorted(
+        (item for site in builder.sites for item in builder.devices(site)),
+        key=lambda item: (item.get("path") or "", item.get("hostname") or ""),
+    )
+    cluster_index = sorted(
+        (item for site in builder.sites for item in builder.clusters(site)),
+        key=lambda item: (item.get("path") or "", item.get("name") or ""),
+    )
     return {
         "entities": {item["id"]: item for item in entities},
-        "sites": build_sites_index(root),
-        "devices": build_device_index_all(root),
-        "clusters": build_cluster_index_all(root),
+        "sites": build_sites_index(root, builder),
+        "devices": device_index,
+        "clusters": cluster_index,
         "templates": build_template_index_all(root),
     }
 
 
 def _materialize(repo: Path, sha: str) -> Iterator[Path]:
-    proc = git(repo, ["archive", "--format=tar", sha], timeout=60)
-    if proc.returncode != 0:
-        detail = (proc.stderr or b"").decode("utf-8", errors="replace").strip()
-        raise RefError(detail or f"git archive falló para {sha}")
-    with tempfile.TemporaryDirectory(prefix="isot-diff-") as tmp:
-        dest = Path(tmp)
-        with tarfile.open(fileobj=io.BytesIO(proc.stdout), mode="r:") as archive:
-            archive.extractall(dest, filter="data")
-        yield dest
+    """Árbol de solo lectura de un commit (caché por SHA fuera de ISoT, ver isot.refs)."""
+    from isot.refs import TREES
+
+    with TREES.acquire(repo, sha) as tree:
+        yield tree
+
+
+def snapshot_for(repo: Path, spec: Any) -> dict[str, Any]:
+    """Snapshot de una `isot.refs.RefSpec`: working tree (por huella) o commit (por SHA)."""
+    if not spec.local:
+        return snapshot_ref(repo, spec.sha)
+    key = (str(repo.resolve()), spec.key)
+    cached = _snapshot_cache.get(key)
+    if cached is not None:
+        _snapshot_cache.move_to_end(key)
+        return cached
+    snap = snapshot_inventory(repo)
+    _snapshot_cache[key] = snap
+    while len(_snapshot_cache) > SNAPSHOT_CACHE_SIZE:
+        _snapshot_cache.popitem(last=False)
+    return snap
 
 
 def snapshot_ref(repo: Path, sha: str) -> dict[str, Any]:
@@ -498,6 +533,7 @@ def _compare_entities(
                 "site": meta.get("site"),
                 "status": status,
                 "graph_ids": list(meta.get("graph_ids") or []),
+                "path": meta.get("path"),
                 "changes": changes,
                 "before": None if before is None else before["payload"],
                 "after": None if after is None else after["payload"],
@@ -877,26 +913,27 @@ def diff_from_snapshots(
 
 
 def semantic_diff(repo: Path, base_ref: str, head_ref: str, site: str | None = None) -> dict[str, Any]:
-    base_name = validate_ref(base_ref)
-    head_name = validate_ref(head_ref)
+    """Diff semántico base → head; cualquiera de los dos puede ser `local` (working tree)."""
+    from isot.refs import resolve_ref
+
     site_key = site or ""
     if site_key and not re.fullmatch(r"^[A-Za-z0-9._-]+$", site_key):
         raise RefError("id de sitio inválido")
-    base_sha = resolve_sha(repo, base_name)
-    head_sha = resolve_sha(repo, head_name)
-    cache_key = (str(repo.resolve()), base_sha, head_sha, site_key)
+    base = resolve_ref(repo, base_ref)
+    head = resolve_ref(repo, head_ref)
+    cache_key = (str(repo.resolve()), base.key, head.key, site_key)
     cached = _diff_cache.get(cache_key)
     if cached is not None:
         _diff_cache.move_to_end(cache_key)
         return cached
-    base_snap = snapshot_ref(repo, base_sha)
-    head_snap = snapshot_ref(repo, head_sha)
+    base_snap = snapshot_for(repo, base)
+    head_snap = snapshot_for(repo, head)
     payload = diff_from_snapshots(
         base_snap,
         head_snap,
         site,
-        base_meta={"ref": base_name, "sha": base_sha, "short": base_sha[:7]},
-        head_meta={"ref": head_name, "sha": head_sha, "short": head_sha[:7]},
+        base_meta=base.meta(),
+        head_meta=head.meta(),
     )
     _diff_cache[cache_key] = payload
     while len(_diff_cache) > CACHE_SIZE:
@@ -906,11 +943,16 @@ def semantic_diff(repo: Path, base_ref: str, head_ref: str, site: str | None = N
 
 def clear_caches(repo: Path | None = None) -> None:
     """Vacía las cachés de diff/snapshot; con `repo`, solo las de ese repositorio."""
+    from isot import indexer
+
+    indexer._STATUS_CACHE.clear()
+    indexer._LIVE_CACHE.clear()
     if repo is None:
         _diff_cache.clear()
         _snapshot_cache.clear()
         return
     key = str(repo.resolve())
+    # Los árboles por SHA no se invalidan: un commit es inmutable.
     for cache in (_diff_cache, _snapshot_cache):
         for item in [k for k in cache if k[0] == key]:
             del cache[item]

@@ -1,3 +1,4 @@
+import type { CompareFilesPayload, RefMeta } from "./types";
 /** Tipos de la API /api/renders (ver isot/renders.py e isot/web_renders.py). */
 
 export type RenderError = { file: string | null; line: number | null; kind: string; message: string; item?: string };
@@ -147,4 +148,17 @@ export type WriteResult = {
   message: string;
   files: string[];
   push?: { ok: boolean; message: string };
+};
+
+export type CompareStatus = "added" | "removed" | "modified" | "unchanged";
+
+/** Salida renderizada en base vs head (`/api/renders/compare`). */
+export type RendersCompare = {
+  base: RefMeta;
+  head: RefMeta;
+  files: { path: string; status: CompareStatus; instance: string; before: string | null; after: string | null; diff: string }[];
+  instances: { id: string; template: string; version: string; base_version: string | null; dir: string; status: CompareStatus; errors: RenderError[]; counts: Record<CompareStatus, number> }[];
+  counts: Record<CompareStatus, number>;
+  errors: { base: string[]; head: string[] };
+  templates: CompareFilesPayload;
 };

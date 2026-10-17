@@ -39,9 +39,12 @@ compartir enlaces (`?tab=renders&sub=resumen|plantillas|diff|guia`).
   el botón **Aplicar** (solo en modo edición).
 - **Guía**: este documento y la guía para LLMs.
 
-El selector **Datos** de la barra permite ver el estado de otra rama del repo
-de datos (por ejemplo la rama `wizard/…` que acabas de crear). Si es una rama
-`wizard/…`, los siguientes guardados continúan esa misma rama.
+Renders usa el control **Comparar** de la barra superior (el mismo de todas
+las vistas, ver [Comparar](../compare/GUIDE.md)): los datos que se ven son los
+de **head** (Local = working tree, una rama, un tag o un commit). Si head es
+una rama `wizard/…`, los siguientes guardados continúan esa misma rama; con
+head en otra rama o commit todo es de solo lectura. «Ver la rama» tras un
+guardado pone base = Local y head = la rama nueva.
 
 Sin `--edit` (o `ISOT_EDIT=1`) todo es de solo lectura: puedes explorar,
 previsualizar y ver diffs, pero los botones de guardar y aplicar están
@@ -183,8 +186,16 @@ que hay en el destino:
 
 - **Carpeta destino**: siempre dentro de este repo de datos: `target_dir`
   (`rendered/` por defecto) o el `target_dir` propio de la instancia.
-- **Comparar con**: working tree, o una rama de este mismo repo (p. ej. la
-  que acaba de crear un «Aplicar»), para revisar lo que contiene.
+- Sin Comparar: render de Local contra la carpeta destino de Local.
+- Con **Comparar** activo hay tres modos:
+  - **Destino (base) vs render (head)**: la carpeta destino tal como está en
+    base contra lo que renderiza head (tras «Aplicar», base = la rama nueva y
+    head = Local: debe verse en sync).
+  - **Salida base → head**: lo que renderiza cada lado (añadidos, eliminados,
+    modificados, iguales por ruta final), útil para ver el efecto de cambiar un
+    template, `renders.yaml` o el inventario.
+  - **Templates y renders.yaml**: diff de archivos de `manifest-templates/` y
+    `renders.yaml` entre base y head.
 - Vista **Unificado** o **Lado a lado** por archivo.
 - **Aplicar…** (solo edición): muestra el diff completo, y al confirmar hace
   commit en una rama `wizard/…` **de este mismo repo de datos**. «Borrar huérfanos»
@@ -244,3 +255,11 @@ solo escribe cuando confirmas un «Aplicar», en una rama `wizard/…` del mismo
 
 Para que un LLM escriba templates por ti, pásale
 [docs/llm/RENDERS.md](../llm/RENDERS.md) y la descripción de lo que quieres.
+
+## Índice
+
+Cada guardado (plantilla, clon, `renders.yaml`, Aplicar) regenera el índice
+del repo de datos (`_artifacts_index.json`, `_index_manifest.json`, …) en el
+mismo commit. Si copias plantillas o salidas a mano, ejecuta `isot index`
+y commitea los índices; si no, ISoT muestra «Índice desactualizado» y la
+regla IDX-001 lo marca.

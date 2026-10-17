@@ -6,7 +6,9 @@ import { DetailPanel } from "./components/DetailPanel";
 import { FindingsBell, FindingsPanel } from "./components/FindingsPanel";
 import { LinkDetailView } from "./components/LinkDetail";
 import { RepoSwitcher } from "./components/RepoSwitcher";
-import { RefPicker, effectiveRef } from "./components/RefPicker";
+import { CompareControl } from "./components/CompareControl";
+import { FilesCompare } from "./components/FilesCompare";
+import { IndexBanner } from "./components/IndexBanner";
 import { Splitter, useMediaQuery, usePanelSize, useViewport } from "./components/Splitter";
 import { Sidebar } from "./components/Sidebar";
 import { TemplateExplorer } from "./components/TemplateExplorer";
@@ -19,7 +21,7 @@ import { api } from "./api";
 import { countFindings, scopeFindings, selectionFromFinding } from "./findings";
 import { appPanelSpecs, clampSize, layoutKey } from "./resize";
 import { edgeSelection, fallbackDetail, relatedFindings } from "./links";
-import { pickDefaultRefs } from "./compareRefs";
+import { compareFromUrl, defaultCompare, withCompareParams, type CompareRefs } from "./compare";
 import { mergeLibraryTemplates } from "./dataRepo";
 import {
   applyEditToggle,
@@ -106,14 +108,14 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
   const [bootError, setBootError] = useState<string | null>(null);
   const [wizardInfo, setWizardInfo] = useState<WizardStatus | null>(null);
   const [canvas, setCanvas] = useState<CanvasMode>("graph");
-  const [compare, setCompare] = useState(() => Boolean(savedSession && !savedSession.editing && savedSession.lastBrowse.compare));
+  // Comparar universal: refs en la URL (?base=…&head=…), `local` = working tree.
+  const [compareRefs, setCompareRefs] = useState<CompareRefs | null>(() => compareFromUrl(window.location.href));
+  const [compare, setCompare] = useState(
+    () => Boolean(compareFromUrl(window.location.href)) || Boolean(savedSession && !savedSession.editing && savedSession.lastBrowse.compare),
+  );
   const [refs, setRefs] = useState<RefsPayload | null>(null);
-  const [baseBranch, setBaseBranch] = useState("");
-  const [baseCommit, setBaseCommit] = useState("");
-  const [baseCustom, setBaseCustom] = useState("");
-  const [headBranch, setHeadBranch] = useState("");
-  const [headCommit, setHeadCommit] = useState("");
-  const [headCustom, setHeadCustom] = useState("");
+  const [filesFocus, setFilesFocus] = useState<string | null>(null);
+  const [indexKey, setIndexKey] = useState(0);
   const [diff, setDiff] = useState<SemanticDiff | null>(null);
   const [diffError, setDiffError] = useState<string | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
@@ -140,12 +142,35 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
   }, [view, renderSub]);
 
   useEffect(() => {
+    const next = withCompareParams(window.location.href, compare && compareRefs ? compareRefs : null);
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (next !== current) window.history.replaceState(window.history.state, "", next);
+  }, [compare, compareRefs, view, renderSub]);
+
+  useEffect(() => {
+    if (compare && !compareRefs && refs) setCompareRefs(defaultCompare(refs));
+  }, [compare, compareRefs, refs]);
+
+  const changeCompare = useCallback((next: CompareRefs | null) => {
+    setDiffEntity(null);
+    if (!next) {
+      setCompare(false);
+      return;
+    }
+    setCompareRefs(next);
+    setCompare(true);
+  }, []);
+
+  useEffect(() => {
     const onPop = () => {
       const state = rendersFromUrl(window.location.href);
       if (state.renders) {
         setView("renders");
         setRenderSub(state.sub);
       }
+      const fromUrl = compareFromUrl(window.location.href);
+      if (fromUrl) setCompareRefs(fromUrl);
+      setCompare(Boolean(fromUrl));
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -221,12 +246,7 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
         setClustersBySite(clusters);
         setGraphs(graphMap);
         setTopologies(topoMap);
-        if (gitRefs) {
-          setRefs(gitRefs);
-          const pick = pickDefaultRefs(gitRefs);
-          setBaseBranch(pick.base);
-          setHeadBranch(pick.head);
-        }
+        if (gitRefs) setRefs(gitRefs);
         if (findingsPayload) setFindings(findingsPayload);
         setWizardInfo(wizard);
         const canEdit = Boolean(wizard?.edit);
@@ -306,11 +326,12 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
     };
   }, [selection, compare]);
 
-  const baseRef = effectiveRef(baseBranch, baseCommit, baseCustom);
-  const headRef = effectiveRef(headBranch, headCommit, headCustom);
+  const baseRef = compareRefs?.base ?? "";
+  const headRef = compareRefs?.head ?? "";
+  const semanticActive = compare && view !== "renders" && view !== "wizards";
 
   useEffect(() => {
-    if (!compare || !baseRef || !headRef) return;
+    if (!semanticActive || !baseRef || !headRef) return;
     let cancelled = false;
     setDiffLoading(true);
     setDiffError(null);
@@ -339,7 +360,7 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
     return () => {
       cancelled = true;
     };
-  }, [compare, baseRef, headRef, siteFilter]);
+  }, [semanticActive, baseRef, headRef, siteFilter, indexKey]);
 
   useEffect(() => {
     if (!compare || !baseRef || !headRef) {
@@ -358,7 +379,7 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
     return () => {
       cancelled = true;
     };
-  }, [compare, baseRef, headRef, siteFilter]);
+  }, [compare, baseRef, headRef, siteFilter, indexKey]);
 
   const devices = useMemo(() => {
     if (siteFilter === "all") return Object.values(devicesBySite).flat();
@@ -492,7 +513,7 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
     return scopeFindings(findings, findingsScope);
   })();
   // ---- Conexión (arista) seleccionada ----
-  const linkRefs = compare && diff ? { base: diff.base.sha, head: diff.head.sha } : null;
+  const linkRefs = compare && diff ? { base: diff.base.local ? "local" : diff.base.sha, head: diff.head.local ? "local" : diff.head.sha } : null;
   const linkRefKey = linkRefs ? `${linkRefs.base}..${linkRefs.head}` : "";
   useEffect(() => {
     if (!selectedEdge) {
@@ -720,33 +741,24 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
             type="button"
             id="renders-tab"
             className={view === "renders" ? "is-active" : ""}
-            onClick={() => {
-              setCompare(false);
-              setView("renders");
-            }}
+            onClick={() => setView("renders")}
           >
             Renders
           </button>
         </nav>
-        <nav className="view-tabs">
-          <button
-            type="button"
-            className={compare ? "is-active" : ""}
-            onClick={() => {
+        <CompareControl
+          refs={refs}
+          value={compare ? (compareRefs ?? defaultCompare(refs)) : null}
+          resolved={diff ? { base: diff.base, head: diff.head } : findingsDiff?.refs}
+          onChange={(next) => {
+            if (next && view === "wizards") {
+              setView(lastBrowse.view);
+              setSiteFilter(lastBrowse.siteFilter);
               setCanvas("graph");
-              setDiffEntity(null);
-              if (view === "wizards" || view === "renders") {
-                setView(lastBrowse.view);
-                setCompare(true);
-                setSiteFilter(lastBrowse.siteFilter);
-                return;
-              }
-              setCompare((value) => !value);
-            }}
-          >
-            Comparar
-          </button>
-        </nav>
+            }
+            changeCompare(next);
+          }}
+        />
         <FindingsBell
           counts={scopedFindings?.counts ?? { error: 0, warning: 0, info: 0 }}
           scopeLabel={findingsScope === "all" ? null : (siteNames[findingsScope] ?? findingsScope)}
@@ -767,35 +779,7 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
             </button>
           </nav>
         ) : null}
-        {compare ? (
-          <div className="ref-pickers">
-            <RefPicker
-              id="base-ref"
-              label="Base"
-              refs={refs}
-              branch={baseBranch}
-              commit={baseCommit}
-              custom={baseCustom}
-              resolvedSha={diff?.base.sha}
-              onBranch={setBaseBranch}
-              onCommit={setBaseCommit}
-              onCustom={setBaseCustom}
-            />
-            <RefPicker
-              id="head-ref"
-              label="Head"
-              refs={refs}
-              branch={headBranch}
-              commit={headCommit}
-              custom={headCustom}
-              resolvedSha={diff?.head.sha}
-              onBranch={setHeadBranch}
-              onCommit={setHeadCommit}
-              onCustom={setHeadCustom}
-            />
-          </div>
-        ) : null}
-        {view === "kubernetes" || compare ? (
+        {view !== "renders" && view !== "wizards" && (view === "kubernetes" || compare) ? (
           <nav className="view-tabs canvas-tabs">
             <button
               type="button"
@@ -822,11 +806,24 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
             >
               Diff values
             </button>
+            {compare ? (
+              <button type="button" id="canvas-files" className={canvas === "files" ? "is-active" : ""} onClick={() => setCanvas("files")} title="Archivos del repo que cambian de base a head (diff YAML)">
+                Archivos
+              </button>
+            ) : null}
           </nav>
         ) : null}
         <p className="badge">{editEnabled ? "edición · wizards" : "solo lectura · Git-as-a-Database"}</p>
       </header>
       {bootError ? <p className="boot-error">No se pudieron leer los índices: {bootError}</p> : null}
+      <IndexBanner
+        editEnabled={editEnabled}
+        refreshKey={indexKey}
+        onReindexed={() => {
+          setIndexKey((value) => value + 1);
+          onRefreshConfig?.();
+        }}
+      />
       {editEnabled ? (
         <WizardsView
           hidden={view !== "wizards"}
@@ -834,7 +831,10 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
           clustersBySite={clustersBySite}
           templates={wizardTemplates}
           siteTemplates={wizardInfo?.site_templates ?? []}
-          onAfterCommit={() => onRefreshConfig?.()}
+          onAfterCommit={() => {
+            setIndexKey((value) => value + 1);
+            onRefreshConfig?.();
+          }}
           initialDraft={wizardDraft}
           onDraftChange={persistDraft}
           onClearDraft={clearDraft}
@@ -843,19 +843,24 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
           onOpenCompare={(base, head) => {
             setView("network");
             setSiteFilter("all");
-            setCompare(true);
             setCanvas("graph");
-            setBaseBranch(base);
-            setBaseCommit("");
-            setBaseCustom("");
-            setHeadBranch(head);
-            setHeadCommit("");
-            setHeadCustom("");
+            changeCompare({ base, head });
           }}
         />
       ) : null}
       {view === "renders" ? (
-        <RendersView sub={renderSub} onSub={setRenderSub} sites={sites} editEnabled={editEnabled} onAfterCommit={() => onRefreshConfig?.()} />
+        <RendersView
+          sub={renderSub}
+          onSub={setRenderSub}
+          sites={sites}
+          editEnabled={editEnabled}
+          compare={compare ? compareRefs : null}
+          onCompare={changeCompare}
+          onAfterCommit={() => {
+            setIndexKey((value) => value + 1);
+            onRefreshConfig?.();
+          }}
+        />
       ) : null}
       {view !== "wizards" && view !== "renders" ? (
         <>
@@ -899,7 +904,9 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
         }}
       />
       )}
-      {compare && canvas === "diff" && diff ? (
+      {compare && canvas === "files" && compareRefs ? (
+        <FilesCompare refs={compareRefs} focusPath={filesFocus} className="explorer-pane" />
+      ) : compare && canvas === "diff" && diff ? (
         <CompareValues diff={diff} onSelectEntity={onDiffEntity} />
       ) : view === "kubernetes" && canvas === "explorer" && templateDetail ? (
         <TemplateExplorer
@@ -956,6 +963,10 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
         onShowDiff={() => setCanvas("diff")}
         diffEntity={compare ? diffEntity : null}
         onSelectDiffEntity={onSelectDiffChild}
+        onShowFileDiff={(path) => {
+          setFilesFocus(path);
+          setCanvas("files");
+        }}
         linkView={linkView}
       />
       <Splitter

@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { isLocalRef, refLabel, type CompareRefs } from "../../compare";
 import { driftLabel } from "../../renders";
 import { rendersApi } from "../../rendersApi";
-import type { DiffFile, DiffInstance, RendersDiff } from "../../rendersTypes";
+import type { DiffFile, DiffInstance, RendersCompare, RendersDiff } from "../../rendersTypes";
+import { FilesCompare } from "../FilesCompare";
 import { ErrorList, errorMessage, FileTree, SideBySideDiff, StatusBadge, UnifiedDiff, WriteDialog, type WriteFlow, type WriteMode } from "./common";
 
 type Props = {
   refName: string | null;
+  /** Comparar global (barra superior): head = datos que se renderizan; base = destino / salida contra la que se compara. */
+  compare: CompareRefs | null;
+  onCompare: (refs: CompareRefs) => void;
   version: number;
-  branches: string[];
   write: WriteMode;
   instance: string | null;
   onInstance: (id: string | null) => void;
@@ -19,9 +23,15 @@ type FileRef = DiffFile & { instance: string };
 
 const STATUS_ORDER = ["new", "modified", "orphaned", "unchanged"] as const;
 
-/** Render fresco vs carpeta destino: árbol con estados + diff unificado o lado a lado + aplicar. */
-export function RendersDiffTab({ refName, version, branches, write, instance, onInstance, onAfterCommit }: Props) {
-  const [targetRef, setTargetRef] = useState("");
+type DiffView = "drift" | "output" | "files";
+
+/**
+ * Render fresco vs carpeta destino: árbol con estados + diff unificado o lado a lado + aplicar.
+ * Con Comparar activo: destino en base vs render en head, salida base→head, o templates/renders.yaml.
+ */
+export function RendersDiffTab({ refName, compare, onCompare, version, write, instance, onInstance, onAfterCommit }: Props) {
+  const [view, setView] = useState<DiffView>("drift");
+  const targetRef = compare && !isLocalRef(compare.base) ? compare.base : "";
   const [data, setData] = useState<RendersDiff | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -75,9 +85,9 @@ export function RendersDiffTab({ refName, version, branches, write, instance, on
   const applyBlocked = !write.canWrite
     ? write.reason
     : refName
-      ? "Aplicar usa el working tree del repo de datos: vuelve a «working tree» para aplicar."
+      ? "Aplicar usa el working tree del repo de datos: pon head = Local para aplicar."
       : targetRef
-        ? "Estás comparando contra otra rama; aplica contra el working tree (elige «working tree»)."
+        ? `El destino se lee en ${refLabel(targetRef)}: pon base = Local (o sal de Comparar) para aplicar.`
         : data?.error
           ? data.error
           : !drifting.length
@@ -94,21 +104,41 @@ export function RendersDiffTab({ refName, version, branches, write, instance, on
     });
   };
 
+  const modeTabs = compare ? (
+    <nav className="view-tabs render-compare-modes" aria-label="Qué comparar">
+      <button type="button" id="render-view-drift" className={view === "drift" ? "is-active" : ""} onClick={() => setView("drift")} title="Carpeta destino leída en base vs render fresco de head">
+        Destino (base) vs render (head)
+      </button>
+      <button type="button" id="render-view-output" className={view === "output" ? "is-active" : ""} onClick={() => setView("output")} title="Lo que renderiza base vs lo que renderiza head">
+        Salida base → head
+      </button>
+      <button type="button" id="render-view-files" className={view === "files" ? "is-active" : ""} onClick={() => setView("files")} title="manifest-templates/ y renders.yaml en base vs head">
+        Templates y renders.yaml
+      </button>
+    </nav>
+  ) : null;
+
+  if (compare && view === "output") {
+    return (
+      <div className="renders-body renders-diff">
+        <div className="render-diff-controls">{modeTabs}</div>
+        <OutputCompare refs={compare} instance={instance} onInstance={onInstance} version={version} />
+      </div>
+    );
+  }
+  if (compare && view === "files") {
+    return (
+      <div className="renders-body renders-diff">
+        <div className="render-diff-controls">{modeTabs}</div>
+        <FilesCompare refs={compare} prefix={["manifest-templates", "renders.yaml"]} title="Templates y renders.yaml" className="render-files-compare" />
+      </div>
+    );
+  }
+
   return (
     <div className="renders-body renders-diff">
       <div className="render-diff-controls">
-        <label className="site-picker">
-          <span>Comparar con</span>
-          <select id="render-target-ref" value={targetRef} onChange={(event) => setTargetRef(event.target.value)}>
-            <option value="">working tree</option>
-            {branches.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-            {targetRef && !branches.includes(targetRef) ? <option value={targetRef}>{targetRef}</option> : null}
-          </select>
-        </label>
+        {modeTabs}
         <label className="site-picker">
           <span>Instancia</span>
           <select value={instance ?? ""} onChange={(event) => onInstance(event.target.value || null)}>
@@ -150,7 +180,8 @@ export function RendersDiffTab({ refName, version, branches, write, instance, on
             <span className="muted">
               {instances.filter((item) => item.in_sync).length} instancia(s) en sync · {drifting.length} con drift
               {` · carpeta destino ${data.target_dir}/`}
-              {targetRef ? ` · en la rama ${targetRef}` : " · working tree"}
+              {targetRef ? ` · destino leído en ${refLabel(targetRef)}` : " · destino en working tree"}
+              {refName ? ` · render de ${refLabel(refName)}` : ""}
             </span>
           </div>
           <div className="render-diff-layout">
@@ -208,11 +239,123 @@ export function RendersDiffTab({ refName, version, branches, write, instance, on
           flow={flow}
           onClose={() => setFlow(null)}
           onDone={(result) => {
-            setTargetRef(result.branch);
+            // Destino tal como quedó en la rama wizard/… vs render local: debería verse en sync.
+            if (result.branch) onCompare({ base: result.branch, head: "local" });
             onAfterCommit();
           }}
         />
       ) : null}
     </div>
+  );
+}
+
+/** Lo que renderiza base vs lo que renderiza head (por ruta final de salida). */
+function OutputCompare({ refs, instance, onInstance, version }: { refs: CompareRefs; instance: string | null; onInstance: (id: string | null) => void; version: number }) {
+  const [data, setData] = useState<RendersCompare | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [hideUnchanged, setHideUnchanged] = useState(true);
+  const [mode, setMode] = useState<"unified" | "split">("unified");
+  const [selected, setSelected] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setError(null);
+    setData(null);
+    rendersApi
+      .compare({ base: refs.base, head: refs.head, instance })
+      .then((value) => !cancelled && setData(value))
+      .catch((err: unknown) => !cancelled && setError(errorMessage(err)));
+    return () => {
+      cancelled = true;
+    };
+  }, [refs.base, refs.head, instance, version]);
+
+  const files = useMemo(() => (data?.files ?? []).filter((file) => !hideUnchanged || file.status !== "unchanged"), [data, hideUnchanged]);
+  useEffect(() => {
+    if (!files.some((file) => file.path === selected)) setSelected(files[0]?.path ?? null);
+  }, [files, selected]);
+  const current = files.find((file) => file.path === selected) ?? null;
+
+  return (
+    <>
+      <div className="render-diff-controls">
+        <label className="site-picker">
+          <span>Instancia</span>
+          <select value={instance ?? ""} onChange={(event) => onInstance(event.target.value || null)}>
+            <option value="">todas</option>
+            {(data?.instances ?? []).map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.id}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="checkbox">
+          <input type="checkbox" checked={hideUnchanged} onChange={(event) => setHideUnchanged(event.target.checked)} />
+          <span>ocultar iguales</span>
+        </label>
+        <nav className="view-tabs">
+          <button type="button" className={mode === "unified" ? "is-active" : ""} onClick={() => setMode("unified")}>
+            Unificado
+          </button>
+          <button type="button" className={mode === "split" ? "is-active" : ""} onClick={() => setMode("split")}>
+            Lado a lado
+          </button>
+        </nav>
+      </div>
+      {error ? <p className="error">{error}</p> : null}
+      {!data && !error ? <p className="muted">Renderizando base y head…</p> : null}
+      {data ? (
+        <>
+          <div className="render-diff-summary">
+            <span className="render-status is-added">{data.counts.added} añadidos</span>
+            <span className="render-status is-removed">{data.counts.removed} eliminados</span>
+            <span className="render-status is-modified">{data.counts.modified} modificados</span>
+            <span className="render-status is-unchanged">{data.counts.unchanged} iguales</span>
+            <span className="muted">
+              salida de {refLabel(refs.base)} → {refLabel(refs.head)} · {data.templates.files.length} archivo(s) de templates/renders.yaml cambian
+            </span>
+          </div>
+          <div className="render-diff-layout">
+            <aside className="render-diff-tree">
+              {data.instances.map((item) => (
+                <div key={item.id} className="render-diff-instance">
+                  <button type="button" className="render-diff-instance-head" onClick={() => onInstance(instance === item.id ? null : item.id)}>
+                    <strong>{item.id}</strong> <StatusBadge status={item.status} />
+                  </button>
+                  <div className="muted render-diff-dir">
+                    <code>{item.dir}/</code> · {item.template}@{item.base_version && item.base_version !== item.version ? `${item.base_version}→${item.version}` : item.version}
+                  </div>
+                  <ErrorList errors={item.errors} warnings={[]} />
+                </div>
+              ))}
+              {[...data.errors.base.map((e) => `base: ${e}`), ...data.errors.head.map((e) => `head: ${e}`)].map((e) => (
+                <p key={e} className="error">
+                  {e}
+                </p>
+              ))}
+              <h4>Archivos</h4>
+              <FileTree items={files} selected={selected} onSelect={(file) => setSelected(file.path)} badge={(file) => <StatusBadge status={file.status} />} />
+            </aside>
+            <section className="render-diff-view">
+              {current ? (
+                <>
+                  <header>
+                    <StatusBadge status={current.status} /> <code>{current.path}</code> <span className="muted">({current.instance})</span>
+                  </header>
+                  {mode === "unified" ? (
+                    <UnifiedDiff diff={current.diff} />
+                  ) : (
+                    <SideBySideDiff before={current.before} after={current.after} leftLabel={`base · ${refLabel(refs.base)}`} rightLabel={`head · ${refLabel(refs.head)}`} />
+                  )}
+                </>
+              ) : (
+                <p className="muted">{files.length ? "Elige un archivo." : "La salida es igual en base y head."}</p>
+              )}
+            </section>
+          </div>
+        </>
+      ) : null}
+    </>
   );
 }

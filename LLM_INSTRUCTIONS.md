@@ -101,7 +101,10 @@ campo `k8s_name` guarda el nombre k8s.
 ## 5. Tras editar YAML
 
 1. `python -m isot.validator --repo <repo de datos>` (sin `--repo` usa `isot.yaml`; `--repo-id ID` o `--all`)
-2. `python -m isot.indexer --repo <repo de datos>`
+2. `python -m isot.indexer --repo <repo de datos>` (**siempre** tras añadir o
+   cambiar archivos; incremental. Commitea los `_*_index.json` y
+   `_index_manifest.json` en el mismo commit; `--check` lo verifica y la regla
+   IDX-001 avisa si quedó desfasado)
 3. `python -m isot.leakcheck` (si tocaste el repo de la herramienta o `examples/`)
 4. No hagas commit si alguno falla o si un `_*_index.json` quedó desfasado.
 5. Altas por UI: wizard (rama `wizard/…`), no commits directos en main.
@@ -142,8 +145,12 @@ Cómo leer charts y values **sin alucinar**:
 La UI tiene selector de sitio (Todos / SITE1 / SITE2). Vista **Sitios**
 (global: DCs y DCI), **Red** (dispositivos de un sitio) y **Kubernetes**
 (templates y clústeres; pestañas Grafo / Explorador / Diff values). El modo
-**Comparar** pide `/api/refs`, `/api/commits?rev=` y `/api/diff` (árboles
-de git, sin checkout). Base y head pueden ser rama, tag, SHA o `HEAD~N`.
+**Comparar** (un control en la barra, estado en `?base=&head=`) pide
+`/api/refs`, `/api/refs/resolve`, `/api/diff`, `/api/findings?base=&head=`,
+`/api/compare/files|file` y `/api/renders/compare` (árboles de git sin
+checkout, cacheados por SHA fuera de ISoT). Base y head pueden ser `local`
+(working tree con cambios sin commit), rama, tag, SHA (corto) o `HEAD~N`.
+Guía: [docs/compare/GUIDE.md](docs/compare/GUIDE.md).
 El estado de un hijo se propaga al sitio/clúster/template/release padre
 (`inherited`, `child_counts`, `children`). El default es **solo lectura**.
 

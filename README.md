@@ -21,7 +21,7 @@ y HEAD corto.*
   datos (p.ej. uno por región o por equipo) y la cabecera cambia entre
   ellos; cada repo tiene su propio estado, hallazgos y ramas.
 - **Visor + editor.** Mapa global de sitios, red por sitio, Kubernetes,
-  explorador de templates y values, Comparar entre refs de git, hallazgos de
+  explorador de templates y values, Comparar entre Local (working tree), ramas y commits, hallazgos de
   reglas de control y wizards que escriben YAML en una rama nueva.
 - **Plantillas y ejemplos, no datos.** Este repositorio trae solo código,
   plantillas (`templates/`), schemas (`schemas/`) y ejemplos ficticios
@@ -357,32 +357,71 @@ mitad de su mínimo los colapsa. Los tamaños se guardan por vista en
 
 *Divisor lista ↔ chart del explorador en pleno arrastre (resaltado).*
 
-### Comparar refs de git
+### Comparar (Local, ramas y commits)
 
-El modo **Comparar** elige dos refs de git y pinta el grafo (verde agregado,
-rojo quitado, amarillo modificado, gris sin cambios) más el diff de values
-Helm. Un sitio, clúster, template o release **hereda** el estado de sus hijos:
-queda amarillo con un badge `+N −N ~N` y el panel lista las entidades
-cambiadas (con enlace). Clic o doble clic en un sitio modificado abre ese
-sitio sin salir de Comparar. VLANs, devices, enlaces y releases quitados se
-dibujan como fantasma (borde rojo punteado). La lista lateral ordena primero
-lo cambiado y activa **solo cambios** cuando hay diferencias. Cada lado
-permite: (1) rama o tag, (2) un commit del historial reciente de esa rama
-(SHA corto, mensaje, autor, fecha, con búsqueda) y (3) pegar un SHA o una
-expresión (`HEAD~3`, `main~1`). Comparar dos commits de la misma rama es
-válido. El backend resuelve cada ref con `git rev-parse --verify` y
-devuelve el SHA en `base.sha` / `head.sha`. Lee los árboles con `git archive`
-(sin checkout).
+**Comparar** enfrenta dos versiones del mismo repositorio de datos en **todas**
+las vistas. Cada lado (base y head) puede ser **Local (working tree)** —con
+los cambios sin commit—, una rama, un tag o un commit (SHA completo o corto,
+`HEAD~3`). Un único control en la barra superior, `[Comparar] BASE main ▾ →
+HEAD Local ▾ ⇄`, abre un menú con buscador (Local, ramas, tags, commits
+recientes) y un campo para pegar un SHA que el backend valida con
+`git rev-parse --verify`. El estado va en la URL (`?base=main&head=local`),
+se puede enlazar y se mantiene al cambiar de pestaña. Por defecto:
+`main → Local`.
+
+Lo mismo se compara en el grafo (Sitios, Red, Kubernetes; verde agregado,
+rojo quitado, amarillo modificado, gris igual; lo quitado como fantasma), el
+detalle de aristas, la lista e inventario con **solo cambios**, el detalle de
+device/clúster/template (con **Ver diff del YAML**), IPAM (VLANs, subredes y
+espacios de direcciones), Diff values, la nueva pestaña **Archivos** (diff
+unificado o lado a lado de cualquier archivo), los hallazgos (nuevos y
+resueltos) y Renders (datos en head; destino en base vs render en head; salida
+base → head; templates y `renders.yaml`). Un sitio, clúster, template o
+release **hereda** el estado de sus hijos (`+N −N ~N`).
+
+Todo es solo lectura: los commits se leen con `git archive` en un directorio
+temporal fuera de ISoT (cacheado por SHA, borrado al salir) y Local se lee del
+disco. Guía completa: [docs/compare/GUIDE.md](docs/compare/GUIDE.md).
 
 ![Comparar main contra demo/diff-example en SITE1](docs/images/compare-graph.png)
 
-*Por defecto Base = `main` y Head = la rama más reciente distinta de la
-actual (en `demo-norte`, `demo/diff-example`): VLAN 2099 `LAB_NET` agregada
-y `site1-jump001` quitado.*
+*Base = `main`, Head = `demo/diff-example` en SITE1: VLAN 2099 `LAB_NET`
+agregada y `site1-jump001` quitado.*
 
 ![Values entre dos refs](docs/images/compare-values.png)
 
 *Diff values entre refs: `cniConfig.mtu` 1440 → 1500.*
+
+![Hallazgos nuevos y resueltos de main a Local](docs/images/compare-findings.png)
+
+*Hallazgos en Comparar: nuevos en head (Local) y resueltos respecto de base.*
+
+![Diff de archivos YAML base → head](docs/images/compare-files.png)
+
+*Pestaña Archivos: diff lado a lado del YAML de un sitio entre `main` y Local.*
+
+### Índice del repo de datos
+
+ISoT lee el inventario de índices JSON generados (`sites/_sites_index.json`,
+`_devices_index.json`, `_clusters_index.json`, `_templates_index.json`,
+`_artifacts_index.json`) y un manifiesto `_index_manifest.json` con la huella
+de cada grupo de fuentes (sitios, devices, clústeres, cluster-templates,
+`manifest-templates/`, `renders.yaml`, salidas `rendered/` y `_ingest/`).
+
+- **Toda escritura de la app** (wizards, guardar/clonar plantillas de render,
+  `renders.yaml`, Aplicar, Corregir, Reindexar) regenera el índice **en el
+  mismo commit** de la rama `wizard/…`.
+- **Al cargar**, ISoT compara el manifiesto con los archivos. Si el índice
+  está desactualizado nunca sirve datos viejos: los recalcula al vuelo
+  (incremental) y muestra el aviso **Índice desactualizado**; con edición, el
+  botón **Reindexar** lo deja commiteado en una rama `wizard/…`.
+- `isot index` es **incremental** (solo reparsea los grupos cuya huella
+  cambió; `--full` rehace todo, `--status` informa sin escribir) e
+  `isot index --check` es la comprobación estricta byte a byte que usa la CI.
+- La regla **IDX-001** (aviso) marca un índice commiteado ausente o
+  desactualizado, y la acción reutilizable de CI falla si no está al día.
+- Quien añada archivos a mano o con un LLM (p.ej. la ingesta) debe correr
+  `isot index` y commitear los índices.
 
 ### Reglas de control y hallazgos
 
@@ -809,7 +848,7 @@ ISOT_EDIT=1 ./scripts/serve.sh --edit
 isot config                                 # configuración y estado de cada repositorio
 isot init --path DIR | --scaffold DIR       # escribe isot.yaml / crea un repo de datos vacío
 isot validate  [--repo DIR | --repo-id ID | --all] [--strict] [--schemas] [--format json]
-isot index     [--repo DIR | --repo-id ID | --all] [--check]
+isot index     [--repo DIR | --repo-id ID | --all] [--check | --status | --full]
 isot schemas   [--check | --write]          # JSON Schema del repo de datos (schemas/*.schema.json)
 isot ingest status --repo DIR --source FUENTE
 isot leakcheck                              # repo de la herramienta
@@ -824,8 +863,11 @@ usan el repositorio por defecto): `/api/health`, `/api/repos`,
 `/api/graph?view=global`, `/api/templates`, detalle bajo demanda,
 `/api/templates/{name}/values/{release}` (lazy),
 `/api/sites/{id}/clusters/{name}/values-diff`,
-`/api/refs`, `/api/commits?rev=<ref>`, y
-`/api/diff?base=<ref>&head=<ref>[&site=<id>]`,
+`/api/refs`, `/api/commits?rev=<ref>`, `/api/refs/resolve?ref=`,
+`/api/diff?base=<ref>&head=<ref>[&site=<id>]` (cualquier lado puede ser
+`local`), `/api/compare/files?base=&head=[&prefix=]`,
+`/api/compare/file?base=&head=&path=`, `/api/index/status`,
+`/api/index/artifacts`, `POST /api/index/reindex` (edición),
 `/api/findings?site=&ref=` (estricto por sitio; sin `site` trae `by_site`
 y `global`), `/api/findings?base=&head=[&site=]`, `/api/rules`,
 `/api/link?source=&target=[&base=&head=]`.
@@ -833,7 +875,8 @@ Con edición: `GET /api/wizard/status`, `GET /api/wizard/cabling-defaults`,
 `POST /api/wizard/device/preview|commit`, `POST /api/wizard/site/preview|commit`.
 Renders: `GET /api/renders[?ref=]`, `/api/renders/templates[/{id}[?source=repo|bundled]]`,
 `/api/renders/templates/{id}/clone?new_id=`, `/api/renders/context?site=&cluster=`,
-`POST /api/renders/preview`, `/api/renders/diff?instance=&target_ref=`,
+`POST /api/renders/preview`, `/api/renders/diff?instance=&target_ref=&ref=`,
+`/api/renders/compare?base=&head=[&instance=]`,
 `/api/renders/config`, `/api/renders/guide?doc=human|llm`; con edición
 `POST /api/renders/templates/save|config|apply/preview|commit` (siempre en una
 rama `wizard/…`).

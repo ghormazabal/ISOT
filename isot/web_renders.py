@@ -15,7 +15,9 @@ from typing import Any, Callable, Iterator
 import yaml
 from fastapi import FastAPI, HTTPException, Query
 
-from isot.gitdiff import RefError, _materialize, clear_caches, resolve_sha, validate_ref
+from isot.compare import changed_files
+from isot.gitdiff import RefError, clear_caches
+from isot.refs import is_local, resolve_ref, tree_for
 from isot.paths import tool_root
 from isot.renders import (
     INSTANCE_KEYS,
@@ -27,6 +29,7 @@ from isot.renders import (
     TEMPLATE_FILE,
     RenderError,
     RenderService,
+    compare_outputs,
     file_diffs,
     find_template,
     head_sha,
@@ -54,20 +57,20 @@ def register(
 ) -> None:
     @contextlib.contextmanager
     def render_root(ref: str | None) -> Iterator[Path]:
+        """Árbol de lectura: vacío o `local` = working tree; si no, el commit (caché por SHA)."""
         root = resolved_root()
-        if not ref:
+        if not ref or is_local(ref):
             yield root
             return
         try:
-            sha = resolve_sha(root, validate_ref(ref))
+            spec = resolve_ref(root, ref)
         except RefError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        for tree in _materialize(root, sha):
+        with tree_for(root, spec) as tree:
             yield tree
-            return
 
     def service(root: Path) -> RenderService:
-        return RenderService(root)
+        return RenderService(root, git_root=resolved_root())
 
     def can_edit() -> bool:
         return bool(registry.configured and edit_for(registry.entry()))
@@ -180,11 +183,29 @@ def register(
         with render_root(ref) as root:
             svc = service(root)
             try:
-                payload = svc.target_diff(instance_id=instance, ref=target_ref or None)
+                payload = svc.target_diff(instance_id=instance, ref=None if is_local(target_ref) else (target_ref or None))
             except (RenderError, RefError) as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
-            payload["edit"] = can_edit() and not ref
+            payload["edit"] = can_edit() and (not ref or is_local(ref))
             return payload
+
+    @app.get("/api/renders/compare")
+    def renders_compare(
+        base: str = Query(...),
+        head: str = Query(...),
+        instance: str | None = Query(default=None),
+    ) -> dict[str, Any]:
+        """Salida renderizada y templates en base vs head (cualquiera puede ser `local`). Solo lectura."""
+        root = resolved_root()
+        try:
+            base_spec, head_spec = resolve_ref(root, base), resolve_ref(root, head)
+            with tree_for(root, base_spec) as base_tree, tree_for(root, head_spec) as head_tree:
+                payload = compare_outputs(base_tree, head_tree, instance_id=instance or None)
+            payload["templates"] = changed_files(root, base_spec, head_spec, [TEMPLATE_DIRNAME, RENDERS_FILE])
+        except (RenderError, RefError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        payload["base"], payload["head"] = base_spec.meta(), head_spec.meta()
+        return payload
 
     @app.get("/api/renders/guide")
     def renders_guide(doc: str = Query(default="human")) -> dict[str, Any]:

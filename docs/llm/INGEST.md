@@ -582,7 +582,11 @@ ingesta sea idéntica.
 2. Claves en el orden de los ejemplos (§1.5, §1.6) y listas en el orden de la
    fuente. Así dos ingestas iguales producen el mismo texto.
 3. `_ingest/provenance.yaml`, `gaps.yaml` y `state.yaml`.
-4. `isot index --repo <repo>`.
+4. `isot index --repo <repo>` — **obligatorio tras añadir o cambiar
+   cualquier archivo** (también `_ingest/`, que entra en `_artifacts_index.json`
+   y en la huella de `_index_manifest.json`). La ingesta no pasa por la UI, así
+   que nadie más lo hará por ti; sin esto la regla `IDX-001` avisa, la UI
+   muestra «Índice desactualizado» y `isot index --check` falla en CI.
 
 ### Paso 6. Validar e iterar
 

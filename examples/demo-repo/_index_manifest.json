@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "generator": "isot index",
+  "files": 41,
+  "groups": {
+    "_ingest": "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+    "cluster-templates": "4a8a90d0a03eb5e2bf248b1b2052fbb2a8b091fc",
+    "manifest-templates": "7d71393b6fe81213fb96d1e8abd2184411990b78",
+    "rendered:rendered": "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+    "renders.yaml": "bc0ef1b1c00ddf52b2da6e62c67ba0987e2b0cc5",
+    "sites.yaml": "168dad227e9c489ed6f0de607496ccb6bedff77e",
+    "sites/site1/cluster-templates": "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+    "sites/site1/clusters": "2864458cf39959f9e25007811e091bae1d420ae9",
+    "sites/site1/devices": "f3f853f0f07084270d58485d39215614efa217dd",
+    "sites/site1/renders.yaml": "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+    "sites/site2/cluster-templates": "decfaa1225d5d04c36f7773d56d88e85f3ea3518",
+    "sites/site2/clusters": "104c9c1f71a2263d6123f84a1b455bbd69988357",
+    "sites/site2/devices": "15f8450b7d9eab4d5c3ad0f1901bf4e19e93b264",
+    "sites/site2/renders.yaml": "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+  }
+}

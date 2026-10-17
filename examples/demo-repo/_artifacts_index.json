@@ -1,0 +1,87 @@
+{
+  "manifest_templates": [
+    {
+      "id": "chrony-conf",
+      "version": "1",
+      "path": "manifest-templates/chrony-conf",
+      "description": "chrony.conf con los NTP del sitio",
+      "files": [
+        "chrony.conf.j2"
+      ],
+      "errors": 0
+    }
+  ],
+  "renders": {
+    "path": "renders.yaml",
+    "exists": true,
+    "instances": [
+      {
+        "id": "site1-apps-netplan",
+        "template": "netplan-node",
+        "site": "site1",
+        "cluster": "site1-apps",
+        "target_dir": null,
+        "dir": "site1/site1-apps/netplan-node",
+        "enabled": true
+      },
+      {
+        "id": "site1-platform-netplan",
+        "template": "netplan-node",
+        "site": "site1",
+        "cluster": "site1-platform",
+        "target_dir": null,
+        "dir": "site1/site1-platform/netplan-node",
+        "enabled": true
+      },
+      {
+        "id": "site1-platform-nads",
+        "template": "multus-nad",
+        "site": "site1",
+        "cluster": "site1-platform",
+        "target_dir": null,
+        "dir": "site1/site1-platform/multus-nad",
+        "enabled": true
+      },
+      {
+        "id": "site1-platform-metallb",
+        "template": "metallb-pools",
+        "site": "site1",
+        "cluster": "site1-platform",
+        "target_dir": null,
+        "dir": "site1/site1-platform/metallb-pools",
+        "enabled": true
+      },
+      {
+        "id": "site1-platform-namespaces",
+        "template": "core-namespaces",
+        "site": "site1",
+        "cluster": "site1-platform",
+        "target_dir": null,
+        "dir": "site1/site1-platform/core-namespaces",
+        "enabled": true
+      },
+      {
+        "id": "site1-chrony",
+        "template": "chrony-conf",
+        "site": "site1",
+        "cluster": null,
+        "target_dir": null,
+        "dir": "site1/site/chrony-conf",
+        "enabled": true
+      },
+      {
+        "id": "site2-edge-netplan-iface",
+        "template": "netplan-per-interface",
+        "site": "site2",
+        "cluster": "site2-edge",
+        "target_dir": null,
+        "dir": "site2/site2-edge/netplan-per-interface",
+        "enabled": true
+      }
+    ],
+    "target_dir": "rendered",
+    "errors": 0
+  },
+  "rendered": [],
+  "ingest": []
+}

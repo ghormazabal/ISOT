@@ -122,6 +122,25 @@ def rule_foo(ctx: RuleContext) -> list[Finding]:
    indica edición.
 5. `npm test && npm run build` sin errores (TS estricto, sin locales sin usar).
 
+## Escrituras e índice
+
+Toda ruta que escriba en el repo de datos debe dejar el índice al día **en
+el mismo commit**: usa `wizard.commit_preview` o `renders.commit_files` (ambos
+llaman a `indexer.write_indexes` antes de `git add`). Si añades un tipo de
+artefacto nuevo, súmalo a `indexer.source_groups` (huella) y a
+`build_artifacts_index`. `tests/test_index_fresh.py` recorre todas las rutas
+de escritura y comprueba `check_index` tras cada commit, además del estado
+desfasado, IDX-001, Reindexar y el reindexado incremental.
+
+## Comparar
+
+Una vista nueva que deba compararse recibe `base`/`head` (strings; `local`
+es válido) y los resuelve con `refs.resolve_ref` + `refs.tree_for` (o
+`gitdiff.snapshot_for`). Nunca hagas checkout ni escribas en el árbol
+materializado: es una caché compartida y de solo lectura. En la UI, lee las
+refs de `compareRefs` en `App.tsx` (no añadas selectores de ref propios).
+Tests: `tests/test_compare.py` y `web/src/compare.test.ts`.
+
 ## Convenciones
 
 - Textos de UI, mensajes y docs en castellano; identificadores en inglés.

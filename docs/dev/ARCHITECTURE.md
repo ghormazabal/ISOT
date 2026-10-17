@@ -34,8 +34,21 @@ flowchart LR
 - `isot/inventory.py` carga perezosa de sitios, equipos, clústeres y
   cluster-templates (YAML). `isot/indexer.py` genera índices ligeros
   deterministas (`_sites_index.json`, `_device_index.json`,
-  `_cluster_index.json`, `_template_index.json`) que la UI lee al arrancar;
-  el YAML completo se abre bajo demanda.
+  `_cluster_index.json`, `_template_index.json`, `_artifacts_index.json` con
+  `manifest-templates/`, `renders.yaml`, `rendered/` y `_ingest/`) que la UI
+  lee al arrancar; el YAML completo se abre bajo demanda.
+- **Frescura del índice.** `_index_manifest.json` guarda la huella (sha256 de
+  rutas y contenidos) de cada grupo de fuentes (`sites.yaml`, devices y
+  clústeres por sitio, cluster-templates, `manifest-templates/`,
+  `renders.yaml`, cada carpeta de salida, `_ingest/`). `index_status`
+  compara huellas (con caché de hashes por tamaño/mtime) y `IndexBuilder`
+  reutiliza del disco los índices de los grupos sin cambios: reindexar es
+  **incremental**. Si el índice está desfasado la API sirve un overlay en
+  memoria (`live_indexes`) y la UI muestra el aviso; nunca escribe en el
+  working tree por su cuenta (lo dejaría sucio y bloquearía los wizards).
+  Todas las escrituras (`wizard.commit_preview`, `renders.commit_files`,
+  Reindexar) llaman a `write_indexes` antes del commit. La regla IDX-001 y
+  `indexer --check` (CI) detectan índices commiteados desfasados.
 - `isot/validator.py` integra integridad referencial, IPAM, cableado y
   reglas; `isot/schemas.py` genera los JSON Schema de `schemas/` **desde el
   código** (y `--check` verifica que estén al día).
@@ -73,11 +86,20 @@ hallazgos nuevos) y, al confirmar, hacen commit en una rama nueva
 original y nunca tocan ramas protegidas. El push es opcional
 (`edit.push`), solo de ramas `wizard/`.
 
-### Git (`isot/gitdiff.py`)
-Lectura de refs sin checkout: `git archive` de un SHA a un directorio
-temporal (`_materialize`), snapshots del inventario por ref, diff semántico
-entre refs (Comparar) y hallazgos por ref. Valida refs (`validate_ref`) antes
-de pasarlas a git.
+### Git y Comparar (`isot/refs.py`, `isot/gitdiff.py`, `isot/compare.py`)
+Todo Comparar usa base/head donde cualquiera puede ser `local` (working
+tree). `refs.py` resuelve refs (`parse_ref` → `git rev-parse --verify
+--end-of-options <ref>^{commit}`, siempre con lista de argumentos, sin shell)
+a un `RefSpec`; `local` lleva una huella del working tree (HEAD + rutas,
+tamaños y mtimes) como clave de caché. `TreeCache` materializa commits con
+`git archive` en un `mkdtemp` **fuera** de ISoT y del repo, cacheado por SHA
+(LRU con refcount, borrado con `atexit`); `tree_for` da el propio repo para
+`local`. Sobre eso: `gitdiff.semantic_diff` (snapshots por ref que reutilizan
+el índice commiteado de esa ref si está al día; entidades con `path` del
+YAML de origen), `evaluate_ref`/`diff_findings` (hallazgos nuevos/resueltos),
+`links.diff_details` (aristas), `compare.changed_files`/`file_diff`
+(archivos, con no rastreados en `local`) y `renders.compare_outputs` (salida
+renderizada base → head). Todo es de solo lectura.
 
 ### Configuración y multi-repo (`isot/config.py`, `isot/web.py`)
 `isot.yaml` declara `repos` (id, path, branch, edit…), `default_repo`,
@@ -94,7 +116,9 @@ agente externo construya o actualice el repo de datos.
 ### Frontend (`web/`)
 React 18 + TypeScript + Vite + @xyflow/react. `Root.tsx` resuelve la
 configuración/repo y monta `App.tsx`, que orquesta las vistas (Sitios/Red,
-Kubernetes, Renders, Comparar, Editar), los paneles redimensionables
+Kubernetes, Renders, Editar) y el control único `CompareControl` (base →
+head, estado en `?base=&head=` vía `compare.ts`, compartido por grafo,
+listas, detalle, Archivos, hallazgos y Renders), los paneles redimensionables
 (`Splitter`), el panel de hallazgos y el detalle. La lógica pura vive en
 módulos `*.ts` sin React (testeados con `node --test`); los componentes en
 `components/`. Todas las llamadas pasan por `api.ts`/`rendersApi.ts`, que

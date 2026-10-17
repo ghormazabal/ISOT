@@ -3,6 +3,7 @@ import type {
   RenderInstance,
   RenderPreview,
   RendersDashboard,
+  RendersCompare,
   RendersDiff,
   RenderTemplateDetail,
   RenderTemplateSummary,
@@ -81,6 +82,7 @@ export const rendersApi = {
   preview: (body: PreviewBody) => post<RenderPreview>("/api/renders/preview", body),
   diff: (params: { instance?: string | null; target_ref?: string | null; ref?: string | null }) =>
     request<RendersDiff>(`/api/renders/diff${query(params)}`),
+  compare: (params: { base: string; head: string; instance?: string | null }) => request<RendersCompare>(`/api/renders/compare${query(params)}`),
   guide: (doc: "human" | "llm" = "human") => request<{ path: string; markdown: string }>(`/api/renders/guide${query({ doc })}`),
   config: (ref?: string | null) =>
     request<{ path: string; exists: boolean; text: string; errors: string[] }>(`/api/renders/config${query({ ref })}`),

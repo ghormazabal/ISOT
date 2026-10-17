@@ -23,7 +23,9 @@ principales (no exhaustivo); los módulos privados (`_x`) se omiten.
 | `paths.py` | Rutas de la herramienta (`ISOT_HOME`) y detección de repos de datos | `tool_root`, `bundled_templates_dir`, `demo_repo_dir`, `is_data_repo`, `find_repo_root` |
 | `config.py` | `isot.yaml`: repos, edición, UI; búsqueda y validación | `Config`, `DataRepoConfig`, `EditConfig`, `parse_config`, `load_config`, `resolve_repos`, `repo_status` |
 | `inventory.py` | Carga perezosa del inventario y de la biblioteca de templates | `Site`, `Device`, `Interface`, `AddressSpace`, `iter_yaml_files`, `find_template_file`, `template_library`, `parse_ref` |
-| `indexer.py` | Índices deterministas `_*_index.json` (y `--check`) | `build_sites_index`, `build_device_index`, `build_cluster_index`, `build_template_index`, `write_indexes`, `check_index`, `main` |
+| `indexer.py` | Índices deterministas `_*_index.json`, artefactos y manifiesto de huellas; reindexado incremental, estado y overlay en memoria (`--check`, `--status`, `--full`) | `build_sites_index`, `build_artifacts_index`, `IndexBuilder`, `write_indexes`, `check_index`, `index_status`, `cached_status`, `live_indexes`, `pending_index_writes`, `plan_builder`, `main` |
+| `refs.py` | Refs de Comparar: `local` (working tree) o commit; validación, huella del working tree, caché de árboles por SHA fuera de ISoT | `parse_ref`, `is_local`, `resolve_ref`, `describe_ref`, `RefSpec`, `TreeCache`, `TREES`, `tree_for` |
+| `compare.py` | Archivos que cambian entre base y head y diff de uno (solo lectura) | `changed_files`, `file_diff`, `read_at`, `safe_repo_path` |
 | `validator.py` | Validación (IPAM, refs, cableado, reglas, schemas) y salida texto/JSON/anotaciones GitHub | `validate`, `collect_issues`, `collect_warnings`, `format_report`, `github_annotations`, `main` |
 | `schemas.py` | JSON Schema del repo de datos generados desde el código; validación de documentos | `build_schemas`, `write_schemas`, `check_schemas`, `repo_documents`, `validate_document`, `main` |
 | `render_schemas.py` | Schemas del contexto de render, `template.yaml` y `renders.yaml` | `render_context_schema`, `render_template_schema`, `renders_config_schema`, `render_schemas` |
@@ -31,7 +33,7 @@ principales (no exhaustivo); los módulos privados (`_x`) se omiten.
 | `web.py` | App FastAPI: índices, grafos, detalle, values, refs/diff, hallazgos, wizards, multi-repo, estáticos | `create_app`, `RepoRegistry`, `RepoPrefixMiddleware`, `graph_from_index`, `kubernetes_graph`, `global_sites_graph`, `main` |
 | `web_renders.py` | Rutas `/api/renders/*` (lectura siempre; escritura con edición, en ramas) | `register`, `validate_renders_text` |
 | `wizard.py` | Wizards: preview en memoria, commit en `wizard/<slug>`, push opcional | `device_preview`, `site_preview`, `commit_preview`, `unique_wizard_branch`, `current_branch`, `push_branch`, `WizardError` |
-| `gitdiff.py` | Git sin checkout: refs, commits, snapshots por ref, diff semántico | `validate_ref`, `resolve_sha`, `list_refs`, `list_commits`, `snapshot_ref`, `semantic_diff`, `git`, `clear_caches` |
+| `gitdiff.py` | Git sin checkout: refs, commits, snapshots por ref (o `local`), diff semántico | `validate_ref`, `resolve_sha`, `list_refs`, `list_commits`, `snapshot_ref`, `snapshot_for`, `semantic_diff`, `git`, `clear_caches` |
 | `helm.py` | Charts/values de cluster-templates y diff values clúster vs template | `charts_from_doc`, `load_chart_values`, `merge_values`, `cluster_values_diff`, `collect_chart_issues` |
 | `links.py` | Detalle de una conexión del grafo (y su diff entre refs) | `link_details`, `diff_details`, `view_from_tree`, `view_from_snapshot` |
 | `cabling.py` | Política de cableado (`connection_rules`) y elección de leafs/puertos | `infer_policy`, `load_or_infer`, `pick_pair`, `check_device`, `collect_connection_warnings` |
@@ -51,6 +53,7 @@ principales (no exhaustivo); los módulos privados (`_x`) se omiten.
 | `evaluate.py` | Ejecuta las reglas, overrides, remediaciones, agrupación por sitio, por ref y diff | `evaluate`, `evaluate_ref`, `evaluate_overlay`, `diff_findings`, `scope_findings`, `payload` |
 | `inventory.py` | Reglas INV-* (IP, hostname, puerto, refs, cableado, Helm, schema, overrides) | `rule_ip`, `rule_ref`, `rule_cabling`, `collect_integrity_findings` |
 | `k8s.py` | Reglas K8S-* (CP, CIDRs, MetalLB, MTU, NAD, EOL, skew, charts) | `rule_cp_count`, `rule_cidrs`, `rule_metallb`, `rule_nad`, `rule_k8s_eol`, `_cluster_values` |
+| `index.py` | IDX-001: índice commiteado ausente o desactualizado | `rule_index_fresh` |
 | `renders.py` | REN-001, REN-002, K8S-NAD-002 | `rule_render_errors`, `rule_render_secrets`, `rule_nad_leaf_trunk` |
 | `ingest.py` | ING-* y secretos en el inventario | `rule_ingest_format`, `rule_ingest_gaps`, `rule_secrets` |
 | `overrides.py` | Overrides de severidad en YAML | `parse_overrides`, `apply_overrides` |
@@ -73,6 +76,7 @@ principales (no exhaustivo); los módulos privados (`_x`) se omiten.
 | `src/links.ts` | Detalle de conexiones | `edgeSelection`, `sideRows`, `relatedFindings` |
 | `src/findings.ts` | Conteos, filtrado y anotación de hallazgos | `countFindings`, `scopeFindings`, `annotateGraph`, `canFixWithWizard` |
 | `src/compareRefs.ts` | Refs por defecto de Comparar | `pickDefaultRefs` |
+| `src/compare.ts` | Comparar universal: `local`, validación de refs, URL `?base=&head=`, por defecto, ⇄, escritura | `LOCAL_REF`, `normalizeRef`, `compareFromUrl`, `withCompareParams`, `defaultCompare`, `swapRefs`, `headIsWritable` |
 | `src/resize.ts` | Paneles redimensionables (lógica pura) | `PanelSpec`, `clampSize`, `appPanelSpecs`, `loadLayout` |
 | `src/wizardDraft.ts` | Borrador del wizard en sessionStorage | `loadSession`, `saveSession`, `applyEditToggle` |
 | `src/renders.ts` | Renders: URL de sub-pestañas, árbol, diff lado a lado, edición de `template.yaml` | `rendersFromUrl`, `withRendersParam`, `buildTree`, `sideBySide`, `setTopLevelKey`, `appendOutput` |
@@ -90,15 +94,18 @@ principales (no exhaustivo); los módulos privados (`_x`) se omiten.
 | `DetailPanel.tsx` | Detalle de la selección (equipo, clúster, template, sitio) |
 | `LinkDetail.tsx` | Detalle de una conexión |
 | `TemplateExplorer.tsx`, `ValuesTree.tsx`, `ValuesDiff.tsx` | Explorador de cluster-templates y values |
-| `CompareSidebar.tsx`, `CompareValues.tsx`, `RefPicker.tsx` | Comparar refs |
+| `CompareControl.tsx` | Control único de Comparar en la barra (base → head, Local/rama/tag/commit, SHA validado) |
+| `CompareSidebar.tsx`, `CompareValues.tsx` | Lista e IPAM en Comparar; diff de values |
+| `FilesCompare.tsx` | Archivos que cambian base → head con diff unificado/lado a lado (pestaña Archivos, Renders) |
+| `IndexBanner.tsx` | Aviso «Índice desactualizado» y botón Reindexar |
 | `FindingsPanel.tsx` | Campana y panel de hallazgos (con arreglo por wizard) |
 | `WizardsView.tsx` | Wizards de equipo y sitio |
 | `RepoSwitcher.tsx`, `RepoUnavailable.tsx`, `Onboarding.tsx` | Multi-repo y bienvenida |
 | `Splitter.tsx` | Divisores arrastrables | 
-| `renders/RendersView.tsx` | Sección Renders: sub-pestañas y selector de ref |
+| `renders/RendersView.tsx` | Sección Renders: sub-pestañas; datos = head de Comparar |
 | `renders/RendersSummaryTab.tsx` | Resumen, instancias, destino, `renders.yaml` como texto |
 | `renders/RendersTemplatesTab.tsx` | Biblioteca, editor, preview en vivo, contexto |
-| `renders/RendersDiffTab.tsx` | Diff contra el destino y aplicar |
+| `renders/RendersDiffTab.tsx` | Diff contra el destino y aplicar; con Comparar: destino (base) vs render (head), salida base → head, templates |
 | `renders/RendersGuideTab.tsx` | Guías dentro de la UI |
 | `renders/common.tsx` | Editor con números de línea, diffs, árbol, diálogo de escritura |
 

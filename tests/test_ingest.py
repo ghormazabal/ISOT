@@ -162,9 +162,13 @@ def test_dangling_refs_are_warnings(tmp_path: Path) -> None:
 def test_ingest_dir_is_not_inventory(tmp_path: Path) -> None:
     """Un YAML con forma de device dentro de _ingest/ no aparece en el inventario."""
     root = seed_mini_repo(tmp_path / "inv")
-    before = indexer.index_targets(root)
+    inventory = lambda: [t for t in indexer.index_targets(root) if t[0].name != indexer.ARTIFACTS_INDEX_NAME]  # noqa: E731
+    before = inventory()
     write_yaml(root / "_ingest" / "devices" / "X.yaml", {"hostname": "X", "role": "worker"})
-    assert indexer.index_targets(root) == before
+    assert inventory() == before
+    # …pero sí se indexa como artefacto de ingesta (búsqueda/navegación).
+    artifacts = indexer.build_artifacts_index(root)
+    assert [item["path"] for item in artifacts["ingest"]] == ["_ingest/devices/X.yaml"]
 
 
 @pytest.mark.parametrize(

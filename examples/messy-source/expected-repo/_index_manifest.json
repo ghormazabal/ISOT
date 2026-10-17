@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "generator": "isot index",
+  "files": 14,
+  "groups": {
+    "_ingest": "178780e5f829bfd1e892c31dbbcafadfb34ada32",
+    "cluster-templates": "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+    "manifest-templates": "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+    "rendered:rendered": "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+    "renders.yaml": "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+    "sites.yaml": "22d8db236bba612d619e7472d7f9de86b284b81e",
+    "sites/lab1/cluster-templates": "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+    "sites/lab1/clusters": "b1cedb33a31de704a8787070fdc4c11df70d2aa2",
+    "sites/lab1/devices": "34d27801606ab5750a6ca1736fb18db1bb2af1c1",
+    "sites/lab1/renders.yaml": "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+  }
+}

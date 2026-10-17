@@ -337,6 +337,8 @@ export type DiffEntity = {
   site: string | null;
   status: DiffStatus;
   graph_ids: string[];
+  /** Archivo del repo de datos del que sale la entidad (para abrir su diff YAML). */
+  path?: string | null;
   changes: DiffChange[];
   before: unknown;
   after: unknown;
@@ -371,9 +373,54 @@ export type CommitsPayload = {
   commits: GitRef[];
 };
 
+/** Meta de una ref resuelta por el backend; `local` = working tree. */
+export type RefMeta = {
+  ref: string;
+  sha: string;
+  short?: string;
+  local?: boolean;
+  label?: string;
+  subject?: string;
+  author?: string;
+  date?: string;
+  dirty?: number;
+};
+
+export type CompareFileEntry = { path: string; status: "added" | "removed" | "modified"; kind: string };
+
+export type CompareFilesPayload = {
+  base: RefMeta;
+  head: RefMeta;
+  prefix: string[];
+  files: CompareFileEntry[];
+  truncated: boolean;
+  counts: { added: number; removed: number; modified: number };
+};
+
+export type CompareFilePayload = {
+  path: string;
+  status: "added" | "removed" | "modified" | "unchanged";
+  binary: boolean;
+  before: string | null;
+  after: string | null;
+  diff: string;
+  base: RefMeta;
+  head: RefMeta;
+};
+
+export type IndexStatus = {
+  fresh: boolean;
+  live: boolean;
+  manifest: boolean;
+  missing: string[];
+  stale: string[];
+  files: number;
+  can_reindex: boolean;
+};
+
 export type SemanticDiff = {
-  base: { ref: string; sha: string; short?: string };
-  head: { ref: string; sha: string; short?: string };
+  base: RefMeta;
+  head: RefMeta;
   site: string | null;
   summary: { added: number; removed: number; modified: number; unchanged: number };
   entities: DiffEntity[];
@@ -384,7 +431,7 @@ export type SemanticDiff = {
   };
 };
 
-export type CanvasMode = "graph" | "explorer" | "diff";
+export type CanvasMode = "graph" | "explorer" | "diff" | "files";
 
 export type Selection =
   | { type: "device"; site: string; hostname: string }
@@ -517,6 +564,7 @@ export type FindingsPayload = {
 
 export type FindingsDiffPayload = {
   scope?: string;
+  refs?: { base: RefMeta; head: RefMeta };
   base: FindingsPayload;
   head: FindingsPayload;
   added: Finding[];

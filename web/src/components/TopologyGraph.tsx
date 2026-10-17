@@ -148,7 +148,7 @@ export function TopologyGraph({
             {compare
               ? isGlobal
                 ? "Diff gráfico · clic en un sitio modificado para abrir su topología"
-                : "Diff gráfico entre refs de git (sin checkout)"
+                : "Diff gráfico base → head (Local, ramas o commits; sin checkout)"
               : isGlobal
                 ? "Vista global: sitios y enlaces DCI (índice)"
                 : view === "kubernetes"
