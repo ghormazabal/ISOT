@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Any, Callable
 
 from isot.rules.model import Finding, RuleSpec, Severity
 
@@ -59,6 +59,7 @@ def emit(
     path: str | None = None,
     graph_id: str | None = None,
     severity: str | None = None,
+    remediation: dict[str, Any] | None = None,
 ) -> Finding:
     sev = severity or spec.default_severity
     return Finding(
@@ -73,4 +74,5 @@ def emit(
         cluster=cluster,
         path=path,
         graph_id=graph_id,
+        remediation=remediation,
     )

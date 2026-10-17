@@ -205,6 +205,59 @@ def _k8s_roles_for(role: str, sibling: dict[str, Any] | None = None) -> list[str
     return []
 
 
+def _prepare_network_device(
+    data: dict[str, Any], devices: list[dict[str, Any]], used_ips: set[str], source: str
+) -> list[str]:
+    """Limpia un equipo de red copiado de un hermano.
+
+    - Quita interfaces conectadas a equipos que no son de red (servidores): el
+      leaf nuevo nace sin servidores; se conectan después.
+    - Reasigna IPs sin VLAN (loopback) a la siguiente libre de su /24, y
+      ``bgp.router_id`` si era la loopback heredada.
+    """
+    network_hosts = {
+        str(doc.get("hostname") or "")
+        for doc in devices
+        if str(doc.get("kind") or doc.get("_kind") or "").lower() == "network"
+    }
+    kept: list[Any] = []
+    dropped = 0
+    renamed: dict[str, str] = {}
+    for iface in data.get("networking") or []:
+        if not isinstance(iface, dict):
+            kept.append(iface)
+            continue
+        connected = iface.get("connected_to")
+        if isinstance(connected, dict) and connected.get("device") and str(connected["device"]) not in network_hosts:
+            dropped += 1
+            continue
+        if iface.get("ip") and iface.get("vlan") is None:
+            raw = str(iface["ip"])
+            addr, _, prefix = raw.partition("/")
+            try:
+                net = ipaddress.ip_network(f"{addr}/24", strict=False)
+                plan = next_ip(str(net), used_ips, reserved=(), after=addr)
+            except (AllocatorError, ValueError):
+                plan = None
+            if plan is not None:
+                new_addr = plan.value.split("/", 1)[0]
+                iface["ip"] = f"{new_addr}/{prefix}" if prefix else new_addr
+                used_ips.add(new_addr)
+                renamed[addr] = new_addr
+        kept.append(iface)
+    data["networking"] = kept
+    bgp = data.get("bgp")
+    if isinstance(bgp, dict) and str(bgp.get("router_id") or "") in renamed:
+        bgp["router_id"] = renamed[str(bgp["router_id"])]
+    notes: list[str] = []
+    if dropped:
+        notes.append(
+            f"equipo de red nuevo sin servidores: se omitieron {dropped} enlace(s) heredados de {source}; "
+            "conecta los servidores después"
+        )
+    return notes
+
+
 def allocate_devices(
     repo: Path,
     *,
@@ -324,8 +377,16 @@ def allocate_devices(
         data["vendor"] = "generic"
         if not data.get("model"):
             data["model"] = "compute-2u" if kind == "baremetal" else data.get("model")
-        data["k8s_roles"] = _k8s_roles_for(role or "", spec_source)
-        data["k8s_name"] = hostname.lower()
+        if kind == "network":
+            # Un equipo de red no es nodo Kubernetes ni hereda los enlaces a servidores del hermano.
+            data.pop("k8s_roles", None)
+            data.pop("k8s_name", None)
+            if not cluster:
+                data.pop("cluster_ref", None)
+            warnings.extend(_prepare_network_device(data, devices, used_ips, sibling_host or spec_label))
+        else:
+            data["k8s_roles"] = _k8s_roles_for(role or "", spec_source)
+            data["k8s_name"] = hostname.lower()
         role_origin = f"heredado de {sibling_host}" if sibling_host else f"solicitado; {pattern_note}"
         spec_origin = f"heredado de {sibling_host}" if sibling_host else spec_label
         fields = [
@@ -786,7 +847,15 @@ def device_preview(repo: Path, body: dict[str, Any]) -> dict[str, Any]:
     }
     edits = body.get("fields") if isinstance(body.get("fields"), dict) else None
     apply_field_edits(preview, edits)
-    return attach_preview_graph(repo, preview, site_id)
+    preview = attach_preview_graph(repo, preview, site_id)
+    fix = body.get("fix")
+    findings = preview.get("findings")
+    if isinstance(fix, dict) and isinstance(findings, dict):
+        # Hallazgo que el wizard intenta corregir (abierto desde «Corregir» en el panel).
+        from isot.rules.remediation import fix_status
+
+        findings["fix"] = fix_status(fix, findings.get("current") or [], findings.get("resolved") or [])
+    return preview
 
 
 def _shift_ipv4(address: str, src_net: ipaddress.IPv4Network, dst_net: ipaddress.IPv4Network) -> str:

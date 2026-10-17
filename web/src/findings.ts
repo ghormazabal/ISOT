@@ -169,3 +169,17 @@ export function selectionFromFinding(finding: Finding): {
   if (finding.site) return { type: "site", id: finding.site, site: finding.site };
   return null;
 }
+
+/** ¿El hallazgo tiene una acción que abre un wizard? */
+export function canFixWithWizard(finding: Finding): boolean {
+  return finding.remediation?.kind === "add_device";
+}
+
+/** Texto del resultado del preview frente al hallazgo que se corrige. */
+export function fixSummary(preview: WizardPreview | null): { ok: boolean; text: string } | null {
+  const fix = preview?.findings?.fix;
+  if (!fix) return null;
+  const also = fix.also_resolves.length ? ` · también resuelve ${fix.also_resolves.join(", ")}` : "";
+  if (fix.resolved) return { ok: true, text: `Resuelve ${fix.id}${also}` };
+  return { ok: false, text: `Aún no resuelve ${fix.id}${also}` };
+}

@@ -1316,3 +1316,84 @@ td {
   gap: 4px;
   font-weight: 400;
 }
+
+.finding-main {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.finding-main p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.finding-main .reco {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.finding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--line);
+}
+
+.finding-fix:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.finding-action-reason {
+  font-size: 11px;
+}
+
+.fix-banner {
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  background: var(--panel-2);
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.fix-banner header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fix-banner .fix-followup {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.fix-result {
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fix-result.ok {
+  background: #1a2e24;
+  color: #8ad4b0;
+}
+
+.fix-result.pending {
+  background: #3d3010;
+  color: #e4c36a;
+}

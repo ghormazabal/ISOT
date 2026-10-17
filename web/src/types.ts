@@ -370,6 +370,45 @@ export type Finding = {
   override_reason?: string | null;
   /** Hallazgo de un template atribuido al clúster que lo usa ("global/<name>"). */
   source_template?: string | null;
+  /** Acción de remediación (ver docs/rules.md). */
+  remediation?: Remediation | null;
+};
+
+export type AddDeviceRemediation = {
+  kind: "add_device";
+  site: string;
+  cluster: string | null;
+  role: string;
+  device_kind: "baremetal" | "vm" | "network";
+  count: number;
+  reason: string;
+  label: string;
+  followup?: string;
+};
+
+export type OpenEntityRemediation = {
+  kind: "open_entity";
+  target: "cluster" | "template" | "values" | "device" | "site";
+  site: string | null;
+  name: string;
+  label: string;
+};
+
+export type Remediation = AddDeviceRemediation | OpenEntityRemediation;
+
+/** Hallazgo que un wizard intenta corregir (viaja en el borrador y en el body del preview). */
+export type FixContext = {
+  finding: Pick<Finding, "id" | "severity" | "site" | "cluster" | "entity_kind" | "entity_id" | "message">;
+  remediation: AddDeviceRemediation;
+};
+
+export type FixStatus = {
+  id: string;
+  site?: string | null;
+  cluster?: string | null;
+  resolved: boolean;
+  remaining: Finding[];
+  also_resolves: string[];
 };
 
 export type FindingCounts = { error: number; warning: number; info: number; total: number };
@@ -411,6 +450,7 @@ export type WizardFindings = {
   resolved: Finding[];
   current: Finding[];
   blocked: boolean;
+  fix?: FixStatus | null;
 };
 
 export type WizardCommit = {

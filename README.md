@@ -278,6 +278,23 @@ contadores en cada nodo de sitio; clic en un grupo abre el sitio.*
 
 ![Wizard bloqueado por un error de reglas](docs/images/wizard-blocked.png)
 
+**Corregir desde un hallazgo.** Los hallazgos que se arreglan agregando
+componentes (K8S-CP-001, K8S-WK-001, K8S-ST-001, y un leaf para
+K8S-CP-002) traen **Corregir** en el panel: abre Editar con el wizard
+«Agregar device» precargado (sitio, clúster, rol del clúster y cantidad
+que falta) y la vista previa dice si el cambio **resuelve** el hallazgo.
+El resto trae **Abrir …** (clúster, template o values). Sin modo edición
+el botón queda deshabilitado. Detalle en
+[`docs/rules.md`](docs/rules.md#remediación).
+
+![Panel de SITE2 con acciones Corregir / Abrir](docs/images/finding-fix-panel.png)
+
+![Wizard abierto desde K8S-CP-001](docs/images/finding-fix-wizard.png)
+
+*Corregir K8S-CP-001 en site2-edge: propone SITE2-CTRL003 (verde) con la
+siguiente IP y PortChannel en SITE2-LEAF001; «Resuelve K8S-CP-001 ·
+también resuelve K8S-WK-001».*
+
 *Vista previa del wizard: un error nuevo deshabilita Confirmar.*
 
 ## Capturas

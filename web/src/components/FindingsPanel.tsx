@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { GLOBAL_GROUP, groupFindingsBySite, templateName } from "../findings";
-import type { Finding, FindingCounts, FindingsPayload } from "../types";
+import type { Finding, FindingCounts, FindingsPayload, OpenEntityRemediation } from "../types";
 
 type Props = {
   payload: FindingsPayload | null;
@@ -18,7 +18,15 @@ type Props = {
   onClose: () => void;
   onSelect: (finding: Finding) => void;
   onOpenSite?: (site: string) => void;
+  /** Modo edición activo: habilita «Corregir». */
+  editEnabled?: boolean;
+  onFix?: (finding: Finding) => void;
+  onOpenEntity?: (action: OpenEntityRemediation, finding: Finding) => void;
 };
+
+type CardActions = Pick<Props, "editEnabled" | "onFix" | "onOpenEntity">;
+
+export const FIX_DISABLED_HINT = "Requiere modo edición (arranca con --edit / ISOT_EDIT=1) para abrir el wizard";
 
 const SEV: Array<Finding["severity"]> = ["error", "warning", "info"];
 
@@ -64,25 +72,58 @@ export function FindingsBell({
   );
 }
 
-function FindingCard({ item, showSite, onSelect }: { item: Finding; showSite?: boolean; onSelect: (finding: Finding) => void }) {
+function FindingCard({
+  item,
+  showSite,
+  onSelect,
+  editEnabled,
+  onFix,
+  onOpenEntity,
+}: { item: Finding; showSite?: boolean; onSelect: (finding: Finding) => void } & CardActions) {
   const tpl = templateName(item);
+  const action = item.remediation;
   return (
-    <button type="button" className={`finding-card sev-${item.severity}`} onClick={() => onSelect(item)}>
-      <span className="finding-head">
-        <span className={`sev-pill sev-${item.severity}`}>{item.severity}</span>
-        <strong>{item.id}</strong>
-        {showSite && item.site ? <span className="finding-site">{item.site}</span> : null}
-      </span>
-      {tpl ? (
-        <span className="finding-origin" title={item.source_template ?? undefined}>
-          plantilla <span className="mono">{tpl}</span> · vía clúster <span className="mono">{item.cluster}</span>
+    <div className={`finding-card sev-${item.severity}`}>
+      <button type="button" className="finding-main" onClick={() => onSelect(item)}>
+        <span className="finding-head">
+          <span className={`sev-pill sev-${item.severity}`}>{item.severity}</span>
+          <strong>{item.id}</strong>
+          {showSite && item.site ? <span className="finding-site">{item.site}</span> : null}
         </span>
-      ) : (
-        <span className="mono">{item.entity_id}</span>
-      )}
-      <p>{item.message}</p>
-      <p className="reco">{item.recommendation}</p>
-    </button>
+        {tpl ? (
+          <span className="finding-origin" title={item.source_template ?? undefined}>
+            plantilla <span className="mono">{tpl}</span> · vía clúster <span className="mono">{item.cluster}</span>
+          </span>
+        ) : (
+          <span className="mono">{item.entity_id}</span>
+        )}
+        <p>{item.message}</p>
+        <p className="reco">{item.recommendation}</p>
+      </button>
+      {action ? (
+        <div className="finding-actions">
+          {action.kind === "add_device" ? (
+            <>
+              <button
+                type="button"
+                className="primary finding-fix"
+                data-finding={item.id}
+                disabled={!editEnabled}
+                title={editEnabled ? `${action.label} con el wizard «Agregar device»` : FIX_DISABLED_HINT}
+                onClick={() => onFix?.(item)}
+              >
+                Corregir · {action.label}
+              </button>
+              <span className="muted finding-action-reason">{action.reason}</span>
+            </>
+          ) : (
+            <button type="button" className="text-link finding-open" onClick={() => onOpenEntity?.(action, item)}>
+              {action.label} →
+            </button>
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -98,7 +139,11 @@ export function FindingsPanel({
   onClose,
   onSelect,
   onOpenSite,
+  editEnabled,
+  onFix,
+  onOpenEntity,
 }: Props) {
+  const actions: CardActions = { editEnabled, onFix, onOpenEntity };
   const [severity, setSeverity] = useState("all");
   const [cluster, setCluster] = useState("all");
   const [rule, setRule] = useState("all");
@@ -197,7 +242,7 @@ export function FindingsPanel({
                 <ul className="findings-list">
                   {group.findings.map((item, index) => (
                     <li key={`${item.id}:${item.entity_id}:${item.cluster ?? ""}:${index}`}>
-                      <FindingCard item={item} onSelect={onSelect} />
+                      <FindingCard item={item} onSelect={onSelect} {...actions} />
                     </li>
                   ))}
                 </ul>
@@ -209,7 +254,7 @@ export function FindingsPanel({
         <ul className="findings-list">
           {filtered.map((item, index) => (
             <li key={`${item.id}:${item.entity_id}:${item.cluster ?? ""}:${index}`}>
-              <FindingCard item={item} onSelect={onSelect} />
+              <FindingCard item={item} onSelect={onSelect} {...actions} />
             </li>
           ))}
           {!filtered.length ? <li className="muted">Sin hallazgos en {label(scope)}.</li> : null}

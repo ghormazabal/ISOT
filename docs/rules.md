@@ -53,6 +53,56 @@ UI: dentro de un sitio la campana y el panel muestran solo ese sitio; en la
 vista global el panel agrupa por sitio (más «Global / plantillas») y cada
 nodo de sitio del mapa lleva sus contadores.
 
+## Remediación
+
+Cada hallazgo trae `remediation` (en `/api/findings` y en `--format json`),
+una acción legible por máquina:
+
+```yaml
+# Se corrige agregando componentes → wizard «Agregar device»
+remediation:
+  kind: add_device
+  site: site2
+  cluster: site2-edge        # null para equipos de red
+  role: edge-server          # rol existente del clúster
+  device_kind: baremetal     # baremetal | vm | network
+  count: 1                   # cuántos faltan
+  reason: "site2-edge: 2 → 3 control planes (quórum etcd impar)"
+  label: "Agregar 1 control plane"
+  followup: "..."            # opcional: paso manual posterior
+
+# No se corrige agregando algo → navegar a la entidad
+remediation:
+  kind: open_entity
+  target: template           # cluster | template | values | device | site
+  site: global
+  name: rke2-rancher-hybrid-calico
+  label: "Abrir template rke2-rancher-hybrid-calico"
+```
+
+| Regla | Acción |
+| --- | --- |
+| K8S-CP-001 | `add_device`: control planes con el rol de los CP del clúster hasta 3 (o +1 si es par ≤ 6). Más de 7 → `open_entity`. |
+| K8S-WK-001 | `add_device`: workers hasta el mínimo (2, o 3 con Ceph/Longhorn). Rol de los workers puros, si no de los CP+worker; sin workers, rol `worker` (patrón por convenio del allocator) con el tipo de device de los CP. |
+| K8S-ST-001 | `add_device`: nodos (rol de los workers) hasta igualar las réplicas. |
+| K8S-CP-002 (mismo par de leafs) | `add_device` de un leaf (`device_kind: network`, rol de los leafs actuales) + `followup`: reconectar un control plane o hacer dual-home. El leaf nace sin servidores, con IP de gestión y loopback nuevas. |
+| K8S-CP-002 (mismo hypervisor), K8S-VER-*, K8S-NET-001, K8S-LB-001, K8S-NAD-001, K8S-TPL-001 | `open_entity` del clúster. |
+| K8S-CNI-001 | `open_entity` con `target: values`. |
+| K8S-VER-003, INV-HELM-001 (templates) | `open_entity` del template. |
+| INV-* de device / sitio | `open_entity` del device o del sitio. |
+
+En la UI cada tarjeta del panel muestra **Corregir · …** (`add_device`) o
+**Abrir …** (`open_entity`). «Corregir» entra en Editar con el wizard
+«Agregar device» precargado (sitio, clúster, rol, tipo y cantidad; el
+direccionamiento lo asigna el allocator), un banner con el hallazgo y la
+vista previa automática. El preview manda `fix` (id, sitio, entidad y
+clúster del hallazgo) y la respuesta trae `findings.fix`:
+`{resolved, remaining, also_resolves}`, comparando el estado antes/después
+por identidad (sin el mensaje). La UI muestra «Resuelve K8S-CP-001» o
+«Aún no resuelve …» con el `followup`. Sin modo edición el botón queda
+deshabilitado con un tooltip. El borrador (incluida la corrección) se
+conserva al salir de Editar y al recargar.
+
 ## Catálogo
 
 | id | sev | Qué revisa | Cómo silenciarla |

@@ -39,6 +39,8 @@ class Finding:
     override_reason: str | None = None
     # Hallazgo de un template atribuido al clúster que lo usa ("global/<name>" o "<site>/<name>").
     source_template: str | None = None
+    # Acción de remediación legible por máquina (add_device / open_entity). Ver docs/rules.md.
+    remediation: dict[str, Any] | None = None
 
     def key(self) -> tuple[str, str, str, str, str, str]:
         return (self.id, self.site or "", self.entity_kind, self.entity_id, self.cluster or "", self.message)
@@ -59,6 +61,7 @@ class Finding:
             "silenced": self.silenced,
             "override_reason": self.override_reason,
             "source_template": self.source_template,
+            "remediation": self.remediation,
         }
 
 
@@ -78,4 +81,5 @@ def finding_from_dict(data: dict[str, Any]) -> Finding:
         silenced=bool(data.get("silenced")),
         override_reason=data.get("override_reason"),
         source_template=data.get("source_template"),
+        remediation=data.get("remediation") if isinstance(data.get("remediation"), dict) else None,
     )

@@ -1,6 +1,6 @@
 /**Borrador del wizard: estado de la app + sessionStorage (sobrevive recarga).*/
 
-import type { ConnectionRule, WizardPreview } from "./types";
+import type { ConnectionRule, Finding, FixContext, WizardPreview } from "./types";
 
 export type WizardMode = "pick" | "device" | "site";
 export type DockTab = "fields" | "yaml";
@@ -16,6 +16,8 @@ export type DeviceDraftState = {
   preview: WizardPreview | null;
   neighborhood: boolean;
   tab: DockTab;
+  /** Hallazgo que se está corrigiendo (abierto con «Corregir»), o null. */
+  fix?: FixContext | null;
 };
 
 export type SiteDraftState = {
@@ -84,7 +86,36 @@ export function emptyDeviceDraft(site = "site1", cluster = "site1-apps"): Device
     preview: null,
     neighborhood: false,
     tab: "fields",
+    fix: null,
   };
+}
+
+/**
+ * Borrador del wizard «Agregar device» precargado desde un hallazgo con
+ * remediación add_device: sitio, clúster, rol, tipo y cantidad.
+ */
+export function draftFromFinding(finding: Finding, base: WizardDraft): WizardDraft | null {
+  const action = finding.remediation;
+  if (!action || action.kind !== "add_device") return null;
+  const device: DeviceDraftState = {
+    ...emptyDeviceDraft(action.site, action.cluster ?? ""),
+    kind: action.device_kind,
+    role: action.role,
+    count: Math.max(1, Math.min(action.count || 1, 32)),
+    fix: {
+      finding: {
+        id: finding.id,
+        severity: finding.severity,
+        site: finding.site,
+        cluster: finding.cluster,
+        entity_kind: finding.entity_kind,
+        entity_id: finding.entity_id,
+        message: finding.message,
+      },
+      remediation: action,
+    },
+  };
+  return { ...base, mode: "device", device };
 }
 
 export function emptySiteDraft(templateSite = "site2"): SiteDraftState {
@@ -134,6 +165,7 @@ export function isDraftInProgress(draft: WizardDraft | null | undefined): boolea
   if (draft.device.preview || draft.site.preview) return true;
   if (draft.site.step > 1) return true;
   if (Object.keys(draft.device.edits || {}).length > 0) return true;
+  if (draft.device.fix) return true;
   return false;
 }
 

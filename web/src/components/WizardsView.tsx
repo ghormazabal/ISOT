@@ -21,9 +21,9 @@ import {
   type WizardDraft,
   type WizardMode,
 } from "../wizardDraft";
-import { wizardCanCommit } from "../findings";
+import { fixSummary, wizardCanCommit } from "../findings";
 import { TopologyGraph } from "./TopologyGraph";
-import type { Finding } from "../types";
+import type { Finding, FixContext } from "../types";
 
 type Props = {
   sites: SiteIndexEntry[];
@@ -34,6 +34,9 @@ type Props = {
   onDraftChange: (draft: WizardDraft) => void;
   onClearDraft: () => void;
   hidden?: boolean;
+  /** Borrador a cargar (p. ej. desde «Corregir» en un hallazgo); cambia `seedKey` para aplicarlo. */
+  seedDraft?: WizardDraft | null;
+  seedKey?: number;
 };
 
 type Mode = WizardMode;
@@ -50,15 +53,27 @@ export function WizardsView({
   onDraftChange,
   onClearDraft,
   hidden = false,
+  seedDraft = null,
+  seedKey = 0,
 }: Props) {
   const [epoch, setEpoch] = useState(0);
   const [lastCommit, setLastCommit] = useState<WizardCommit | null>(null);
+  const [seed, setSeed] = useState<WizardDraft | null>(null);
+  const appliedSeed = useRef(0);
+
+  useEffect(() => {
+    if (!seedKey || seedKey === appliedSeed.current || !seedDraft) return;
+    appliedSeed.current = seedKey;
+    setSeed(seedDraft);
+    setLastCommit(null);
+    setEpoch((value) => value + 1);
+  }, [seedKey, seedDraft]);
   const blank = emptyWizardDraft({
     site: sites[0]?.id,
     cluster: clustersBySite[sites[0]?.id ?? ""]?.[0]?.name,
     templateSite: sites.find((item) => item.id === "site2")?.id ?? sites[0]?.id,
   });
-  const initial = epoch === 0 ? initialDraft : blank;
+  const initial = epoch === 0 ? initialDraft : (seed ?? blank);
 
   const discard = () => {
     if (
@@ -69,6 +84,7 @@ export function WizardsView({
       return;
     }
     setLastCommit(null);
+    setSeed(null);
     setEpoch((value) => value + 1);
     onClearDraft();
   };
@@ -85,6 +101,7 @@ export function WizardsView({
         onDraftChange={onDraftChange}
         onCommitted={(commit) => {
           setLastCommit(commit);
+          setSeed(null);
           setEpoch((value) => value + 1);
           onClearDraft();
         }}
@@ -215,6 +232,7 @@ function DeviceWizard({
   const [tab, setTab] = useState<DockTab>(initial.tab);
   const [saveRules, setSaveRules] = useState(initial.saveRules);
   const [acceptWarnings, setAcceptWarnings] = useState(false);
+  const [fix, setFix] = useState<FixContext | null>(initial.fix ?? null);
   const skipPreview = useRef(Boolean(initial.preview));
   const clusters = clustersBySite[site] ?? [];
 
@@ -230,8 +248,9 @@ function DeviceWizard({
       preview,
       neighborhood,
       tab,
+      fix,
     });
-  }, [site, kind, cluster, role, count, edits, saveRules, preview, neighborhood, tab, onChange]);
+  }, [site, kind, cluster, role, count, edits, saveRules, preview, neighborhood, tab, fix, onChange]);
 
   const body = useMemo(
     () => ({
@@ -243,8 +262,9 @@ function DeviceWizard({
       fields: edits,
       save_inferred_rules: saveRules,
       accept_warnings: acceptWarnings,
+      fix: fix?.finding ?? null,
     }),
-    [site, kind, cluster, role, count, edits, saveRules, acceptWarnings],
+    [site, kind, cluster, role, count, edits, saveRules, acceptWarnings, fix],
   );
 
   const run = async (action: "preview" | "commit") => {
@@ -282,10 +302,36 @@ function DeviceWizard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [edits, count, cluster, site, kind, role, saveRules]);
 
+  useEffect(() => {
+    // Abierto desde «Corregir»: la vista previa sale sola (direccionamiento automático).
+    if (initial.fix && !initial.preview) void run("preview");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const summary = fixSummary(preview);
+
   return (
     <div className={preview ? "wizard-workspace" : "wizard-form"}>
       <div className="wizard-form">
         <h3>Agregar device</h3>
+        {fix ? (
+          <div className="fix-banner" id="wizard-fix-banner">
+            <header>
+              <span className={`sev-pill sev-${fix.finding.severity}`}>{fix.finding.severity}</span>
+              <strong>Corrigiendo {fix.finding.id}</strong>
+              <span className="mono">{fix.finding.entity_id}</span>
+              <button type="button" className="text-link" style={{ marginLeft: "auto" }} onClick={() => setFix(null)}>
+                quitar
+              </button>
+            </header>
+            <span>{fix.finding.message}</span>
+            <span>
+              Propuesta: <strong>{fix.remediation.label}</strong> ({fix.remediation.reason})
+              {fix.remediation.count > 1 ? ` · se agregan los ${fix.remediation.count} en este mismo alta` : ""}
+            </span>
+            {fix.remediation.followup ? <span className="fix-followup">{fix.remediation.followup}</span> : null}
+          </div>
+        ) : null}
         <div className="wizard-grid">
           <label>
             Sitio
@@ -370,6 +416,15 @@ function DeviceWizard({
             Confirmar en rama wizard/…
           </button>
         </div>
+        {fix && summary ? (
+          <p className={`fix-result ${summary.ok ? "ok" : "pending"}`} id="wizard-fix-result">
+            {summary.ok ? "✔ " : "… "}
+            {summary.text}
+            {!summary.ok && fix.remediation.followup ? (
+              <span className="fix-followup"> — {fix.remediation.followup}</span>
+            ) : null}
+          </p>
+        ) : null}
         <WizardFindingsBox
           preview={preview}
           acceptWarnings={acceptWarnings}

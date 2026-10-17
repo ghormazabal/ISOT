@@ -15,6 +15,7 @@ import { countFindings, scopeFindings, selectionFromFinding } from "./findings";
 import {
   applyEditToggle,
   defaultBrowse,
+  draftFromFinding,
   draftsEqual,
   emptyWizardDraft,
   isDraftInProgress,
@@ -32,6 +33,7 @@ import type {
   DeviceIndexEntry,
   DiffEntity,
   Finding,
+  OpenEntityRemediation,
   FindingsDiffPayload,
   FindingsPayload,
   GraphNode,
@@ -89,6 +91,7 @@ export default function App() {
   const [findings, setFindings] = useState<FindingsPayload | null>(null);
   const [findingsDiff, setFindingsDiff] = useState<FindingsDiffPayload | null>(null);
   const [findingsOpen, setFindingsOpen] = useState(false);
+  const [wizardSeed, setWizardSeed] = useState<{ key: number; draft: WizardDraft } | null>(null);
 
   const persistDraft = useCallback((draft: WizardDraft) => {
     setWizardDraft((current) => (draftsEqual(current, draft) ? current : draft));
@@ -434,6 +437,58 @@ export default function App() {
     }
     return scopeFindings(findings, findingsScope);
   })();
+  // «Corregir» en un hallazgo: entra en Editar con el wizard «Agregar device» precargado.
+  const fixFinding = (finding: Finding) => {
+    if (!editEnabled) return;
+    const next = draftFromFinding(finding, wizardDraft);
+    if (!next) return;
+    if (
+      isDraftInProgress(wizardDraft) &&
+      !wizardDraft.device.fix &&
+      !window.confirm("Hay un borrador del wizard en curso. ¿Reemplazarlo por la corrección de este hallazgo?")
+    ) {
+      return;
+    }
+    setWizardDraft(next);
+    setWizardSeed((current) => ({ key: (current?.key ?? 0) + 1, draft: next }));
+    setCompare(false);
+    setView("wizards");
+    setFindingsOpen(false);
+  };
+
+  const openEntityFromFinding = (action: OpenEntityRemediation) => {
+    if (view === "wizards") {
+      setView(lastBrowse.view);
+    }
+    setCompare(false);
+    if (action.target === "site") {
+      if (action.site) setSiteFilter(action.site);
+      setSelection({ type: "site", id: action.name });
+      setView("network");
+      setCanvas("graph");
+      return;
+    }
+    if (action.target === "device" && action.site) {
+      setSiteFilter(action.site);
+      setSelection({ type: "device", site: action.site, hostname: action.name });
+      setView("network");
+      setCanvas("graph");
+      return;
+    }
+    if (action.target === "template") {
+      setSelection({ type: "template", site: action.site || "global", name: action.name });
+      setView("kubernetes");
+      return;
+    }
+    if (action.site) {
+      // cluster o values: la ficha del clúster abre el diff de values si tiene template.
+      setSiteFilter(action.site);
+      setSelection({ type: "cluster", site: action.site, name: action.name });
+      setView("kubernetes");
+      setCanvas(action.target === "values" ? "diff" : "graph");
+    }
+  };
+
   const openSiteFromFindings = (site: string) => {
     if (view === "wizards") {
       setView(lastBrowse.view);
@@ -596,6 +651,8 @@ export default function App() {
           initialDraft={wizardDraft}
           onDraftChange={persistDraft}
           onClearDraft={clearDraft}
+          seedDraft={wizardSeed?.draft ?? null}
+          seedKey={wizardSeed?.key ?? 0}
           onOpenCompare={(base, head) => {
             setView("network");
             setSiteFilter("all");
@@ -718,6 +775,9 @@ export default function App() {
         resolved={findingsDiff?.resolved}
         compare={compare && view !== "wizards"}
         onOpenSite={openSiteFromFindings}
+        editEnabled={editEnabled}
+        onFix={fixFinding}
+        onOpenEntity={openEntityFromFinding}
         open={findingsOpen}
         onClose={() => setFindingsOpen(false)}
         onSelect={(finding: Finding) => {

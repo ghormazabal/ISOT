@@ -15,6 +15,7 @@ from isot.rules.inventory import collect_integrity_findings
 from isot.rules.model import Finding, RANK
 from isot.rules.overrides import apply_overrides, parse_overrides
 from isot.rules.registry import RULES, catalog as registry_catalog
+from isot.rules.remediation import fill_default_remediations
 
 # Import side effects: register rules.
 import isot.rules.inventory  # noqa: F401
@@ -172,6 +173,7 @@ def evaluate(
     if not include_silenced:
         findings = [item for item in findings if item.severity != "off"]
     findings = scope_findings(findings, site)
+    fill_default_remediations(findings)
     findings.sort(
         key=lambda item: (-RANK.get(item.severity, 0), item.id, item.site or "", item.entity_id, item.cluster or "")
     )

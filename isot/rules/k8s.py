@@ -16,6 +16,15 @@ from isot.inventory import Device
 from isot.rules.context import RuleContext
 from isot.rules.model import Finding
 from isot.rules.registry import RULES, emit, rule
+from isot.rules.remediation import (
+    DEFAULT_CP_ROLE,
+    DEFAULT_LEAF_ROLE,
+    DEFAULT_WORKER_ROLE,
+    add_device,
+    dominant,
+    open_entity,
+    wizard_kind,
+)
 from isot.validator import _ip_in_cidr, _ip_only, _parse_address_token, _topology_maps
 
 VERSION_RE = re.compile(r"v?(\d+)\.(\d+)")
@@ -222,6 +231,42 @@ def _replica_count(cluster: dict[str, Any], values: dict[str, Any]) -> tuple[int
     return None, ""
 
 
+def _node_role_kind(ctx: RuleContext, site: str, nodes: list[dict[str, Any]]) -> list[tuple[str, str]]:
+    out: list[tuple[str, str]] = []
+    for node in nodes:
+        device = _device_for_node(ctx, site, node)
+        if device is None or not device.role:
+            continue
+        out.append((str(device.role), wizard_kind(device.data.get("kind"))))
+    return out
+
+
+def _cp_role_kind(ctx: RuleContext, site: str, cluster: dict[str, Any]) -> tuple[str, str]:
+    """Rol y tipo de device de los control planes existentes del clúster."""
+    cps = [node for node in _nodes(cluster) if _is_cp(node)]
+    return dominant(_node_role_kind(ctx, site, cps), (DEFAULT_CP_ROLE, "baremetal"))
+
+
+def _worker_role_kind(ctx: RuleContext, site: str, cluster: dict[str, Any]) -> tuple[str, str]:
+    """Rol de los workers del clúster (primero workers puros, luego CP+worker).
+
+    Sin workers: rol por defecto ``worker`` (patrón nuevo por convenio del
+    allocator) con el tipo de device de los control planes.
+    """
+    nodes = _nodes(cluster)
+    pure = [node for node in nodes if _is_worker(node) and not _is_cp(node)]
+    mixed = [node for node in nodes if _is_worker(node) and _is_cp(node)]
+    found = _node_role_kind(ctx, site, pure) or _node_role_kind(ctx, site, mixed)
+    if found:
+        return dominant(found, (DEFAULT_WORKER_ROLE, "baremetal"))
+    _, cp_kind = _cp_role_kind(ctx, site, cluster)
+    return DEFAULT_WORKER_ROLE, cp_kind
+
+
+def _plural(count: int, one: str, many: str) -> str:
+    return one if count == 1 else many
+
+
 @rule(
     "K8S-CP-001",
     severity="warning",
@@ -253,6 +298,21 @@ def rule_cp_count(ctx: RuleContext) -> list[Finding]:
             )
         if not message:
             continue
+        missing = 3 - count if count < 3 else (1 if count <= 7 and count % 2 == 0 else 0)
+        if missing:
+            role, kind = _cp_role_kind(ctx, site, cluster)
+            target = count + missing
+            remediation = add_device(
+                site=site,
+                cluster=name,
+                role=role,
+                device_kind=kind,
+                count=missing,
+                reason=f"{name}: {count} → {target} control planes (quórum etcd impar)",
+                label=f"Agregar {missing} {_plural(missing, 'control plane', 'control planes')}",
+            )
+        else:
+            remediation = open_entity(target="cluster", site=site, name=name, label=f"Abrir {name}")
         findings.append(
             emit(
                 spec,
@@ -263,6 +323,7 @@ def rule_cp_count(ctx: RuleContext) -> list[Finding]:
                 path=rel,
                 graph_id=_graph_cluster(site, name),
                 message=message,
+                remediation=remediation,
             )
         )
     return findings
@@ -317,9 +378,31 @@ def rule_cp_placement(ctx: RuleContext) -> list[Finding]:
         if len(cps) >= 2 and len(leafs) == 1:
             key, members = next(iter(leafs.items()))
             if len(members) == len(cps):
+                leaf_roles = [
+                    (str(dev.role), "network")
+                    for dev in (ctx.device(site, item) for item in key)
+                    if dev is not None and dev.role
+                ]
+                leaf_role, _ = dominant(leaf_roles, (DEFAULT_LEAF_ROLE, "network"))
+                pair_label = ",".join(key)
+                remediation = add_device(
+                    site=site,
+                    cluster=None,
+                    role=leaf_role,
+                    device_kind="network",
+                    count=1,
+                    reason=f"{name}: leaf adicional para sacar control planes del par {pair_label}",
+                    label="Agregar leaf",
+                    followup=(
+                        f"Después reconecta {members[-1]} (bond) al leaf nuevo o haz dual-home "
+                        f"con {pair_label}; el hallazgo se resuelve cuando los control planes "
+                        "no cuelgan todos del mismo par."
+                    ),
+                )
                 findings.append(
                     emit(
                         spec,
+                        remediation=remediation,
                         severity="warning",
                         entity_kind="cluster",
                         entity_id=f"{site}/{name}",
@@ -819,6 +902,19 @@ def rule_workers(ctx: RuleContext) -> list[Finding]:
         count = len(workers)
         values = _cluster_values(ctx, cluster)
         longhorn, ceph = _uses_longhorn_or_ceph(cluster, values)
+        minimum = 3 if (longhorn or ceph) else 2
+        if count < minimum:
+            role, kind = _worker_role_kind(ctx, site, cluster)
+            missing = minimum - count
+            remediation = add_device(
+                site=site,
+                cluster=name,
+                role=role,
+                device_kind=kind,
+                count=missing,
+                reason=f"{name}: {count} → {minimum} workers",
+                label=f"Agregar {missing} {_plural(missing, 'worker', 'workers')}",
+            )
         if count < 2:
             findings.append(
                 emit(
@@ -830,10 +926,11 @@ def rule_workers(ctx: RuleContext) -> list[Finding]:
                     path=rel,
                     graph_id=_graph_cluster(site, name),
                     message=f"{name} tiene {count} worker(s); se recomiendan al menos 2",
+                    remediation=remediation,
                 )
             )
         elif (longhorn or ceph) and count < 3:
-            kind = "Longhorn" if longhorn else "Ceph"
+            storage = "Longhorn" if longhorn else "Ceph"
             findings.append(
                 emit(
                     spec,
@@ -843,7 +940,8 @@ def rule_workers(ctx: RuleContext) -> list[Finding]:
                     cluster=name,
                     path=rel,
                     graph_id=_graph_cluster(site, name),
-                    message=f"{name} usa {kind} con {count} workers; se recomiendan al menos 3",
+                    message=f"{name} usa {storage} con {count} workers; se recomiendan al menos 3",
+                    remediation=remediation,
                 )
             )
     return findings
@@ -870,6 +968,17 @@ def rule_storage_replicas(ctx: RuleContext) -> list[Finding]:
         if not longhorn and not ceph:
             continue
         if replicas > len(eligible):
+            role, kind = _worker_role_kind(ctx, site, cluster)
+            missing = replicas - len(eligible)
+            remediation = add_device(
+                site=site,
+                cluster=name,
+                role=role,
+                device_kind=kind,
+                count=missing,
+                reason=f"{name}: {len(eligible)} → {replicas} nodos elegibles para {replicas} réplicas",
+                label=f"Agregar {missing} {_plural(missing, 'nodo', 'nodos')} de storage",
+            )
             findings.append(
                 emit(
                     spec,
@@ -883,6 +992,7 @@ def rule_storage_replicas(ctx: RuleContext) -> list[Finding]:
                         f"{name}: {replicas} réplicas ({origin}) > {len(eligible)} "
                         f"nodos elegibles"
                     ),
+                    remediation=remediation,
                 )
             )
     return findings
