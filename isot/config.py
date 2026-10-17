@@ -12,7 +12,13 @@ Orden de búsqueda del archivo de configuración:
 3. `./isot.yaml` (directorio actual)
 4. `~/.config/isot/config.yaml`
 
-`--repo DIR` (o `ISOT_ROOT`) fuerza el repositorio de datos sin archivo.
+`--repo DIR` (repetible; o `ISOT_ROOT`, varias rutas separadas por `:`) fuerza
+los repositorios de datos sin archivo; el id de cada uno es el nombre de su
+carpeta.
+
+Cada repositorio se valida por separado y de forma perezosa: uno inválido
+(ruta inexistente, carpeta sin sites.yaml) queda como no disponible con su
+mensaje de error, sin romper la configuración ni los demás.
 """
 
 from __future__ import annotations
@@ -42,7 +48,7 @@ CONFIG_FILENAME = "isot.yaml"
 USER_CONFIG = Path("~/.config/isot/config.yaml")
 TOP_KEYS = {"version", "data_repo", "repos", "default_repo", "templates", "edit", "ui"}
 DATA_REPO_KEYS = {"path", "remote", "branch"}
-REPO_KEYS = {"id", "name", "path", "remote", "branch"}
+REPO_KEYS = {"id", "name", "path", "remote", "branch", "edit"}
 SAFE_REPO_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,62}$")
 EDIT_KEYS = {"enabled", "push", "push_remote"}
 UI_KEYS = {"title"}
@@ -67,6 +73,20 @@ class DataRepoConfig:
     branch: str | None = None
     id: str = "default"
     name: str | None = None
+    # None: hereda edit.enabled; False: este repositorio es solo lectura.
+    edit: bool | None = None
+
+    @property
+    def label(self) -> str:
+        return self.name or self.path.name
+
+    def error(self) -> str | None:
+        """Mensaje si el repositorio no está disponible (se evalúa al pedirlo)."""
+        try:
+            validate_data_repo_path(self.path, f"{self.id}: path")
+        except ConfigError as exc:
+            return str(exc)
+        return None
 
 
 @dataclass
@@ -160,16 +180,17 @@ def _optional_text(value: Any, where: str) -> str | None:
 
 
 def validate_data_repo_path(path: Path, where: str = "data_repo.path") -> Path:
+    shown = display_path(path)
     if not path.exists():
         raise ConfigError(
-            f"{where}={path} no existe. Clona ahí tu repositorio de datos o usa "
+            f"{where}={shown} no existe. Clona ahí tu repositorio de datos o usa "
             "`isot init --scaffold DIR` para empezar desde cero."
         )
     if not path.is_dir():
-        raise ConfigError(f"{where}={path} no es un directorio")
+        raise ConfigError(f"{where}={shown} no es un directorio")
     if not is_data_repo(path):
         raise ConfigError(
-            f"{where}={path} no parece un repositorio de datos ISoT (falta sites.yaml y sites/). "
+            f"{where}={shown} no parece un repositorio de datos ISoT (falta sites.yaml y sites/). "
             "Si está vacío, ejecuta `isot init --scaffold DIR`."
         )
     return path
@@ -267,21 +288,56 @@ def _parse_repo(raw: dict[str, Any], base: Path, where: str, label: str) -> Data
     remote = _optional_text(raw.get("remote"), f"{label}.remote") or "origin"
     if not SAFE_REMOTE.fullmatch(remote):
         raise ConfigError(f"{label}.remote debe ser el nombre de un remote git (p.ej. origin)")
-    path = validate_data_repo_path(_expand(raw_path, base), f"{label}.path")
+    # La ruta no se valida aquí: un repositorio inválido no debe romper los demás
+    # (ver DataRepoConfig.error y resolve()).
+    path = _expand(raw_path, base)
     repo_id = _optional_text(raw.get("id"), f"{label}.id")
     if repo_id is None:
         if label != "data_repo":
             raise ConfigError(f"{where}: falta {label}.id")
-        repo_id = re.sub(r"[^a-z0-9._-]+", "-", path.name.lower()).strip("-.") or "default"
+        repo_id = repo_slug(path)
     if not SAFE_REPO_ID.fullmatch(repo_id):
         raise ConfigError(f"{label}.id={repo_id!r} inválido (minúsculas, números, . _ -)")
+    edit = None
+    if "edit" in raw:
+        if label == "data_repo":
+            raise ConfigError(f"{where}: data_repo no admite edit (usa edit.enabled)")
+        edit = _bool(raw["edit"], f"{label}.edit")
     return DataRepoConfig(
         path=path,
         remote=remote,
         branch=_optional_text(raw.get("branch"), f"{label}.branch"),
         id=repo_id,
         name=_optional_text(raw.get("name"), f"{label}.name"),
+        edit=edit,
     )
+
+
+def repo_slug(path: Path) -> str:
+    """Id de repositorio a partir del nombre de la carpeta."""
+    return re.sub(r"[^a-z0-9._-]+", "-", path.name.lower()).strip("-.")[:63] or "repo"
+
+
+def repos_from_paths(paths: list[str | Path]) -> list[DataRepoConfig]:
+    """Repositorios dados por --repo / ISOT_ROOT: id = carpeta (con sufijo si se repite)."""
+    out: list[DataRepoConfig] = []
+    seen: set[str] = set()
+    for raw in paths:
+        path = Path(raw).expanduser().resolve()
+        if any(item.path == path for item in out):
+            continue
+        base = repo_slug(path)
+        repo_id, n = base, 2
+        while repo_id in seen:
+            repo_id, n = f"{base}-{n}", n + 1
+        seen.add(repo_id)
+        out.append(DataRepoConfig(path=path, id=repo_id))
+    return out
+
+
+def env_repo_paths() -> list[str]:
+    raw = os.environ.get("ISOT_ROOT") or ""
+    return [item for item in raw.split(os.pathsep) if item.strip()]
 
 
 def load_config_file(path: Path) -> Config:
@@ -306,38 +362,76 @@ class Resolved:
     repo: Path
     origin: str
     config: Config
-    repo_id: str = "default"
+    repo_id: str = ""
+    # Todos los repositorios de esta resolución (el elegido incluido).
+    repos: list[DataRepoConfig] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not self.repo_id:
+            self.repo_id = repo_slug(self.repo)
+        if not self.repos:
+            self.repos = [DataRepoConfig(path=self.repo, id=self.repo_id)]
+
+
+def resolve_repos(
+    *,
+    repo: str | Path | list[str | Path] | None = None,
+    config_path: str | Path | None = None,
+    allow_cwd: bool = True,
+) -> tuple[Config, list[DataRepoConfig], str | None, str]:
+    """(config, repositorios, id por defecto, origen) sin validar cada repositorio.
+
+    Orden: --repo (repetible), ISOT_ROOT, configuración, directorio actual.
+    """
+    config = load_config(config_path)
+    base_config = config or Config(source=None)
+    paths = [repo] if isinstance(repo, (str, Path)) else list(repo or [])
+    if paths:
+        repos = repos_from_paths(paths)
+        return base_config, repos, repos[0].id, "--repo"
+    env = env_repo_paths()
+    if env:
+        repos = repos_from_paths(env)
+        return base_config, repos, repos[0].id, "ISOT_ROOT"
+    if config and config.repos:
+        default = config.data_repo or config.repos[0]
+        return config, list(config.repos), default.id, str(config.source)
+    if allow_cwd:
+        try:
+            root = find_repo_root(Path.cwd())
+        except FileNotFoundError:
+            pass
+        else:
+            repos = repos_from_paths([root])
+            return base_config, repos, repos[0].id, "directorio actual"
+    raise ConfigMissing()
 
 
 def resolve(
     *,
-    repo: str | Path | None = None,
+    repo: str | Path | list[str | Path] | None = None,
     config_path: str | Path | None = None,
     allow_cwd: bool = True,
+    repo_id: str | None = None,
 ) -> Resolved:
     """Repositorio de datos: --repo, ISOT_ROOT, configuración, o el directorio actual.
 
-    Lanza ConfigMissing (con instrucciones) si no hay ninguno, y ConfigError si
-    la configuración es inválida.
+    `repo_id` elige uno de la lista (por defecto, default_repo). Lanza
+    ConfigMissing (con instrucciones) si no hay ninguno, y ConfigError si la
+    configuración o el repositorio elegido son inválidos.
     """
-    config = load_config(config_path)
-    base_config = config or Config(source=None)
-    if repo:
-        path = validate_data_repo_path(Path(repo).expanduser().resolve(), "--repo")
-        return Resolved(path, "--repo", base_config)
-    env = os.environ.get("ISOT_ROOT")
-    if env:
-        path = validate_data_repo_path(Path(env).expanduser().resolve(), "ISOT_ROOT")
-        return Resolved(path, "ISOT_ROOT", base_config)
-    if config and config.data_repo:
-        chosen = config.data_repo
-        return Resolved(chosen.path, str(config.source), config, chosen.id)
-    if allow_cwd:
-        try:
-            return Resolved(find_repo_root(Path.cwd()), "directorio actual", base_config)
-        except FileNotFoundError:
-            pass
-    raise ConfigMissing()
+    config, repos, default_id, origin = resolve_repos(repo=repo, config_path=config_path, allow_cwd=allow_cwd)
+    wanted = repo_id or default_id
+    chosen = next((item for item in repos if item.id == wanted), None)
+    if chosen is None:
+        raise ConfigError(f"repositorio {wanted!r} no está configurado ({', '.join(item.id for item in repos)})")
+    if origin in {"--repo", "ISOT_ROOT"}:
+        validate_data_repo_path(chosen.path, origin)
+    else:
+        error = chosen.error()
+        if error:
+            raise ConfigError(error)
+    return Resolved(chosen.path, origin, config, chosen.id, repos)
 
 
 def apply(config: Config) -> None:
@@ -355,12 +449,16 @@ def missing_message() -> str:
     return "\n".join(lines)
 
 
-def cli_resolve(repo: str | Path | None, config_path: str | Path | None) -> Resolved | None:
+def cli_resolve(
+    repo: str | Path | list[str | Path] | None,
+    config_path: str | Path | None,
+    repo_id: str | None = None,
+) -> Resolved | None:
     """Para los comandos de consola: imprime las instrucciones en vez de fallar."""
     import sys
 
     try:
-        resolved = resolve(repo=repo, config_path=config_path)
+        resolved = resolve(repo=repo, config_path=config_path, repo_id=repo_id)
     except ConfigMissing:
         print(missing_message(), file=sys.stderr)
         return None
@@ -402,17 +500,39 @@ def _git(repo: Path, args: list[str]) -> str | None:
     return proc.stdout.decode("utf-8", errors="replace").strip()
 
 
-def repo_status(repo: Path, config: Config | None = None) -> dict[str, Any]:
+def cli_resolve_all(
+    repo: str | Path | list[str | Path] | None,
+    config_path: str | Path | None,
+) -> tuple[Config, list[DataRepoConfig]] | None:
+    """Todos los repositorios (para `--all`); imprime instrucciones si no hay."""
+    import sys
+
+    try:
+        config, repos, _default, _origin = resolve_repos(repo=repo, config_path=config_path)
+    except ConfigMissing:
+        print(missing_message(), file=sys.stderr)
+        return None
+    except ConfigError as exc:
+        print(f"error de configuración: {exc}", file=sys.stderr)
+        return None
+    apply(config)
+    return config, repos
+
+
+def repo_status(
+    repo: Path,
+    config: Config | None = None,
+    entry: DataRepoConfig | None = None,
+) -> dict[str, Any]:
     """Rama, HEAD, dirty y remote (saneado). Nunca incluye credenciales."""
-    entry = None
-    if config:
+    if entry is None and config:
         entry = next((item for item in config.repos if item.path == repo.resolve()), None) or config.data_repo
     remote_name = (entry.remote if entry else None) or "origin"
     expected = entry.branch if entry else None
     top = _git(repo, ["rev-parse", "--show-toplevel"])
     is_git = top is not None and Path(top).resolve() == repo.resolve()
     info: dict[str, Any] = {
-        "id": entry.id if entry else "default",
+        "id": entry.id if entry else repo_slug(repo),
         "name": (entry.name if entry and entry.name else None) or repo.name,
         "path": str(repo),
         "git": is_git,
@@ -436,3 +556,64 @@ def repo_status(repo: Path, config: Config | None = None) -> dict[str, Any]:
     info["dirty"] = bool(status)
     info["remote_url"] = sanitize_remote_url(_git(repo, ["remote", "get-url", remote_name]))
     return info
+
+
+# ---------------------------------------------------------------------------
+# Argumentos comunes de consola (validador, indexer, isot config)
+# ---------------------------------------------------------------------------
+
+
+def add_repo_arguments(parser: Any) -> None:
+    parser.add_argument(
+        "--repo",
+        "--root",
+        dest="root",
+        action="append",
+        type=Path,
+        default=None,
+        help="Repositorio de datos (repetible). Por defecto: los de isot.yaml.",
+    )
+    parser.add_argument("--repo-id", default=None, help="Id de un repositorio de la configuración.")
+    parser.add_argument(
+        "--all",
+        dest="all_repos",
+        action="store_true",
+        help="Todos los repositorios configurados (los no disponibles cuentan como fallo).",
+    )
+    parser.add_argument("--config", type=Path, default=None, help="Archivo de configuración isot.yaml.")
+
+
+@dataclass
+class CliTarget:
+    id: str
+    path: Path
+    error: str | None = None
+
+
+def cli_targets(args: Any) -> list[CliTarget] | None:
+    """Repositorios a procesar según --repo / --repo-id / --all. None: ya se imprimió el error."""
+    import sys
+
+    if getattr(args, "all_repos", False):
+        if args.repo_id:
+            print("error: usa --repo-id o --all, no ambos", file=sys.stderr)
+            return None
+        found = cli_resolve_all(args.root, args.config)
+        if found is None:
+            return None
+        _config, repos = found
+        return [CliTarget(item.id, item.path, item.error()) for item in repos]
+    resolved = cli_resolve(args.root, args.config, repo_id=args.repo_id)
+    if resolved is None:
+        return None
+    return [CliTarget(resolved.repo_id, resolved.repo)]
+
+
+
+def display_path(path: Path) -> str:
+    """Ruta con `~` si está bajo el home (para mensajes, la UI e isot.yaml)."""
+    resolved = path.expanduser().resolve()
+    try:
+        return "~/" + resolved.relative_to(Path.home().resolve()).as_posix()
+    except ValueError:
+        return resolved.as_posix()

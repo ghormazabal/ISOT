@@ -48,7 +48,8 @@ export function Onboarding({ info, error, checking, onRetry }: Props) {
           </li>
           <li className="onboarding-demo" id="onboarding-demo">
             <strong>Ver demo.</strong> <code>isot demo</code> copia el inventario de ejemplo a un directorio temporal
-            (con su propio git y la rama <code>demo/diff-example</code>) y lo sirve.
+            (con su propio git y la rama <code>demo/diff-example</code>) y lo sirve; <code>isot demo --multi</code> crea dos
+            repositorios y un <code>isot.yaml</code> con ambos para probar el selector.
           </li>
         </ol>
         <p className="muted">

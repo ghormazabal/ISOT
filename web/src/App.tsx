@@ -5,7 +5,7 @@ import { CompareValues } from "./components/CompareValues";
 import { DetailPanel } from "./components/DetailPanel";
 import { FindingsBell, FindingsPanel } from "./components/FindingsPanel";
 import { LinkDetailView } from "./components/LinkDetail";
-import { DataRepoBadge } from "./components/DataRepoBadge";
+import { RepoSwitcher } from "./components/RepoSwitcher";
 import { RefPicker, effectiveRef } from "./components/RefPicker";
 import { Splitter, useMediaQuery, usePanelSize, useViewport } from "./components/Splitter";
 import { Sidebar } from "./components/Sidebar";
@@ -61,15 +61,18 @@ import type {
   ValuesDiff,
 } from "./types";
 
-const savedSession = loadSession();
-
 type AppProps = {
   /** Repositorio de datos activo (de /api/config); se refresca periódicamente. */
   config?: Extract<ConfigInfo, { configured: true }> | null;
   onRefreshConfig?: () => void;
+  /** Cambia de repositorio de datos (Root remonta la app con ese repo). */
+  onSwitchRepo?: (repoId: string) => void;
 };
 
-export default function App({ config = null, onRefreshConfig }: AppProps = {}) {
+export default function App({ config = null, onRefreshConfig, onSwitchRepo }: AppProps = {}) {
+  // Sesión (borrador del wizard, sitio y vista) propia de cada repositorio.
+  const repoKey = config?.active_repo ?? null;
+  const [savedSession] = useState(() => loadSession(undefined, repoKey));
   const [view, setView] = useState<AppView>(() => (savedSession?.editing ? "wizards" : savedSession?.lastBrowse.view ?? "network"));
   const [siteFilter, setSiteFilter] = useState<SiteFilter>(() => savedSession?.lastBrowse.siteFilter ?? "all");
   const [lastBrowse, setLastBrowse] = useState<BrowseSnapshot>(() => savedSession?.lastBrowse ?? defaultBrowse());
@@ -138,8 +141,8 @@ export default function App({ config = null, onRefreshConfig }: AppProps = {}) {
       draft: wizardDraft,
       lastBrowse,
       editing: view === "wizards",
-    });
-  }, [wizardDraft, lastBrowse, view]);
+    }, undefined, repoKey);
+  }, [wizardDraft, lastBrowse, view, repoKey]);
 
   const toggleEdit = () => {
     const next = applyEditToggle(view, lastBrowse);
@@ -640,7 +643,14 @@ export default function App({ config = null, onRefreshConfig }: AppProps = {}) {
         <div>
           <p className="brand">
             {config?.ui.title || "ISoT"}
-            {config ? <DataRepoBadge info={config} /> : null}
+            {config ? (
+              <RepoSwitcher
+                current={config.data_repo}
+                repos={config.repos}
+                activeId={config.active_repo}
+                onSelect={(id) => onSwitchRepo?.(id)}
+              />
+            ) : null}
           </p>
           <p className="tagline">
             {siteFilter === "all"

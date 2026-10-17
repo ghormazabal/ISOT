@@ -7,6 +7,7 @@ aparte (temporal por defecto) con su propio `git init`.
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import subprocess
 import sys
@@ -60,14 +61,7 @@ jobs:
 """
 
 
-def display_path(path: Path) -> str:
-    """Ruta para escribir en un isot.yaml: con `~` si está bajo el home."""
-    resolved = path.expanduser().resolve()
-    home = Path.home().resolve()
-    try:
-        return "~/" + resolved.relative_to(home).as_posix()
-    except ValueError:
-        return resolved.as_posix()
+display_path = isot_config.display_path
 
 
 def render_config(repo_path: Path, *, edit: bool = False) -> str:
@@ -198,19 +192,129 @@ def create_demo(target: Path | None = None, *, diff_example: bool = True) -> Pat
     source = demo_repo_dir()
     if not is_data_repo(source):
         raise FileNotFoundError(f"no se encontró la demo en {source}")
-    if target is None:
-        target = Path(tempfile.mkdtemp(prefix="isot-demo-"))
-    target = target.expanduser().resolve()
-    if target.exists() and any(target.iterdir()):
-        if is_data_repo(target) and (target / ".git").exists():
-            return target
-        raise FileExistsError(f"{target} existe y no está vacío")
+    target, existing = _fresh_target(target, "isot-demo-")
+    if existing:
+        return target
     shutil.copytree(source, target, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     if git_init_commit(target, "Inventario de ejemplo ISoT", fallback_identity=True) is None:
         raise RuntimeError("no se pudo crear el commit inicial de la demo")
     if diff_example:
         create_diff_example(target)
     return target
+
+
+DEMO_SUR_SITES = {
+    # id nuevo: (reemplazos sobre la copia de site2)
+    "site3": {"site2": "site3", "SITE2": "SITE3", "site1": "site4", "SITE1": "SITE4", "10.80.": "10.82.", "64610": "64630"},
+    "site4": {
+        "site2": "site4",
+        "SITE2": "SITE4",
+        "site1": "site3",
+        "SITE1": "SITE3",
+        "10.80.": "10.84.",
+        "192.0.2.2/24": "192.0.2.1/24",
+        "64610": "64640",
+    },
+}
+DEMO_SUR_CATALOG = """# Catálogo de la demo «sur»: dos sitios edge (variante de site2) unidos por DCI.
+sites:
+  - id: site3
+    name: SITE3
+    path: sites/site3
+    description: "Sitio edge de ejemplo (variante de SITE2)"
+  - id: site4
+    name: SITE4
+    path: sites/site4
+    description: "Sitio edge de ejemplo (variante de SITE2)"
+
+address_spaces:
+  - id: dci-overlay
+    description: "Enlace DCI SITE3↔SITE4 (documentación RFC 5737)"
+    sites: [site3, site4]
+    match:
+      subnets: [DCI]
+"""
+
+
+def _rename(text: str, mapping: dict[str, str]) -> str:
+    pattern = re.compile("|".join(re.escape(key) for key in sorted(mapping, key=len, reverse=True)))
+    return pattern.sub(lambda match: mapping[match.group(0)], text)
+
+
+def _fresh_target(target: Path | None, prefix: str) -> tuple[Path, bool]:
+    """(destino, ya_existía_como_demo)."""
+    if target is None:
+        target = Path(tempfile.mkdtemp(prefix=prefix))
+    target = target.expanduser().resolve()
+    if target.exists() and any(target.iterdir()):
+        if is_data_repo(target) and (target / ".git").exists():
+            return target, True
+        raise FileExistsError(f"{target} existe y no está vacío")
+    return target, False
+
+
+def create_demo_sur(target: Path | None = None) -> Path:
+    """Segunda demo, más chica: site3 y site4 (copias renombradas del edge site2) con DCI entre ambos."""
+    source = demo_repo_dir()
+    if not is_data_repo(source):
+        raise FileNotFoundError(f"no se encontró la demo en {source}")
+    target, existing = _fresh_target(target, "isot-demo-sur-")
+    if existing:
+        return target
+    target.mkdir(parents=True, exist_ok=True)
+    (target / "sites.yaml").write_text(DEMO_SUR_CATALOG, encoding="utf-8")
+    edge = source / "sites" / "site2"
+    for site_id, mapping in DEMO_SUR_SITES.items():
+        for path in sorted(edge.rglob("*")):
+            if not path.is_file() or path.name.startswith("_") or path.suffix not in {".yaml", ".yml"}:
+                continue
+            rel = _rename(path.relative_to(edge).as_posix(), mapping)
+            dest = target / "sites" / site_id / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(_rename(path.read_text(encoding="utf-8"), mapping), encoding="utf-8")
+    # Solo el cluster-template global que usan los clústeres edge (el resto sale de la biblioteca).
+    template = "rke2-rancher-hybrid-calico"
+    shutil.copytree(source / "cluster-templates" / template, target / "cluster-templates" / template)
+    write_indexes(target)
+    if git_init_commit(target, "Inventario de ejemplo ISoT (sur)", fallback_identity=True) is None:
+        raise RuntimeError("no se pudo crear el commit inicial de la demo sur")
+    return target
+
+
+def render_multi_config(repos: list[tuple[str, str, Path]], *, base: Path, edit: bool = True) -> str:
+    lines = [
+        "# Configuración de ISoT con varios repositorios (generada por `isot demo --multi`).",
+        "version: 1",
+        "repos:",
+    ]
+    for repo_id, name, path in repos:
+        try:
+            shown = path.resolve().relative_to(base.resolve()).as_posix()
+        except ValueError:
+            shown = display_path(path)
+        lines += [f"  - id: {repo_id}", f"    name: {name}", f"    path: {shown}", "    branch: main"]
+    lines += [f"default_repo: {repos[0][0]}", "edit:", f"  enabled: {'true' if edit else 'false'}", ""]
+    return "\n".join(lines)
+
+
+def create_multi_demo(parent: Path | None = None, *, diff_example: bool = True) -> Path:
+    """`parent/demo-norte` (site1 + site2), `parent/demo-sur` (site3 + site4) e `parent/isot.yaml`."""
+    if parent is None:
+        parent = Path(tempfile.mkdtemp(prefix="isot-demos-"))
+    parent = parent.expanduser().resolve()
+    parent.mkdir(parents=True, exist_ok=True)
+    norte = create_demo(parent / "demo-norte", diff_example=diff_example)
+    sur = create_demo_sur(parent / "demo-sur")
+    config = parent / isot_config.CONFIG_FILENAME
+    if not config.exists():
+        config.write_text(
+            render_multi_config(
+                [("demo-norte", "Demo norte (site1 + site2)", norte), ("demo-sur", "Demo sur (site3 + site4)", sur)],
+                base=parent,
+            ),
+            encoding="utf-8",
+        )
+    return config
 
 
 # ---------------------------------------------------------------------------
@@ -272,26 +376,52 @@ def demo_main(argv: list[str] | None = None) -> int:
         prog="isot demo",
         description="Copia el inventario de ejemplo a un directorio aparte (git init) y lo sirve.",
     )
-    parser.add_argument("--dir", type=Path, default=None, help="Destino (por defecto, un directorio temporal).")
+    parser.add_argument(
+        "--dir",
+        type=Path,
+        default=None,
+        help="Destino (por defecto, un directorio temporal). Con --multi, la carpeta que contendrá ambos repos.",
+    )
+    parser.add_argument(
+        "--multi",
+        action="store_true",
+        help="Dos repos (demo-norte: site1+site2, demo-sur: site3+site4) y un isot.yaml que lista ambos.",
+    )
+    parser.add_argument(
+        "--variant",
+        choices=("norte", "sur"),
+        default="norte",
+        help="Sin --multi: norte (site1+site2, por defecto) o sur (site3+site4).",
+    )
     parser.add_argument("--no-serve", action="store_true", help="Solo crea el repo de la demo.")
     parser.add_argument("--no-diff-example", action="store_true", help="No crea la rama demo/diff-example.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args(argv)
     try:
-        target = create_demo(args.dir, diff_example=not args.no_diff_example)
+        if args.multi:
+            config = create_multi_demo(args.dir, diff_example=not args.no_diff_example)
+        elif args.variant == "sur":
+            target = create_demo_sur(args.dir)
+        else:
+            target = create_demo(args.dir, diff_example=not args.no_diff_example)
     except (FileExistsError, FileNotFoundError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    from isot import web
+
+    serve = ["--edit", "--host", args.host, "--port", str(args.port)]
+    if args.multi:
+        print(f"Demos listas en {config.parent} (demo-norte, demo-sur) y configuración {config}.")
+        print(f"Para usarlas después: isot web --config {config}")
+        return 0 if args.no_serve else web.main(["--config", str(config), *serve])
     print(f"Demo lista en {target} (repo git propio; la carpeta de la herramienta no se toca).")
-    if not args.no_diff_example:
+    if args.variant == "norte" and not args.no_diff_example:
         print(f"Rama {DIFF_EXAMPLE_BRANCH} creada: Comparar → base main, head {DIFF_EXAMPLE_BRANCH}.")
     print(f"Para usarla después: isot web --repo {target} --edit   (o data_repo.path en isot.yaml)")
     if args.no_serve:
         return 0
-    from isot import web
-
-    return web.main(["--repo", str(target), "--edit", "--host", args.host, "--port", str(args.port)])
+    return web.main(["--repo", str(target), *serve])
 
 
 def diff_example_main(argv: list[str] | None = None) -> int:

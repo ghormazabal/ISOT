@@ -42,7 +42,7 @@ from isot.inventory import (
     resolve_template_path,
     site_by_id,
 )
-from isot.config import cli_resolve
+from isot.config import add_repo_arguments, cli_targets, cli_resolve
 
 OK_EXIT = 0
 FAIL_EXIT = 1
@@ -496,15 +496,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Valida IPs únicas, referencias lógicas y reglas de control de ISoT."
     )
-    parser.add_argument(
-        "--repo",
-        "--root",
-        dest="root",
-        type=Path,
-        default=None,
-        help="Repositorio de datos (por defecto: data_repo.path de isot.yaml).",
-    )
-    parser.add_argument("--config", type=Path, default=None, help="Archivo de configuración isot.yaml.")
+    add_repo_arguments(parser)
     parser.add_argument(
         "--strict",
         action="store_true",
@@ -522,10 +514,23 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    resolved = cli_resolve(args.root, args.config)
-    if resolved is None:
+    targets = cli_targets(args)
+    if targets is None:
         return CONFIG_EXIT
-    return validate(resolved.repo, strict=args.strict, fmt=args.fmt)
+    if len(targets) == 1 and not targets[0].error:
+        return validate(targets[0].path, strict=args.strict, fmt=args.fmt)
+    if args.fmt == "json":
+        print("error: --all con --format json no está soportado; usa --repo-id", file=sys.stderr)
+        return CONFIG_EXIT
+    worst = OK_EXIT
+    for target in targets:
+        print(f"\n=== repositorio {target.id} ({target.path.name}) ===")
+        if target.error:
+            print(f"[ERROR] no disponible: {target.error}")
+            worst = max(worst, FAIL_EXIT)
+            continue
+        worst = max(worst, validate(target.path, strict=args.strict, fmt=args.fmt))
+    return worst
 
 
 if __name__ == "__main__":

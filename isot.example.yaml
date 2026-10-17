@@ -19,17 +19,19 @@ data_repo:
   remote: origin        # remote git cuya URL se muestra (sin credenciales)
   branch: main          # rama esperada; la UI avisa si el clon está en otra
 
-# Forma general (varios repositorios; hoy se usa default_repo y la UI muestra
-# cuál está activo). Usa data_repo O repos, no ambos: data_repo equivale a una
-# lista de un elemento con id = nombre de la carpeta.
+# Varios repositorios: la UI muestra un selector en la cabecera (?repo=<id>).
+# Usa data_repo O repos, no ambos: data_repo equivale a una lista de un
+# elemento con id = nombre de la carpeta. Cada repo se valida por separado: uno
+# inválido aparece como «no disponible» con su error y no afecta a los demás.
 # repos:
-#   - id: norte
-#     name: Inventario norte
+#   - id: norte                    # obligatorio: minúsculas, números, . _ -
+#     name: Inventario norte       # opcional: nombre en la UI
 #     path: ~/repos/inventario-norte
 #     branch: main
 #   - id: sur
 #     path: ~/repos/inventario-sur
-# default_repo: norte
+#     edit: false                  # opcional: este repo en solo lectura
+# default_repo: norte              # el que se abre por defecto (si no, el primero)
 
 # Opcional: carpetas extra de cluster-templates (cada una con <nombre>/template.yaml,
 # o con una subcarpeta cluster-templates/). Orden de prioridad para un template_ref:

@@ -6,13 +6,13 @@ import sys
 
 USAGE = """uso: isot <comando> [opciones]
 
-  web         sirve la API y la UI (--config, --repo, --edit, --port)
-  validate    valida el repositorio de datos (--repo, --config)
-  index       regenera los _*_index.json (--check para CI)
+  web         sirve la API y la UI (--config, --repo repetible, --edit, --host, --port)
+  validate    valida repositorios de datos (--repo, --repo-id, --all, --config)
+  index       regenera los _*_index.json (--check para CI; --repo-id, --all)
   init        crea isot.yaml (--path DIR) o un repo de datos vacío (--scaffold DIR)
   demo        copia la demo a un directorio aparte con git init y la sirve
   demo-diff   crea la rama demo/diff-example en un repo demo
-  config      muestra qué configuración y repo de datos se usan
+  config      muestra la configuración y el estado de cada repositorio
   leakcheck   patrones prohibidos (repo de la herramienta; --repo para otro árbol)
 """
 
@@ -24,21 +24,40 @@ def _config_main(argv: list[str]) -> int:
 
     parser = argparse.ArgumentParser(prog="isot config")
     parser.add_argument("--config", default=None)
-    parser.add_argument("--repo", default=None)
+    parser.add_argument("--repo", action="append", default=None, help="Repositorio de datos (repetible).")
     args = parser.parse_args(argv)
-    resolved = isot_config.cli_resolve(args.repo, args.config)
-    if resolved is None:
+    try:
+        cfg, repos, default_id, origin = isot_config.resolve_repos(repo=args.repo, config_path=args.config)
+    except isot_config.ConfigMissing:
+        print(isot_config.missing_message(), file=sys.stderr)
         return 2
-    status = isot_config.repo_status(resolved.repo, resolved.config)
-    print(f"origen:       {resolved.origin}")
-    print(f"repo datos:   {resolved.repo}")
-    print(f"git:          {'sí' if status['git'] else 'no'}  rama={status['branch']}  HEAD={status['short']}  dirty={status['dirty']}")
-    if status["remote_url"]:
-        print(f"remote:       {status['remote']} {status['remote_url']}")
-    cfg = resolved.config
+    except isot_config.ConfigError as exc:
+        print(f"error de configuración: {exc}", file=sys.stderr)
+        return 2
+    print(f"origen:       {origin}")
+    print(f"repositorios: {len(repos)} (por defecto: {default_id})")
+    bad = 0
+    for item in repos:
+        mark = "*" if item.id == default_id else " "
+        error = item.error()
+        print(f" {mark} {item.id:<16} {item.label}")
+        print(f"     ruta:     {isot_config.display_path(item.path)}")
+        if error:
+            bad += 1
+            print(f"     estado:   NO DISPONIBLE: {error}")
+            continue
+        status = isot_config.repo_status(item.path, cfg, item)
+        print(
+            f"     git:      {'sí' if status['git'] else 'no'}  rama={status['branch']}  "
+            f"HEAD={status['short']}  dirty={status['dirty']}"
+        )
+        if status["remote_url"]:
+            print(f"     remote:   {status['remote']} {status['remote_url']}")
+        if item.edit is False:
+            print("     edición:  solo lectura (repos[].edit: false)")
     print(f"templates:    {', '.join(str(p) for p in cfg.templates) or '(solo los de la herramienta)'}")
     print(f"edición:      enabled={cfg.edit.enabled} push={cfg.edit.push} push_remote={cfg.edit.push_remote}")
-    return 0
+    return 1 if bad == len(repos) else 0
 
 
 def main(argv: list[str] | None = None) -> int:

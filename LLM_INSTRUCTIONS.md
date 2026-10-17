@@ -1,8 +1,9 @@
 # Instrucciones para agentes de IA (ISoT)
 
 ISoT es una herramienta: el inventario vive en un **repositorio de datos**
-aparte (configurado en `isot.yaml` → `data_repo.path`, o `--repo DIR`; ver
-`isot config`). Ese repositorio es la **fuente de verdad** de varios sitios
+aparte (configurado en `isot.yaml` → `data_repo.path` o la lista `repos`, o
+`--repo DIR`; ver `isot config`). Con varios repositorios, cada uno es una
+fuente de verdad independiente: no mezcles sitios ni referencias entre ellos. Ese repositorio es la **fuente de verdad** de varios sitios
 lógicos; en este repo el inventario de ejemplo está en `examples/demo-repo/`.
 Todas las rutas de abajo son relativas a la raíz del repositorio de datos. El
 estado vive en Git como YAML/JSON. Si un objeto no está en estos archivos,
@@ -76,7 +77,7 @@ campo `k8s_name` guarda el nombre k8s.
 
 ## 5. Tras editar YAML
 
-1. `python -m isot.validator --repo <repo de datos>` (sin `--repo` usa `isot.yaml`)
+1. `python -m isot.validator --repo <repo de datos>` (sin `--repo` usa `isot.yaml`; `--repo-id ID` o `--all`)
 2. `python -m isot.indexer --repo <repo de datos>`
 3. `python -m isot.leakcheck` (si tocaste el repo de la herramienta o `examples/`)
 4. No hagas commit si alguno falla o si un `_*_index.json` quedó desfasado.

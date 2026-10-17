@@ -20,8 +20,9 @@ propios permisos, revisiones y CI.
 
 El repositorio de datos se declara en un YAML. Orden de búsqueda:
 `--config RUTA` → `$ISOT_CONFIG` → `./isot.yaml` → `~/.config/isot/config.yaml`.
-`--repo DIR` (o `ISOT_ROOT`) fuerza un repositorio sin archivo de
-configuración. `isot.yaml` está en `.gitignore`; la plantilla comentada es
+`--repo DIR` (repetible; o `ISOT_ROOT` con rutas separadas por `:`) fuerza
+los repositorios sin archivo de configuración; el id de cada uno es el
+nombre de su carpeta. `isot.yaml` está en `.gitignore`; la plantilla comentada es
 [`isot.example.yaml`](isot.example.yaml):
 
 ```yaml
@@ -39,11 +40,10 @@ ui:
   title: null
 ```
 
-Para varios repositorios se usa la forma general `repos: [{id, name, path,
-remote?, branch?}]` más `default_repo`; `data_repo` es la abreviatura de una
-lista de un elemento (id = nombre de la carpeta). Hoy se sirve
-`default_repo`; la cabecera y `/api/config` ya exponen `repos[]` y
-`active_repo`.
+Para varios repositorios se usa la forma general `repos: [{id, name?, path,
+remote?, branch?, edit?}]` más `default_repo`; `data_repo` es la abreviatura
+de una lista de un elemento (id = nombre de la carpeta). Ver
+[Varios repositorios](#varios-repositorios).
 
 El archivo se valida al arrancar con mensajes concretos (clave desconocida,
 `path` ausente o inexistente, carpeta que no parece un repositorio de datos,
@@ -74,6 +74,68 @@ configuración). Lo mismo expone `GET /api/config` (`/api/health` incluye
 
 ![Cabecera con el repositorio de datos activo](docs/images/data-repo-header.png)
 
+## Varios repositorios
+
+```yaml
+version: 1
+repos:
+  - id: norte
+    name: Inventario norte
+    path: ~/repos/inventario-norte
+    branch: main
+  - id: sur
+    path: ~/repos/inventario-sur
+    edit: false          # opcional: solo lectura en este repo
+default_repo: norte
+edit:
+  enabled: true
+```
+
+![Selector de repositorio de datos en la cabecera](docs/images/repo-switcher.png)
+
+*Selector abierto con dos demos y un repositorio configurado cuya ruta no
+existe: queda «no disponible» con su error y no afecta a los demás.*
+
+- **Selector en la cabecera.** Con más de un repositorio, la insignia del
+  repo activo es un desplegable: nombre, id, rama, HEAD corto y estado
+  (limpio, «● sin commit», sin git, no disponible), con buscador a partir de
+  seis repositorios. El elegido queda en la URL (`?repo=<id>`, con
+  historial del navegador) y en `localStorage`; al volver se abre el último.
+  Orden: `?repo=` → último usado → `default_repo` → primero.
+- **Cambiar de repositorio** vuelve a montar la vista sobre ese repo: lista
+  de sitios, sitio elegido, refs de Comparar y panel de hallazgos salen de
+  ese repositorio (la sesión de cada uno —vista, sitio y borrador— se guarda
+  por separado). Si hay un borrador del wizard sin confirmar, ISoT avisa
+  antes de cambiar; el borrador queda guardado y vuelve al regresar.
+- **Repositorio no disponible** (ruta inexistente, carpeta sin `sites.yaml`):
+  aparece marcado en el selector con su error y, si se elige, la UI muestra
+  cómo arreglarlo y botones para abrir los demás.
+- **Estado por repositorio en el backend:** cachés de diff/snapshots e
+  índices por ruta del repo, hallazgos, refs y commits de su git, ramas
+  `wizard/…` en ese repo y edición efectiva (`edit.enabled` global, salvo
+  `repos[].edit: false`). Cada repositorio se abre de forma perezosa (nada
+  se lee hasta pedirlo) y un cambio en `isot.yaml` se recarga sin reiniciar.
+- **API.** La forma canónica es `/api/repos/{id}/<ruta>` para toda la API de
+  datos (`/api/repos/sur/sites`, `/api/repos/sur/diff?base=…`,
+  `/api/repos/sur/wizard/device/commit`…). Las rutas sin prefijo
+  (`/api/sites`, …) siguen funcionando contra el repositorio por defecto.
+  `GET /api/repos` lista los repositorios con `id`, `name`, `path` (solo el
+  nombre de la carpeta), `branch`, `short`/`head`, `dirty`, `git`,
+  `available`, `error`, `default` y `edit`; `GET /api/repos/{id}` devuelve
+  uno con estado fresco.
+- **Consola.** `isot config` lista todos con su estado. `isot validate` e
+  `isot index` aceptan `--repo-id ID` (uno de la configuración) o `--all`
+  (todos; un repo no disponible cuenta como fallo). `isot web --repo A
+  --repo B` sirve varios sin archivo.
+- **Demo.** `isot demo --multi` crea `demo-norte` (site1 + site2, con
+  `demo/diff-example`), `demo-sur` (site3 + site4: dos sitios edge, variante
+  de site2 con DCI entre ambos) y un `isot.yaml` que lista los dos, y lo
+  sirve.
+
+Comparar **entre** repositorios (p.ej. el mismo sitio en dos inventarios) no
+está incluido: Comparar trabaja con refs de un mismo repo. Queda como posible
+mejora.
+
 ## Empezar desde cero
 
 ```bash
@@ -98,6 +160,8 @@ elige la otra plantilla; `--output` cambia dónde se escribe `isot.yaml`.
 ```bash
 isot demo                        # copia examples/demo-repo a un directorio temporal y lo sirve
 isot demo --dir ~/TMP/isot-demo --no-serve   # solo prepararla, luego apuntar isot.yaml ahí
+isot demo --multi                # dos repos (demo-norte, demo-sur) + isot.yaml con ambos
+isot demo --variant sur --dir ~/TMP/isot-demo-sur --no-serve   # solo la demo «sur»
 ```
 
 La copia tiene su propio `git init` (commit «Inventario de ejemplo ISoT») y
@@ -126,8 +190,12 @@ de la herramienta. Para eso está `isot demo`.
 - La API sirve solo archivos dentro del repositorio de datos y de las
   carpetas de templates configuradas. `/api/config` y la cabecera muestran
   la URL del remote **sin** usuario ni token.
-- Escucha en `0.0.0.0:8000` con `serve.sh`; en una máquina compartida usa
-  `isot web --host 127.0.0.1`.
+- Escucha solo en `127.0.0.1:8000` por defecto (`serve.sh`, `isot web`,
+  `isot demo`): es una herramienta local que lee y edita repositorios con tus
+  permisos, y no tiene autenticación propia. `--host 0.0.0.0` (o
+  `ISOT_HOST`) la expone a la red de forma explícita y el arranque lo avisa;
+  el contenedor Docker escucha en `0.0.0.0` dentro del contenedor, pero
+  `docker-compose.yml` publica el puerto solo en `127.0.0.1`.
 - `isot leakcheck` es un chequeo del repo de la herramienta (que no se
   cuelen datos reales en ejemplos); para un repo de datos es opcional:
   `isot leakcheck --repo DIR --patterns MIS_PATRONES.json`.
@@ -552,18 +620,19 @@ Diff gráfico entre `main` del repo demo y `demo/diff-example`: SITE1 en amarill
 ## Cómo usarlo
 
 ```bash
-./scripts/serve.sh          # http://localhost:8000  (solo lectura; repo de isot.yaml)
+./scripts/serve.sh          # http://127.0.0.1:8000  (solo lectura; repos de isot.yaml)
 ISOT_EDIT=1 ./scripts/serve.sh --edit
-./scripts/serve.sh --repo ~/repos/mi-inventario --config otra.yaml
+./scripts/serve.sh --repo ~/repos/norte --repo ~/repos/sur   # varios, sin isot.yaml
+./scripts/serve.sh --host 0.0.0.0                            # expuesto a la red (opt-in)
 # o: ISOT_DATA_REPO=~/repos/mi-inventario docker compose up --build
 ```
 
 Desarrollo: `./scripts/dev.sh` (API :8000, Vite :5173).
 
 ```bash
-isot config                                 # qué configuración y repo se usan
-isot validate  [--repo DIR] [--config F]    # = python -m isot.validator
-isot index     [--repo DIR] [--check]       # sitios + devices + clusters + templates
+isot config                                 # configuración y estado de cada repositorio
+isot validate  [--repo DIR | --repo-id ID | --all] [--config F]   # = python -m isot.validator
+isot index     [--repo DIR | --repo-id ID | --all] [--check]      # índices de sitios, devices, clusters, templates
 isot leakcheck                              # repo de la herramienta
 ```
 
@@ -577,7 +646,9 @@ pytest
 cd web && npm ci && npm test && npm run build
 ```
 
-API de solo lectura: `/api/health`, `/api/config`, `/api/sites`, `/api/sites/{id}/devices`,
+API (todas las rutas de datos admiten el prefijo `/api/repos/{id}/`; sin él
+usan el repositorio por defecto): `/api/health`, `/api/repos`,
+`/api/repos/{id}`, `/api/config`, `/api/sites`, `/api/sites/{id}/devices`,
 `/api/sites/{id}/clusters`, `/api/sites/{id}/graph?view=network|kubernetes`,
 `/api/graph?view=global`, `/api/templates`, detalle bajo demanda,
 `/api/templates/{name}/values/{release}` (lazy),

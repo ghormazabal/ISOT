@@ -74,6 +74,11 @@ export type WizardSession = {
 
 export const STORAGE_KEY = "isot.wizard.session";
 
+/** Clave de la sesión del wizard: una por repositorio de datos. */
+export function sessionKey(repoId?: string | null): string {
+  return repoId ? `${STORAGE_KEY}:${repoId}` : STORAGE_KEY;
+}
+
 export const DEFAULT_DOCK_WIDTH = 420;
 export const MIN_DOCK_WIDTH = 260;
 export const MIN_GRAPH_WIDTH = 240;
@@ -200,7 +205,7 @@ export function applyEditToggle(
   return { view: "wizards", compare: false, siteFilter: lastBrowse.siteFilter };
 }
 
-function memoryStorage(): StorageLike {
+export function memoryStorage(): StorageLike {
   const data = new Map<string, string>();
   return {
     getItem: (key) => (data.has(key) ? data.get(key)! : null),
@@ -232,9 +237,9 @@ function withLayout<T extends { graphHidden?: boolean; dockWidth?: number }>(sta
   };
 }
 
-export function loadSession(storage: StorageLike = getDefaultStorage()): WizardSession | null {
+export function loadSession(storage: StorageLike = getDefaultStorage(), repoId?: string | null): WizardSession | null {
   try {
-    const raw = storage.getItem(STORAGE_KEY);
+    const raw = storage.getItem(sessionKey(repoId));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as WizardSession;
     if (!parsed || parsed.v !== 1 || !parsed.draft) return null;
@@ -305,12 +310,16 @@ function dropGraphs(draft: WizardDraft): WizardDraft {
   };
 }
 
-export function saveSession(session: WizardSession, storage: StorageLike = getDefaultStorage()): boolean {
+export function saveSession(
+  session: WizardSession,
+  storage: StorageLike = getDefaultStorage(),
+  repoId?: string | null,
+): boolean {
   const payload: WizardSession = { v: 1, draft: session.draft, lastBrowse: session.lastBrowse, editing: session.editing };
   const attempts = [payload, { ...payload, draft: withoutHeavyGraphs(payload.draft) }, { ...payload, draft: dropGraphs(payload.draft) }];
   for (const item of attempts) {
     try {
-      storage.setItem(STORAGE_KEY, JSON.stringify(item));
+      storage.setItem(sessionKey(repoId), JSON.stringify(item));
       return true;
     } catch {
       /* quota */
@@ -329,4 +338,10 @@ export function clearSession(storage: StorageLike = getDefaultStorage()): void {
 
 export function draftsEqual(left: WizardDraft, right: WizardDraft): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+/** ¿Hay un borrador del wizard sin confirmar guardado para este repositorio? */
+export function hasSavedDraft(repoId: string | null | undefined, storage: StorageLike = getDefaultStorage()): boolean {
+  const session = loadSession(storage, repoId);
+  return Boolean(session && isDraftInProgress(session.draft));
 }

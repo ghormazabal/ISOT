@@ -29,7 +29,7 @@ from isot.inventory import (
     load_devices,
     load_templates,
 )
-from isot.config import cli_resolve
+from isot.config import add_repo_arguments, cli_targets
 
 
 def render_index(entries: Any) -> str:
@@ -268,11 +268,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Genera índices ligeros (sitios, devices, clusters, cluster-templates)."
     )
-    parser.add_argument(
-        "--repo", "--root", dest="root", type=Path, default=None,
-        help="Repositorio de datos (por defecto: data_repo.path de isot.yaml).",
-    )
-    parser.add_argument("--config", type=Path, default=None, help="Archivo de configuración isot.yaml.")
+    add_repo_arguments(parser)
     parser.add_argument(
         "--check",
         action="store_true",
@@ -283,20 +279,25 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    resolved = cli_resolve(args.root, args.config)
-    if resolved is None:
+    targets = cli_targets(args)
+    if targets is None:
         return 2
-    root = resolved.repo
-
-    if args.check:
-        ok, message = check_index(root)
-        print(message)
-        return 0 if ok else 1
-
-    written = write_indexes(root)
-    for path in written:
-        print(f"Escrito {path.relative_to(root).as_posix()}")
-    return 0
+    worst = 0
+    for target in targets:
+        prefix = f"[{target.id}] " if len(targets) > 1 else ""
+        if target.error:
+            print(f"{prefix}no disponible: {target.error}")
+            worst = 1
+            continue
+        root = target.path
+        if args.check:
+            ok, message = check_index(root)
+            print(f"{prefix}{message}")
+            worst = worst if ok else 1
+            continue
+        for path in write_indexes(root):
+            print(f"{prefix}Escrito {path.relative_to(root).as_posix()}")
+    return worst
 
 
 if __name__ == "__main__":

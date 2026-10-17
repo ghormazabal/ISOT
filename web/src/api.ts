@@ -3,6 +3,7 @@ import type {
   ClusterDetail,
   ClusterIndexEntry,
   ConfigInfo,
+  ReposPayload,
   ConnectionPolicy,
   DeviceDetail,
   DeviceIndexEntry,
@@ -23,8 +24,27 @@ import type {
   WizardStatus,
 } from "./types";
 
+let activeRepo: string | null = null;
+
+/** Repositorio de datos de las llamadas siguientes (prefijo /api/repos/{id}/). */
+export function setApiRepo(repoId: string | null): void {
+  activeRepo = repoId;
+}
+
+export function getApiRepo(): string | null {
+  return activeRepo;
+}
+
+/** `/api/x` → `/api/repos/{id}/x` con un repositorio activo; `/api/repos…` no se toca. */
+export function repoUrl(url: string, repoId: string | null = activeRepo): string {
+  if (!repoId || !url.startsWith("/api/") || url === "/api/repos" || url.startsWith("/api/repos/") || url.startsWith("/api/repos?")) {
+    return url;
+  }
+  return `/api/repos/${encodeURIComponent(repoId)}/${url.slice("/api/".length)}`;
+}
+
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
+  const response = await fetch(repoUrl(url), init);
   if (!response.ok) {
     let detail = response.statusText;
     try {
@@ -106,6 +126,7 @@ export const api = {
     postJSON<LinkResponse>("/api/link/preview", { source, target, files }),
   wizardStatus: () => fetchJSON<WizardStatus>("/api/wizard/status"),
   config: () => fetchJSON<ConfigInfo>("/api/config"),
+  repos: () => fetchJSON<ReposPayload>("/api/repos"),
   wizardCablingDefaults: (architecture: string, extra?: Record<string, string | number>) => {
     const params = new URLSearchParams({ architecture });
     if (extra) {

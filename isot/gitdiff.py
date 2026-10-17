@@ -904,6 +904,13 @@ def semantic_diff(repo: Path, base_ref: str, head_ref: str, site: str | None = N
     return payload
 
 
-def clear_caches() -> None:
-    _diff_cache.clear()
-    _snapshot_cache.clear()
+def clear_caches(repo: Path | None = None) -> None:
+    """Vacía las cachés de diff/snapshot; con `repo`, solo las de ese repositorio."""
+    if repo is None:
+        _diff_cache.clear()
+        _snapshot_cache.clear()
+        return
+    key = str(repo.resolve())
+    for cache in (_diff_cache, _snapshot_cache):
+        for item in [k for k in cache if k[0] == key]:
+            del cache[item]

@@ -72,7 +72,25 @@ export type DataRepoStatus = {
   remote: string | null;
   remote_url: string | null;
   expected_branch: string | null;
+  /** false: ruta inexistente o carpeta que no es un repositorio de datos. */
+  available?: boolean;
+  error?: string | null;
+  default?: boolean;
+  /** Edición efectiva en este repositorio (global salvo repos[].edit: false). */
+  edit?: boolean;
 };
+
+/** Entrada de GET /api/repos (path = solo el nombre de la carpeta). */
+export type RepoStatus = DataRepoStatus & {
+  available: boolean;
+  error: string | null;
+  default: boolean;
+  edit: boolean;
+};
+
+export type ReposPayload =
+  | { configured: false; repos: []; default_repo: null; error: string | null; message: string; hints: string[]; search: string[]; edit: boolean }
+  | { configured: true; origin: string; config_file: string | null; default_repo: string; repos: RepoStatus[] };
 
 export type ConfigInfo =
   | {
@@ -88,9 +106,10 @@ export type ConfigInfo =
       origin: string;
       config_file: string | null;
       data_repo: DataRepoStatus;
-      /** Repos declarados en la configuración (preparado para un selector). */
-      repos: { id: string; name: string; active: boolean }[];
+      /** Repositorios configurados (estado de cada uno) y cuál es el de esta vista. */
+      repos: (RepoStatus & { active: boolean })[];
       active_repo: string;
+      default_repo: string;
       templates: string[];
       edit: boolean;
       push: boolean;

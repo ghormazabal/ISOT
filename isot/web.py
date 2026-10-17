@@ -8,8 +8,11 @@ Los POST /api/wizard/* solo existen si ISOT_EDIT=1 (o create_app(edit=True)).
 
 from __future__ import annotations
 
+import contextvars
 import os
 import re
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -442,55 +445,170 @@ def _chart_values_payload(template_path: Path, release: str) -> dict[str, Any]:
     }
 
 
-class DataRepoState:
-    """Repositorio de datos activo. Se vuelve a resolver mientras no haya uno
-    (así el onboarding detecta un isot.yaml recién creado sin reiniciar)."""
+_REQUEST_REPO: contextvars.ContextVar[str | None] = contextvars.ContextVar("isot_request_repo", default=None)
+REPO_PREFIX = "/api/repos/"
+STATUS_TTL = 3.0
 
-    def __init__(self, repo_root: Path | None, config_path: str | Path | None) -> None:
-        self.fixed = repo_root.resolve() if repo_root is not None else None
+
+class RepoPrefixMiddleware:
+    """`/api/repos/{id}/<ruta>` → `/api/<ruta>` sobre el repositorio `id`.
+
+    Es la forma canónica de toda API de datos; las rutas `/api/<ruta>` sin prefijo
+    siguen funcionando contra el repositorio por defecto (compatibilidad).
+    `/api/repos` y `/api/repos/{id}` (estado) no se reescriben.
+    """
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope.get("type") == "http" and scope.get("path", "").startswith(REPO_PREFIX):
+            repo_id, _, rest = scope["path"][len(REPO_PREFIX):].partition("/")
+            if repo_id and rest:
+                path = "/api/" + rest
+                scope = dict(scope, path=path, raw_path=path.encode("utf-8"))
+                token = _REQUEST_REPO.set(repo_id)
+                try:
+                    await self.app(scope, receive, send)
+                finally:
+                    _REQUEST_REPO.reset(token)
+                return
+        await self.app(scope, receive, send)
+
+
+class RepoRegistry:
+    """Repositorios de datos configurados, indexados por id.
+
+    Cada repositorio se valida al pedirlo (un repo inválido queda «no disponible»
+    con su error y no afecta a los demás). Mientras no hay configuración se
+    vuelve a resolver en cada pedido (el onboarding detecta un isot.yaml nuevo),
+    y si el archivo de configuración cambia se recarga.
+    """
+
+    def __init__(self, fixed: list[Path] | None, config_path: str | Path | None) -> None:
+        self.fixed = [path.resolve() for path in fixed] if fixed else None
         self.config_path = config_path
-        self.resolved: isot_config.Resolved | None = None
+        self.config = isot_config.Config(source=None)
+        self.repos: list[isot_config.DataRepoConfig] = []
+        self.default_id: str | None = None
+        self.origin: str | None = None
         self.error: str | None = None
         self.missing = False
+        self._stamp: float | None = None
+        self._status: dict[str, tuple[float, dict[str, Any]]] = {}
+        self._lock = threading.Lock()
         self.refresh()
 
-    def refresh(self) -> None:
-        if self.fixed is not None:
-            config = isot_config.Config(source=None)
-            try:
-                config = isot_config.load_config(self.config_path) or config
-            except isot_config.ConfigError:
-                pass
-            self.resolved = isot_config.Resolved(self.fixed, "create_app", config)
-            return
+    def _config_stamp(self) -> float | None:
+        source = self.config.source
         try:
-            self.resolved = isot_config.resolve(config_path=self.config_path)
-            self.error = None
-            self.missing = False
-            isot_config.apply(self.resolved.config)
-        except isot_config.ConfigMissing as exc:
-            self.resolved, self.error, self.missing = None, str(exc), True
-        except isot_config.ConfigError as exc:
-            self.resolved, self.error, self.missing = None, str(exc), False
+            return source.stat().st_mtime if source else None
+        except OSError:
+            return None
 
-    def current(self) -> isot_config.Resolved | None:
-        if self.resolved is None:
+    def refresh(self) -> None:
+        with self._lock:
+            self._status.clear()
+            try:
+                if self.fixed is not None:
+                    try:
+                        config = isot_config.load_config(self.config_path) or isot_config.Config(source=None)
+                    except isot_config.ConfigError:
+                        config = isot_config.Config(source=None)
+                    repos = isot_config.repos_from_paths(list(self.fixed))
+                    default_id, origin = repos[0].id, "create_app"
+                else:
+                    config, repos, default_id, origin = isot_config.resolve_repos(config_path=self.config_path)
+                self.config, self.repos, self.default_id, self.origin = config, repos, default_id, origin
+                self.error, self.missing = None, False
+                isot_config.apply(config)
+            except isot_config.ConfigMissing as exc:
+                self.repos, self.default_id, self.error, self.missing = [], None, str(exc), True
+            except isot_config.ConfigError as exc:
+                self.repos, self.default_id, self.error, self.missing = [], None, str(exc), False
+            self._stamp = self._config_stamp()
+
+    def check(self) -> None:
+        if not self.repos or (self.config.source is not None and self._config_stamp() != self._stamp):
             self.refresh()
-        return self.resolved
+
+    @property
+    def configured(self) -> bool:
+        self.check()
+        return bool(self.repos)
+
+    def entry(self, repo_id: str | None = None) -> isot_config.DataRepoConfig:
+        self.check()
+        if not self.repos:
+            raise HTTPException(status_code=503, detail=self.error or isot_config.NO_CONFIG_MESSAGE)
+        wanted = repo_id or _REQUEST_REPO.get() or self.default_id
+        found = next((item for item in self.repos if item.id == wanted), None)
+        if found is None:
+            known = ", ".join(item.id for item in self.repos)
+            raise HTTPException(status_code=404, detail=f"repositorio desconocido: {wanted} (configurados: {known})")
+        return found
+
+    def root(self, repo_id: str | None = None) -> Path:
+        entry = self.entry(repo_id)
+        error = entry.error()
+        if error:
+            raise HTTPException(status_code=503, detail=f"repositorio {entry.id} no disponible: {error}")
+        return entry.path
+
+    def status(self, entry: isot_config.DataRepoConfig, *, fresh: bool = False) -> dict[str, Any]:
+        """Estado del repositorio (git, rama, HEAD, dirty) con un TTL corto."""
+        now = time.monotonic()
+        cached = self._status.get(entry.id)
+        if cached and not fresh and now - cached[0] < STATUS_TTL:
+            return cached[1]
+        error = entry.error()
+        if error:
+            info: dict[str, Any] = {
+                "id": entry.id,
+                "name": entry.label,
+                "path": entry.path.name,
+                "git": False,
+                "branch": None,
+                "head": None,
+                "short": None,
+                "dirty": False,
+                "remote": entry.remote,
+                "remote_url": None,
+                "expected_branch": entry.branch,
+            }
+        else:
+            info = isot_config.repo_status(entry.path, self.config, entry)
+            info["path"] = entry.path.name
+        info.update(
+            {
+                "available": error is None,
+                "error": error,
+                "default": entry.id == self.default_id,
+            }
+        )
+        self._status[entry.id] = (now, info)
+        return info
 
 
 def create_app(
-    repo_root: Path | None = None,
+    repo_root: Path | list[Path] | None = None,
     edit: bool | None = None,
     config_path: str | Path | None = None,
 ) -> FastAPI:
-    state = DataRepoState(repo_root, config_path or os.environ.get("ISOT_CONFIG") or None)
-    config_edit = bool(state.resolved and state.resolved.config.edit.enabled)
-    can_edit = edit_enabled(edit) or (edit is None and config_edit)
+    fixed = [repo_root] if isinstance(repo_root, Path) else (list(repo_root) if repo_root else None)
+    registry = RepoRegistry(fixed, config_path or os.environ.get("ISOT_CONFIG") or None)
+
+    def edit_globally() -> bool:
+        return edit_enabled(edit) or (edit is None and registry.config.edit.enabled)
+
+    def edit_for(entry: isot_config.DataRepoConfig) -> bool:
+        """Edición por repositorio: global (flag / edit.enabled) salvo `repos[].edit: false`."""
+        return edit_globally() and entry.edit is not False
+
     app = FastAPI(
         title="ISoT",
-        description="Infrastructure Source of Truth — API de inventario (multi-sitio)",
-        version="0.7.0",
+        description="Infrastructure Source of Truth — API de inventario (multi-sitio, varios repositorios)",
+        version="0.10.0",
     )
     app.add_middleware(
         CORSMiddleware,
@@ -498,12 +616,11 @@ def create_app(
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["*"],
     )
+    app.add_middleware(RepoPrefixMiddleware)
+    app.state.repos = registry
 
     def resolved_root() -> Path:
-        current = state.current()
-        if current is None:
-            raise HTTPException(status_code=503, detail=state.error or isot_config.NO_CONFIG_MESSAGE)
-        return current.repo
+        return registry.root()
 
     def safe_under_root(path: Path, base: Path, *, library: bool = False) -> Path:
         resolved = path.resolve()
@@ -523,44 +640,78 @@ def create_app(
             raise HTTPException(status_code=404, detail=f"Sitio no encontrado: {site_id}")
         return base, site
 
+    def unconfigured_payload() -> dict[str, Any]:
+        return {
+            "configured": False,
+            "error": None if registry.missing else registry.error,
+            "message": isot_config.NO_CONFIG_MESSAGE,
+            "hints": isot_config.HINTS,
+            "search": ["--config", "$ISOT_CONFIG", "./isot.yaml", "~/.config/isot/config.yaml"],
+            "edit": edit_globally(),
+        }
+
+    def repos_payload(*, fresh: bool = False) -> list[dict[str, Any]]:
+        return [
+            {**registry.status(item, fresh=fresh), "edit": edit_for(item)}
+            for item in registry.repos
+        ]
+
     @app.get("/api/health")
     def health() -> dict[str, Any]:
-        current = state.current()
+        configured = registry.configured
+        repos = repos_payload() if configured else []
         return {
             "status": "ok",
-            "configured": current is not None,
-            "data_repo": current.repo.name if current else None,
+            "configured": configured,
+            "data_repo": next((item["name"] for item in repos if item["default"]), None),
+            "default_repo": registry.default_id,
+            "repos": len(repos),
+            "available": sum(1 for item in repos if item["available"]),
         }
+
+    @app.get("/api/repos")
+    def list_repos() -> dict[str, Any]:
+        """Repositorios configurados con su estado (git, disponibilidad y error)."""
+        if not registry.configured:
+            return {**unconfigured_payload(), "repos": [], "default_repo": None}
+        return {
+            "configured": True,
+            "origin": registry.origin,
+            "config_file": str(registry.config.source) if registry.config.source else None,
+            "default_repo": registry.default_id,
+            "repos": repos_payload(),
+        }
+
+    @app.get("/api/repos/{repo_id}")
+    def repo_detail(repo_id: str) -> dict[str, Any]:
+        entry = registry.entry(repo_id)
+        return {**registry.status(entry, fresh=True), "edit": edit_for(entry)}
 
     @app.get("/api/config")
     def config_info() -> dict[str, Any]:
-        """Repositorio de datos activo (sin secretos: ISoT no maneja credenciales)."""
-        current = state.current()
-        if current is None:
-            return {
-                "configured": False,
-                "error": None if state.missing else state.error,
-                "message": isot_config.NO_CONFIG_MESSAGE,
-                "hints": isot_config.HINTS,
-                "search": ["--config", "$ISOT_CONFIG", "./isot.yaml", "~/.config/isot/config.yaml"],
-                "edit": can_edit,
-            }
-        cfg = current.config
+        """Configuración vista desde un repositorio (prefijo /api/repos/{id}/ o el por defecto).
+        Sin secretos: ISoT no maneja credenciales."""
+        if not registry.configured:
+            return unconfigured_payload()
+        entry = registry.entry()
+        cfg = registry.config
+        status = registry.status(entry, fresh=True)
+        can = edit_for(entry)
         return {
             "configured": True,
-            "origin": current.origin,
+            "origin": registry.origin,
             "config_file": str(cfg.source) if cfg.source else None,
-            "data_repo": isot_config.repo_status(current.repo, cfg),
-            # Preparado para varios repos (selector futuro): lista y repo activo.
+            "data_repo": status,
             "repos": [
-                {"id": item.id, "name": item.name or item.path.name, "active": item.path == current.repo}
-                for item in cfg.repos
+                {**item, "active": item["id"] == entry.id}
+                for item in repos_payload()
             ],
-            "active_repo": current.repo_id,
+            "active_repo": entry.id,
+            "default_repo": registry.default_id,
             "templates": [str(path) for path in cfg.templates],
-            "edit": can_edit,
-            "push": bool(can_edit and cfg.edit.push),
-            "push_remote": cfg.edit.push_remote,
+            "edit": can,
+            "push": bool(can and cfg.edit.push),
+            "push_remote": entry.remote if cfg.edit.push_remote == "origin" else cfg.edit.push_remote,
             "ui": {"title": cfg.ui.title},
         }
 
@@ -617,24 +768,33 @@ def create_app(
 
     @app.get("/api/wizard/status")
     def wizard_status() -> dict[str, Any]:
-        current = state.current()
+        entry = registry.entry() if registry.configured else None
+        root = entry.path if entry and not entry.error() else None
+        can = bool(entry and edit_for(entry))
         return {
-            "edit": can_edit,
-            "push": bool(can_edit and current and current.config.edit.push),
-            "site_templates": wizard_site_templates(current.repo if current else None),
-            "template_library": library_catalog(current.repo if current else None),
+            "repo": entry.id if entry else None,
+            "edit": can,
+            "push": bool(can and registry.config.edit.push),
+            "site_templates": wizard_site_templates(root),
+            "template_library": library_catalog(root),
         }
 
     def maybe_push(result: dict[str, Any]) -> dict[str, Any]:
-        current = state.current()
-        if not current or not current.config.edit.push:
+        entry = registry.entry()
+        if not registry.config.edit.push:
             return result
-        result["push"] = push_branch(current.repo, result["branch"], current.config.edit.push_remote)
+        remote = registry.config.edit.push_remote
+        if remote == "origin" and entry.remote:
+            remote = entry.remote
+        result["push"] = push_branch(entry.path, result["branch"], remote)
         return result
 
     def require_edit() -> None:
-        if not can_edit:
+        entry = registry.entry()
+        if not edit_globally():
             raise HTTPException(status_code=403, detail="edición deshabilitada (ISOT_EDIT=1 o --edit)")
+        if not edit_for(entry):
+            raise HTTPException(status_code=403, detail=f"repositorio {entry.id} en solo lectura (repos[].edit: false)")
 
     @app.get("/api/wizard/cabling-defaults")
     def wizard_cabling_defaults(
@@ -685,7 +845,7 @@ def create_app(
             result = commit_preview(
                 resolved_root(), preview, f"sitio {description}", site=preview.get("site") or body.get("id")
             )
-            clear_caches()
+            clear_caches(resolved_root())
             return {**maybe_push(result), "preview": preview}
         except WizardError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -708,7 +868,7 @@ def create_app(
             result = commit_preview(
                 resolved_root(), preview, f"device {hostnames}", site=preview.get("site") or body.get("site")
             )
-            clear_caches()
+            clear_caches(resolved_root())
             return {**maybe_push(result), "preview": preview}
         except (WizardError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1040,13 +1200,26 @@ def create_app(
 app = create_app()
 
 
+DEFAULT_HOST = "127.0.0.1"
+
+
 def build_parser():
     import argparse
 
-    parser = argparse.ArgumentParser(description="Sirve la API y la UI de ISoT sobre un repositorio de datos.")
+    parser = argparse.ArgumentParser(description="Sirve la API y la UI de ISoT sobre uno o varios repositorios de datos.")
     parser.add_argument("--config", type=Path, default=None, help="Archivo de configuración isot.yaml.")
-    parser.add_argument("--repo", type=Path, default=None, help="Repositorio de datos (ignora data_repo.path).")
-    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument(
+        "--repo",
+        type=Path,
+        action="append",
+        default=None,
+        help="Repositorio de datos (repetible; ignora los repos de isot.yaml). El id es el nombre de la carpeta.",
+    )
+    parser.add_argument(
+        "--host",
+        default=os.environ.get("ISOT_HOST") or DEFAULT_HOST,
+        help="Interfaz de escucha (por defecto 127.0.0.1; 0.0.0.0 expone la herramienta a la red).",
+    )
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--edit", action="store_true", help="Habilita los wizards (equivale a edit.enabled).")
     return parser
@@ -1061,18 +1234,28 @@ def main(argv: list[str] | None = None) -> int:
     if args.config:
         os.environ["ISOT_CONFIG"] = str(args.config.expanduser().resolve())
     if args.repo:
-        os.environ["ISOT_ROOT"] = str(args.repo.expanduser().resolve())
+        os.environ["ISOT_ROOT"] = os.pathsep.join(str(item.expanduser().resolve()) for item in args.repo)
     if args.edit:
         os.environ["ISOT_EDIT"] = "1"
     try:
-        resolved = isot_config.resolve()
-        print(f"ISoT: repositorio de datos {resolved.repo} ({resolved.origin})", file=sys.stderr)
+        _config, repos, default_id, origin = isot_config.resolve_repos()
+        print(f"ISoT: {len(repos)} repositorio(s) de datos ({origin}); por defecto: {default_id}", file=sys.stderr)
+        for item in repos:
+            error = item.error()
+            state = f"NO DISPONIBLE: {error}" if error else "ok"
+            print(f"  {item.id:<16} {isot_config.display_path(item.path)}  [{state}]", file=sys.stderr)
     except isot_config.ConfigMissing:
         print(isot_config.missing_message(), file=sys.stderr)
         print("\nLa UI mostrará estas instrucciones hasta que exista la configuración.", file=sys.stderr)
     except isot_config.ConfigError as exc:
         print(f"error de configuración: {exc}", file=sys.stderr)
         print("La UI mostrará el error hasta que se corrija.", file=sys.stderr)
+    if args.host not in {"127.0.0.1", "localhost", "::1"}:
+        print(
+            f"aviso: escuchando en {args.host}: cualquiera que alcance este puerto puede ver el inventario"
+            + (" y crear ramas wizard/…" if os.environ.get("ISOT_EDIT") == "1" else ""),
+            file=sys.stderr,
+        )
     # La app del módulo se creó al importar; se recrea con las opciones ya aplicadas.
     global app
     app = create_app()
