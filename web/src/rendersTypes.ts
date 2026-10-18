@@ -1,4 +1,4 @@
-import type { CompareFilesPayload, RefMeta } from "./types";
+import type { CompareFilesPayload, PendingChange, RefMeta, WizardSave } from "./types";
 /** Tipos de la API /api/renders (ver isot/renders.py e isot/web_renders.py). */
 
 export type RenderError = { file: string | null; line: number | null; kind: string; message: string; item?: string };
@@ -134,21 +134,21 @@ export type RendersDiff = {
   edit: boolean;
 };
 
-export type ProposedFile = { path: string; status: string; diff: string; content: string | null };
+/** Archivo que «Guardar» escribiría; `pending` = ya tenía cambios sin commit (diff vs HEAD). */
+export type ProposedFile = { path: string; status: string; diff: string; content?: string | null; pending?: PendingChange };
 
-export type WritePreview = { files: ProposedFile[]; errors?: Array<RenderError | string>; text?: string; skipped?: string[]; folders?: string[] };
-
-export type WriteResult = {
-  ok: boolean;
-  branch: string;
-  created: boolean;
-  sha: string;
-  short: string;
-  base: string;
-  message: string;
-  files: string[];
-  push?: { ok: boolean; message: string };
+export type WritePreview = {
+  files: ProposedFile[];
+  errors?: Array<RenderError | string>;
+  text?: string;
+  skipped?: string[];
+  folders?: string[];
+  /** Huella del plan: si al guardar no coincide (otro cambio en disco) → 409 y se recalcula. */
+  token?: string;
 };
+
+/** «Guardar» escribe en el working tree (sin commit); el commit es aparte («Cambios»). */
+export type WriteResult = WizardSave;
 
 export type CompareStatus = "added" | "removed" | "modified" | "unchanged";
 
@@ -164,7 +164,7 @@ export type RendersCompare = {
 };
 
 /** Estado en el repo de la carpeta destino de la preview («Guardar en el repo»). */
-export type SaveState = "al_dia" | "desfasado" | "no_existe" | "error";
+export type SaveState = "al_dia" | "desfasado" | "no_existe" | "guardado_sin_commit" | "error";
 
 export type NewInstanceProposal = { id: string; template: string; site: string; cluster?: string; params?: Record<string, unknown> };
 
@@ -174,8 +174,8 @@ export type SaveBody = {
   cluster?: string | null;
   instance?: string | null;
   params?: Record<string, unknown>;
-  branch?: string | null;
   ref?: string | null;
+  token?: string;
   create_instance?: boolean;
   new_instance_id?: string;
   prune?: boolean;
@@ -195,15 +195,17 @@ export type SaveStatus = {
   counts?: StatusCounts | null;
   errors: RenderError[];
   target_error?: string | null;
+  /** Archivos de la carpeta destino con cambios sin commit. */
+  uncommitted?: number;
   edit: boolean;
 };
 
 export type SavePlan = Omit<SaveStatus, "instance" | "edit"> & {
   instance: string;
-  files: { path: string; status: "new" | "modified" | "unchanged" | "orphaned"; diff: string; action: "write" | "delete" | "keep" }[];
-  extra: { path: string; status: string; diff: string }[];
+  files: { path: string; status: "new" | "modified" | "unchanged" | "orphaned"; diff: string; action: "write" | "delete" | "keep"; pending?: PendingChange }[];
+  extra: { path: string; status: string; diff: string; pending?: PendingChange }[];
   changes: number;
-  branch: string | null;
+  token: string;
 };
 
 export type SaveResult = WriteResult & { instance: string; dir: string; created_instance: boolean };

@@ -8,7 +8,7 @@ import type { RenderError, RenderInstance, RenderPreview, RenderTemplateSummary,
 import type { ClusterIndexEntry, SiteIndexEntry } from "../../types";
 import { Splitter, usePanelSize } from "../Splitter";
 import { ValuesTree, valuesToTree } from "../ValuesTree";
-import { CodeEditor, CodeViewer, ErrorList, errorMessage, FileList, WriteDialog, type WriteFlow, type WriteMode } from "./common";
+import { CodeEditor, CodeViewer, ErrorList, errorMessage, FileList, savedMessage, useWorktreeTick, WriteDialog, type WriteFlow, type WriteMode } from "./common";
 import { SaveOutputDialog } from "./SaveOutputDialog";
 
 const SPEC_FILE = "template.yaml";
@@ -37,12 +37,12 @@ type Props = {
   write: WriteMode;
   focus: { id: string; source?: "repo" | "bundled"; key: number } | null;
   onAfterCommit: () => void;
-  onViewBranch: (branch: string) => void;
   /** Tras «Guardar en el repo»: abrir Diff/Comparar con esas refs. */
   onReview?: (refs: { base: string; head: string }) => void;
 };
 
-export function RendersTemplatesTab({ refName, version, sites, write, focus, onAfterCommit, onViewBranch, onReview }: Props) {
+export function RendersTemplatesTab({ refName, version, sites, write, focus, onAfterCommit, onReview }: Props) {
+  const worktreeTick = useWorktreeTick();
   const library = usePanelSize("renders.library", LIBRARY_SPEC);
   const previewWidth = usePanelSize("renders.preview", PREVIEW_SPEC);
 
@@ -195,8 +195,8 @@ export function RendersTemplatesTab({ refName, version, sites, write, focus, onA
     } catch {
       return null;
     }
-    return { template: doc.id, site, cluster: cluster || null, instance: instance || null, params, branch: write.branch, ref: refName };
-  }, [doc?.id, doc?.source, site, cluster, instance, paramsText, write.branch, refName]);
+    return { template: doc.id, site, cluster: cluster || null, instance: instance || null, params, ref: refName };
+  }, [doc?.id, doc?.source, site, cluster, instance, paramsText, refName]);
   const saveKey = JSON.stringify(saveBody);
   useEffect(() => {
     if (!saveBody) {
@@ -224,7 +224,7 @@ export function RendersTemplatesTab({ refName, version, sites, write, focus, onA
       window.clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [saveKey, version]);
+  }, [saveKey, version, worktreeTick]);
 
   const readOnly = !doc || doc.source === "bundled" || !write.canWrite;
   const allErrors: RenderError[] = useMemo(() => [...(preview?.template_errors ?? []), ...(preview?.errors ?? [])], [preview]);
@@ -295,23 +295,23 @@ export function RendersTemplatesTab({ refName, version, sites, write, focus, onA
 
   const save = () => {
     if (!doc) return;
-    const body = { id: specId, spec_text: doc.spec, files: doc.files, branch: write.branch };
+    const body = { id: specId, spec_text: doc.spec, files: doc.files };
     setFlow({
       title: `Guardar template ${specId}`,
-      description: `Se escribe en manifest-templates/${specId}/ del repo de datos.`,
+      description: `Se escribe en manifest-templates/${specId}/ del working tree del repo de datos (sin commit).`,
       preview: () => rendersApi.templateSavePreview(body),
-      commit: () => rendersApi.templateSaveCommit(body),
+      write: (token) => rendersApi.templateSaveWrite({ ...body, token }),
     });
   };
 
   const remove = () => {
     if (!doc || doc.source !== "repo") return;
-    const body = { id: doc.id, delete_template: true, branch: write.branch };
+    const body = { id: doc.id, delete_template: true };
     setFlow({
       title: `Borrar template ${doc.id}`,
-      description: doc.usedBy.length ? `Ojo: lo usan ${doc.usedBy.length} instancia(s); quedarán con error REN-001.` : undefined,
+      description: `Se borra del working tree (sin commit; se puede descartar desde «Cambios»).${doc.usedBy.length ? ` Ojo: lo usan ${doc.usedBy.length} instancia(s); quedarán con error REN-001.` : ""}`,
       preview: () => rendersApi.templateSavePreview(body),
-      commit: () => rendersApi.templateSaveCommit(body),
+      write: (token) => rendersApi.templateSaveWrite({ ...body, token }),
     });
   };
 
@@ -589,7 +589,7 @@ export function RendersTemplatesTab({ refName, version, sites, write, focus, onA
             id="render-save-output"
             className="primary render-save-button"
             disabled={Boolean(saveBlocked) || !saveBody}
-            title={saveBlocked ?? (saveStatus?.needs_instance ? `${saveStatus.reason}: te propondrá crear una instancia` : "Guardar esta salida en su carpeta destino (rama wizard/… nueva)")}
+            title={saveBlocked ?? (saveStatus?.needs_instance ? `${saveStatus.reason}: te propondrá crear una instancia` : "Guardar esta salida en su carpeta destino del working tree (sin commit; el commit va por «Cambios»)")}
             onClick={() => saveBody && setSaving(saveBody)}
           >
             Guardar en el repo
@@ -652,12 +652,8 @@ export function RendersTemplatesTab({ refName, version, sites, write, focus, onA
           onDone={(result) => {
             if (doc && !flow.title.startsWith("Borrar")) setDoc({ ...doc, id: specId, source: "repo", saved: snapshot(doc.spec, doc.files) });
             if (flow.title.startsWith("Borrar")) setDoc(null);
-            setNotice(`Guardado en la rama ${result.branch}. Para verlo (y seguir editando esa rama) usa «Ver rama».`);
+            setNotice(savedMessage(result));
             onAfterCommit();
-          }}
-          onViewBranch={(branch) => {
-            setFlow(null);
-            onViewBranch(branch);
           }}
         />
       ) : null}

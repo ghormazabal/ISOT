@@ -12,7 +12,6 @@ type Props = {
   sites: SiteIndexEntry[];
   write: WriteMode;
   onAfterCommit: () => void;
-  onViewBranch: (branch: string) => void;
   onOpenDiff: (instance: string | null) => void;
   onOpenTemplate: (id: string, source?: "repo" | "bundled") => void;
 };
@@ -62,7 +61,7 @@ function Counter({ label, value, hint, tone, onClick }: { label: string; value: 
   );
 }
 
-export function RendersSummaryTab({ refName, version, sites, write, onAfterCommit, onViewBranch, onOpenDiff, onOpenTemplate }: Props) {
+export function RendersSummaryTab({ refName, version, sites, write, onAfterCommit, onOpenDiff, onOpenTemplate }: Props) {
   const [data, setData] = useState<RendersDashboard | null>(null);
   const [templates, setTemplates] = useState<RenderTemplateSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -107,12 +106,11 @@ export function RendersSummaryTab({ refName, version, sites, write, onAfterCommi
   const driftTotal = data ? data.drift.drift : 0;
 
   const startConfig = (title: string, body: ConfigBody, description?: string) => {
-    const payload = { ...body, branch: write.branch };
     setFlow({
       title,
       description,
-      preview: () => rendersApi.configPreview(payload),
-      commit: () => rendersApi.configCommit(payload),
+      preview: () => rendersApi.configPreview(body),
+      write: (token) => rendersApi.configWrite({ ...body, token }),
     });
   };
 
@@ -464,10 +462,6 @@ export function RendersSummaryTab({ refName, version, sites, write, onAfterCommi
             setDraft(null);
             setTextMode(null);
             onAfterCommit();
-          }}
-          onViewBranch={(branch) => {
-            setFlow(null);
-            onViewBranch(branch);
           }}
         />
       ) : null}

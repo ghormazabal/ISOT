@@ -15,9 +15,10 @@ import { TemplateExplorer } from "./components/TemplateExplorer";
 import { TopologyGraph } from "./components/TopologyGraph";
 import { ValuesDiffView } from "./components/ValuesDiff";
 import { WizardsView } from "./components/WizardsView";
+import { ChangesControl } from "./components/ChangesControl";
 import { RendersView } from "./components/renders/RendersView";
 import { rendersFromUrl, withRendersParam, type RenderSubTab } from "./renders";
-import { api } from "./api";
+import { api, WORKTREE_EVENT } from "./api";
 import { countFindings, scopeFindings, selectionFromFinding } from "./findings";
 import { appPanelSpecs, clampSize, layoutKey } from "./resize";
 import { edgeSelection, fallbackDetail, relatedFindings } from "./links";
@@ -203,6 +204,24 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
 
   const draftPending = isDraftInProgress(wizardDraft);
 
+  // Guardar/descartar/commit cambian el working tree (Local): se recargan índices y grafos.
+  const [dataKey, setDataKey] = useState(0);
+  useEffect(() => {
+    let timer = 0;
+    const bump = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        setDataKey((value) => value + 1);
+        setIndexKey((value) => value + 1);
+      }, 300);
+    };
+    window.addEventListener(WORKTREE_EVENT, bump);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener(WORKTREE_EVENT, bump);
+    };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -262,7 +281,8 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
     return () => {
       cancelled = true;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataKey]);
 
   useEffect(() => {
     if (compare) {
@@ -767,6 +787,20 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
         />
         {editEnabled ? (
           <nav className="view-tabs">
+            <ChangesControl
+              onCompare={(base, head) => {
+                if (view === "wizards") {
+                  setView(lastBrowse.view);
+                  setSiteFilter(lastBrowse.siteFilter);
+                  setCanvas("graph");
+                }
+                changeCompare({ base, head });
+              }}
+              onChanged={() => {
+                setIndexKey((value) => value + 1);
+                onRefreshConfig?.();
+              }}
+            />
             <button
               type="button"
               id="edit-toggle"
@@ -813,7 +847,7 @@ export default function App({ config = null, onRefreshConfig, onSwitchRepo }: Ap
             ) : null}
           </nav>
         ) : null}
-        <p className="badge">{editEnabled ? "edición · wizards" : "solo lectura · Git-as-a-Database"}</p>
+        <p className="badge" title={editEnabled ? "Guardar escribe en el working tree; el commit va por «Cambios»" : undefined}>{editEnabled ? "edición" : "solo lectura · Git-as-a-Database"}</p>
       </header>
       {bootError ? <p className="boot-error">No se pudieron leer los índices: {bootError}</p> : null}
       <IndexBanner

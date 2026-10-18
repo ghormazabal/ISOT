@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { api } from "../api";
+import { api, isConflict, notifyWorktreeChanged } from "../api";
 import type {
   ClusterIndexEntry,
   ConnectionPolicy,
@@ -10,7 +10,7 @@ import type {
   SiteIndexEntry,
   SiteTemplateOption,
   TemplateIndexEntry,
-  WizardCommit,
+  WizardSave,
   WizardField,
   WizardPreview,
 } from "../types";
@@ -41,7 +41,7 @@ type Props = {
   /** Plantillas de sitio (site-templates/ del repo de datos y templates/sites de ISoT). */
   siteTemplates?: SiteTemplateOption[];
   /** Tras un commit del wizard (p.ej. para refrescar rama/HEAD del repo de datos). */
-  onAfterCommit?: (commit: WizardCommit) => void;
+  onAfterCommit?: (commit: WizardSave) => void;
   onOpenCompare: (base: string, head: string) => void;
   initialDraft: WizardDraft;
   onDraftChange: (draft: WizardDraft) => void;
@@ -72,7 +72,7 @@ export function WizardsView({
   seedKey = 0,
 }: Props) {
   const [epoch, setEpoch] = useState(0);
-  const [lastCommit, setLastCommit] = useState<WizardCommit | null>(null);
+  const [lastCommit, setLastCommit] = useState<WizardSave | null>(null);
   const [seed, setSeed] = useState<WizardDraft | null>(null);
   const appliedSeed = useRef(0);
 
@@ -148,9 +148,9 @@ function WizardForms({
   onOpenCompare: (base: string, head: string) => void;
   initial: WizardDraft;
   onDraftChange: (draft: WizardDraft) => void;
-  onCommitted: (commit: WizardCommit) => void;
+  onCommitted: (commit: WizardSave) => void;
   onDiscard: () => void;
-  lastCommit: WizardCommit | null;
+  lastCommit: WizardSave | null;
 }) {
   const [mode, setMode] = useState<Mode>(initial.mode);
   const [deviceDraft, setDeviceDraft] = useState<DeviceDraftState>(initial.device);
@@ -168,8 +168,9 @@ function WizardForms({
         <div>
           <h2>Wizards</h2>
           <p>
-            Alta guiada. El commit vive en una rama <span className="mono">wizard/…</span>, nunca en main ni en la rama
-            actual. El avance se conserva al salir de Editar y al recargar.
+            Alta guiada. <strong>Guardar</strong> escribe los archivos en el working tree local del repo de datos (sin
+            commit); el commit es aparte, desde <strong>Cambios</strong> en la barra superior, en una rama{" "}
+            <span className="mono">wizard/…</span> (nunca en main). El avance se conserva al salir de Editar y al recargar.
           </p>
         </div>
         <div className="wizard-header-actions">
@@ -236,7 +237,7 @@ function DeviceWizard({
   onOpenCompare: (base: string, head: string) => void;
   initial: DeviceDraftState;
   onChange: (draft: DeviceDraftState) => void;
-  onCommitted: (commit: WizardCommit) => void;
+  onCommitted: (commit: WizardSave) => void;
 }) {
   const [site, setSite] = useState(initial.site);
   const [kind, setKind] = useState(initial.kind);
@@ -252,7 +253,7 @@ function DeviceWizard({
   const [role, setRole] = useState(initial.role);
   const [count, setCount] = useState(initial.count);
   const [preview, setPreview] = useState<WizardPreview | null>(initial.preview);
-  const [commit, setCommit] = useState<WizardCommit | null>(null);
+  const [commit, setCommit] = useState<WizardSave | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [edits, setEdits] = useState<Record<string, string>>(initial.edits);
@@ -304,16 +305,28 @@ function DeviceWizard({
     setLoading(true);
     setCommit(null);
     try {
-      const payload = action === "preview" ? await api.wizardDevicePreview(body) : await api.wizardDeviceCommit(body);
+      const payload =
+        action === "preview" ? await api.wizardDevicePreview(body) : await api.wizardDeviceSave({ ...body, token: preview?.token });
       if (action === "preview") setPreview(payload as WizardPreview);
       else {
-        const done = payload as WizardCommit;
+        const done = payload as WizardSave;
         setCommit(done);
         if (done.preview) setPreview(done.preview);
+        notifyWorktreeChanged();
         onCommitted(done);
         return;
       }
     } catch (err) {
+      if (action === "commit" && isConflict(err)) {
+        // El working tree cambió desde la vista previa: se recalcula y se muestra el diff nuevo.
+        try {
+          setPreview(await api.wizardDevicePreview(body));
+        } catch {
+          /* el error original basta */
+        }
+        setError("El working tree cambió desde la vista previa: revisa el diff nuevo y vuelve a guardar.");
+        return;
+      }
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
@@ -426,10 +439,11 @@ function DeviceWizard({
             onClick={() => void run("commit")}
             disabled={loading || !preview || !wizardCanCommit(preview, acceptWarnings).ok}
           >
-            Confirmar en rama wizard/…
+            Guardar en el working tree
           </button>
           <AcceptWarnings preview={preview} checked={acceptWarnings} onChange={setAcceptWarnings} />
         </div>
+        <PendingWarning preview={preview} />
         {error ? <p className="boot-error">{error}</p> : null}
         <CommitBanner commit={commit} onOpenCompare={onOpenCompare} />
       </div>
@@ -487,7 +501,7 @@ function SiteWizard({
   onOpenCompare: (base: string, head: string) => void;
   initial: SiteDraftState;
   onChange: (draft: SiteDraftState) => void;
-  onCommitted: (commit: WizardCommit) => void;
+  onCommitted: (commit: WizardSave) => void;
 }) {
   const [step, setStep] = useState(initial.step);
   const [architecture, setArchitecture] = useState(initial.architecture);
@@ -523,7 +537,7 @@ function SiteWizard({
   const dciAvailable = sites.length > 0;
   const dci = dciWanted && dciAvailable;
   const [preview, setPreview] = useState<WizardPreview | null>(initial.preview);
-  const [commit, setCommit] = useState<WizardCommit | null>(null);
+  const [commit, setCommit] = useState<WizardSave | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [neighborhood, setNeighborhood] = useState(initial.neighborhood);
@@ -668,16 +682,28 @@ function SiteWizard({
     setLoading(true);
     setCommit(null);
     try {
-      const payload = action === "preview" ? await api.wizardSitePreview(body) : await api.wizardSiteCommit(body);
+      const payload =
+        action === "preview" ? await api.wizardSitePreview(body) : await api.wizardSiteSave({ ...body, token: preview?.token });
       if (action === "preview") setPreview(payload as WizardPreview);
       else {
-        const done = payload as WizardCommit;
+        const done = payload as WizardSave;
         setCommit(done);
         if (done.preview) setPreview(done.preview);
+        notifyWorktreeChanged();
         onCommitted(done);
         return;
       }
     } catch (err) {
+      if (action === "commit" && isConflict(err)) {
+        // El working tree cambió desde la vista previa: se recalcula y se muestra el diff nuevo.
+        try {
+          setPreview(await api.wizardSitePreview(body));
+        } catch {
+          /* el error original basta */
+        }
+        setError("El working tree cambió desde la vista previa: revisa el diff nuevo y vuelve a guardar.");
+        return;
+      }
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
@@ -1030,12 +1056,13 @@ function SiteWizard({
                 onClick={() => void run("commit")}
                 disabled={loading || !preview || !wizardCanCommit(preview, acceptWarnings).ok}
               >
-                Confirmar en rama wizard/…
+                Guardar en el working tree
               </button>
               <AcceptWarnings preview={preview} checked={acceptWarnings} onChange={setAcceptWarnings} />
             </>
           )}
         </div>
+        <PendingWarning preview={preview} />
         {error ? <p className="boot-error">{error}</p> : null}
         <CommitBanner commit={commit} onOpenCompare={onOpenCompare} />
       </div>
@@ -1484,27 +1511,38 @@ function WizardStatusBar({
   );
 }
 
+/** Aviso: archivos del preview que ya tienen cambios sin commit (se sobrescriben al guardar). */
+function PendingWarning({ preview }: { preview: WizardPreview | null }) {
+  const pending = preview?.pending ?? [];
+  if (!pending.length) return null;
+  return (
+    <div className="pending-warning" id="wizard-pending-warning" role="note">
+      <strong>Ojo:</strong> {pending.length} archivo(s) ya tienen cambios sin commit y se sobrescribirán al guardar:
+      {pending.map((item) => (
+        <details key={item.path}>
+          <summary className="mono">{item.path}</summary>
+          <pre className="diff">{item.binary ? "(binario)" : item.diff || "(sin diff)"}</pre>
+        </details>
+      ))}
+    </div>
+  );
+}
+
 function CommitBanner({
   commit,
   onOpenCompare,
 }: {
-  commit: WizardCommit | null;
+  commit: WizardSave | null;
   onOpenCompare: (base: string, head: string) => void;
 }) {
   if (!commit) return null;
   return (
-    <div className="wizard-success">
-      Commit {commit.short} en <span className="mono">{commit.branch}</span> (base {commit.base}).
-      <button type="button" className="text-link" onClick={() => onOpenCompare(commit.base, commit.branch)}>
-        Abrir Comparar
+    <div className="wizard-success" id="wizard-saved">
+      ✔ Guardado en el working tree ({commit.files.length} archivo(s), sin commit). Hay {commit.pending} cambio(s)
+      pendientes en <span className="mono">{commit.branch}</span>: haz commit desde <strong>Cambios</strong> en la barra superior.
+      <button type="button" className="text-link" onClick={() => onOpenCompare(commit.branch, "local")}>
+        Ver en Comparar ({commit.branch} → Local)
       </button>
-      {commit.push ? (
-        <span className={commit.push.ok ? "wizard-push ok" : "wizard-push error"} id="wizard-push-result">
-          {commit.push.ok
-            ? ` Publicada en ${commit.push.remote}.`
-            : ` No se pudo publicar en ${commit.push.remote}: ${commit.push.message || "git push falló"}`}
-        </span>
-      ) : null}
     </div>
   );
 }

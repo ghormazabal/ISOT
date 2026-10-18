@@ -127,7 +127,8 @@ instances:
 ISoT renderiza en memoria y compara con `<target_dir>/<dir>` del mismo repo
 de datos: `new`, `modified`, `unchanged`, `orphaned`. «Aplicar» (solo en
 modo edición, con confirmación del diff) escribe los archivos y el
-`.isot-render.json` en una rama `wizard/…` de ese mismo repo. Se rechazan
+`.isot-render.json` en el **working tree** de ese mismo repo (sin commit); el
+commit es una acción aparte de la persona (botón **Cambios**, rama `wizard/…`). Se rechazan
 destinos con `..`, absolutos, por `.git`, enlaces simbólicos que escapan del
 repo y cualquier ruta dentro de la instalación de ISoT. No intentes
 saltarte estas comprobaciones.
@@ -135,14 +136,19 @@ saltarte estas comprobaciones.
 **Preview vs guardar.** `POST /api/renders/preview` solo calcula (no escribe).
 Para guardar la salida de una preview en su carpeta destino, la UI usa
 `POST /api/renders/save/status` (solo lectura: destino, `state` =
-`al_dia|desfasado|no_existe|error`, instancia o `new_instance` propuesta),
-`/api/renders/save/preview` y `/api/renders/save/commit` (edición; cuerpo
-`{template, site, cluster, instance, params, create_instance?,
-new_instance_id?, prune?, message?, branch?}`), equivalentes a Aplicar para
-una sola instancia. Sin instancia que coincida (template, sitio, clúster y
-params) hay que crearla (`create_instance: true`), y entra en `renders.yaml`
-en el mismo commit. Tú (LLM) no llamas a esta API: propone el template y la
-instancia, y que la persona guarde desde la UI o con un commit propio
+`al_dia|desfasado|no_existe|guardado_sin_commit|error`, instancia o
+`new_instance` propuesta), `/api/renders/save/preview` y
+`/api/renders/save/write` (edición, head = Local; cuerpo `{template, site,
+cluster, instance, params, create_instance?, new_instance_id?, prune?,
+token}`), equivalentes a Aplicar para una sola instancia. `/write` escribe
+en el working tree (sin commit) y exige el `token` del preview: si el working
+tree cambió desde entonces responde 409 y hay que volver a previsualizar. Sin
+instancia que coincida (template, sitio, clúster y params) hay que crearla
+(`create_instance: true`), y entra en `renders.yaml` en el mismo guardado.
+El commit es aparte: `GET /api/worktree` (git status por área),
+`POST /api/worktree/commit` (rama `wizard/…`, índice regenerado e incluido;
+nunca `main`, nunca push). Tú (LLM) no llamas a esta API: propone el template
+y la instancia, y que la persona guarde desde la UI o con un commit propio
 seguido de `isot index`.
 
 Con **Comparar** (barra superior, `?base=&head=`), la pestaña Diff ofrece

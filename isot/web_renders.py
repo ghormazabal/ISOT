@@ -1,8 +1,9 @@
 """API de la sección Renders (`/api/renders/...`, también bajo `/api/repos/{id}/`).
 
 Lectura (dashboard, templates, contexto, preview, diff contra el destino) siempre
-disponible; escritura (guardar template, renders.yaml, aplicar un render) solo
-con edición habilitada y siempre en una rama `wizard/…` del repo afectado.
+disponible; escritura (guardar template, renders.yaml, aplicar o guardar un
+render) solo con edición habilitada y siempre en el **working tree** del repo
+afectado, sin commit. El commit es aparte: `/api/worktree/commit` (isot.web_worktree).
 """
 
 from __future__ import annotations
@@ -54,7 +55,6 @@ def register(
     resolved_root: Callable[[], Path],
     edit_for: Callable[[Any], bool],
     edit_globally: Callable[[], bool],
-    maybe_push: Callable[[dict[str, Any]], dict[str, Any]],
 ) -> None:
     @contextlib.contextmanager
     def render_root(ref: str | None) -> Iterator[Path]:
@@ -228,10 +228,39 @@ def register(
             return {"path": RENDERS_FILE, "exists": path.is_file(), "text": text, "errors": validate_renders_text(text) if text else [], "ref": ref}
 
     # --------------------------------------------------------------- escritura
+    # «Guardar» escribe en el working tree local del repo de datos (sin commit);
+    # el commit es una acción aparte (control global «Cambios», isot.web_worktree).
 
-    def _branch(body: dict[str, Any]) -> str | None:
-        value = body.get("branch")
-        return str(value) if value else None
+    def require_local(body: dict[str, Any]) -> None:
+        for key in ("ref", "branch"):
+            value = body.get(key)
+            if value and not is_local(str(value)):
+                raise HTTPException(status_code=400, detail="solo se guarda con head = Local (working tree); cambia «Comparar» a Local")
+
+    def write_preview(root: Path, writes: dict[str, str], deletes: list[str], *, extra: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Diff por archivo + aviso de cambios sin commit + token de concurrencia."""
+        from isot.worktree import pending_info, plan_token
+
+        diffs = [d for d in file_diffs(root, writes, deletes) if d["status"] != "unchanged"]
+        pending = pending_info(root, [d["path"] for d in diffs])
+        for item in diffs:
+            item.pop("content", None)
+            if item["path"] in pending:
+                item["pending"] = pending[item["path"]]
+        return {**(extra or {}), "files": diffs, "token": plan_token(root, writes, deletes), "worktree": True}
+
+    def save_to_worktree(body: dict[str, Any], writes: dict[str, str], deletes: list[str], *, prefix: Any = None) -> dict[str, Any]:
+        from isot.worktree import ConflictError, save_files
+
+        root = resolved_root()
+        try:
+            result = save_files(root, writes, deletes, allowed_prefix=prefix, token=str(body.get("token") or "") or None)
+        except ConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except WizardError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        clear_caches(root)
+        return result
 
     def template_plan(body: dict[str, Any], root: Path) -> dict[str, Any]:
         template_id = str(body.get("id") or "")
@@ -261,32 +290,19 @@ def register(
     @app.post("/api/renders/templates/save/preview")
     def renders_template_save_preview(body: dict[str, Any]) -> dict[str, Any]:
         require_edit()
-        with render_root(_branch(body)) as base:
-            plan = template_plan(body, base)
-            diffs = [d for d in file_diffs(base, plan["writes"], plan["deletes"]) if d["status"] != "unchanged"]
-        return {"id": plan["id"], "files": diffs, "errors": plan["errors"], "branch": _branch(body)}
+        require_local(body)
+        root = resolved_root()
+        plan = template_plan(body, root)
+        return write_preview(root, plan["writes"], plan["deletes"], extra={"id": plan["id"], "errors": plan["errors"]})
 
-    @app.post("/api/renders/templates/save/commit")
-    def renders_template_save_commit(body: dict[str, Any]) -> dict[str, Any]:
+    @app.post("/api/renders/templates/save/write")
+    def renders_template_save_write(body: dict[str, Any]) -> dict[str, Any]:
         require_edit()
-        with render_root(_branch(body)) as base:
-            plan = template_plan(body, base)
-            unchanged = {k for k, v in plan["writes"].items() if (base / k).is_file() and (base / k).read_text(encoding="utf-8") == v}
+        require_local(body)
+        plan = template_plan(body, resolved_root())
         if plan["errors"]:
             raise HTTPException(status_code=400, detail="template.yaml inválido: " + "; ".join(e["message"] for e in plan["errors"][:5]))
-        root = resolved_root()
-        writes = {k: v for k, v in plan["writes"].items() if k not in unchanged}
-        if not writes and not plan["deletes"]:
-            raise HTTPException(status_code=400, detail="no hay cambios que guardar")
-        verb = "borrar" if body.get("delete_template") else "template de render"
-        try:
-            from isot.renders import commit_files
-
-            result = commit_files(root, writes, plan["deletes"], f"{verb} {plan['id']}", allowed_prefix=plan["base"], branch=_branch(body))
-        except WizardError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        clear_caches(root)
-        return maybe_push(result) if result.get("created") else result
+        return {**save_to_worktree(body, plan["writes"], plan["deletes"], prefix=plan["base"]), "id": plan["id"]}
 
     def config_plan(body: dict[str, Any], root: Path) -> dict[str, Any]:
         path = root / RENDERS_FILE
@@ -337,29 +353,21 @@ def register(
     @app.post("/api/renders/config/preview")
     def renders_config_preview(body: dict[str, Any]) -> dict[str, Any]:
         require_edit()
-        with render_root(_branch(body)) as base:
-            plan = config_plan(body, base)
-            diffs = [d for d in file_diffs(base, {RENDERS_FILE: plan["text"]}) if d["status"] != "unchanged"]
-        return {"text": plan["text"], "files": diffs, "errors": plan["errors"]}
+        require_local(body)
+        root = resolved_root()
+        plan = config_plan(body, root)
+        return write_preview(root, {RENDERS_FILE: plan["text"]}, [], extra={"text": plan["text"], "errors": plan["errors"]})
 
-    @app.post("/api/renders/config/commit")
-    def renders_config_commit(body: dict[str, Any]) -> dict[str, Any]:
+    @app.post("/api/renders/config/write")
+    def renders_config_write(body: dict[str, Any]) -> dict[str, Any]:
         require_edit()
-        with render_root(_branch(body)) as base:
-            plan = config_plan(body, base)
+        require_local(body)
+        plan = config_plan(body, resolved_root())
         if plan["text"] == plan["current"]:
             raise HTTPException(status_code=400, detail=f"{RENDERS_FILE} no cambia")
         if plan["errors"]:
             raise HTTPException(status_code=400, detail=f"{RENDERS_FILE} inválido: " + "; ".join(plan["errors"][:5]))
-        root = resolved_root()
-        try:
-            from isot.renders import commit_files
-
-            result = commit_files(root, {RENDERS_FILE: plan["text"]}, [], str(body.get("description") or "renders.yaml"), branch=_branch(body))
-        except WizardError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        clear_caches(root)
-        return maybe_push(result) if result.get("created") else result
+        return save_to_worktree(body, {RENDERS_FILE: plan["text"]}, [], prefix=RENDERS_FILE)
 
     def apply_plan(body: dict[str, Any]) -> tuple[RenderService, dict[str, Any]]:
         root = resolved_root()
@@ -376,32 +384,23 @@ def register(
     @app.post("/api/renders/apply/preview")
     def renders_apply_preview(body: dict[str, Any]) -> dict[str, Any]:
         require_edit()
+        require_local(body)
         _svc, plan = apply_plan(body)
-        diffs = [d for d in file_diffs(resolved_root(), plan["writes"], plan["deletes"]) if d["status"] != "unchanged"]
-        return {"files": diffs, "skipped": plan["skipped"], "folders": plan["folders"], "prune": bool(body.get("prune"))}
+        return write_preview(
+            resolved_root(),
+            plan["writes"],
+            plan["deletes"],
+            extra={"skipped": plan["skipped"], "folders": plan["folders"], "prune": bool(body.get("prune"))},
+        )
 
-    @app.post("/api/renders/apply/commit")
-    def renders_apply_commit(body: dict[str, Any]) -> dict[str, Any]:
+    @app.post("/api/renders/apply/write")
+    def renders_apply_write(body: dict[str, Any]) -> dict[str, Any]:
         require_edit()
+        require_local(body)
         _svc, plan = apply_plan(body)
-        root = resolved_root()
         if not plan["writes"] and not plan["deletes"]:
             raise HTTPException(status_code=400, detail="la carpeta destino ya está al día")
-        try:
-            from isot.renders import commit_files
-
-            result = commit_files(
-                root,
-                plan["writes"],
-                plan["deletes"],
-                "renders",
-                allowed_prefix=plan["folders"],
-                branch=_branch(body),
-            )
-        except WizardError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        clear_caches(root)
-        return maybe_push(result) if result.get("created") else result
+        return save_to_worktree(body, plan["writes"], plan["deletes"], prefix=plan["folders"])
 
     # ------------------------------------------- guardar la salida de la preview
 
@@ -487,12 +486,22 @@ def register(
             state = "no_existe"
         else:
             state = "al_dia" if entry.get("in_sync") else "desfasado"
-        return {"entry": entry, "dir": folder, "state": state}
+        uncommitted: list[str] = []
+        if folder and base == resolved_root():
+            from isot.worktree import WorktreeError, status_entries
+
+            try:
+                uncommitted = [e["path"] for e in status_entries(base) if e["path"].startswith(folder.rstrip("/") + "/")]
+            except WorktreeError:
+                uncommitted = []
+            if state == "al_dia" and uncommitted:
+                state = "guardado_sin_commit"
+        return {"entry": entry, "dir": folder, "state": state, "uncommitted": uncommitted}
 
     @app.post("/api/renders/save/status")
     def renders_save_status(body: dict[str, Any]) -> dict[str, Any]:
         """¿Dónde se guardaría la salida de la preview y cómo está hoy en el repo? (solo lectura)."""
-        with render_root(_branch(body) or body.get("ref") or None) as base:
+        with render_root(body.get("ref") or None) as base:
             svc, target, info = save_target(body, base)
             found = _save_entry(svc, target, base)
         entry = found["entry"]
@@ -500,6 +509,7 @@ def register(
             **info,
             "dir": found["dir"],
             "state": found["state"],
+            "uncommitted": len(found["uncommitted"]),
             "counts": entry.get("counts"),
             "errors": entry.get("errors") or [],
             "target_error": entry.get("target_error"),
@@ -510,8 +520,7 @@ def register(
         svc, target, info = save_target(body, base)
         if info["needs_instance"] and not body.get("create_instance"):
             raise HTTPException(status_code=400, detail=f"{info['reason']}: crea una instancia con estos parámetros")
-        branch = _branch(body)
-        source = resolve_ref(root, branch).sha if branch else head_sha(root)
+        source = head_sha(root)
         try:
             plan = svc.apply_plan([target.id], prune=bool(body.get("prune")), source_commit=source)
         except RenderError as exc:
@@ -534,65 +543,64 @@ def register(
         for rel in [*writes, *plan["deletes"]]:
             if rel != RENDERS_FILE and not rel.startswith(folder + "/"):
                 raise HTTPException(status_code=400, detail=f"ruta fuera del destino: {rel}")
+        from isot.worktree import pending_info, plan_token
+
+        pending = pending_info(root, [*writes, *plan["deletes"]])
         files = [
             {
                 "path": item["target_path"],
                 "status": item["status"],
                 "diff": item.get("diff") or "",
                 "action": "write" if item["status"] in {"new", "modified"} else ("delete" if item["status"] == "orphaned" and body.get("prune") else "keep"),
+                **({"pending": pending[item["target_path"]]} if item["target_path"] in pending else {}),
             }
             for item in entry.get("files") or []
         ]
+        extra_items = []
+        for d in [*extra, *sidecar]:
+            if d["status"] == "unchanged":
+                continue
+            row = {"path": d["path"], "status": d["status"], "diff": d["diff"]}
+            if d["path"] in pending:
+                row["pending"] = pending[d["path"]]
+            extra_items.append(row)
         return {
             **info,
             "instance": target.id,
             "dir": folder,
             "state": found["state"],
             "files": files,
-            "extra": [{"path": d["path"], "status": d["status"], "diff": d["diff"]} for d in [*extra, *sidecar] if d["status"] != "unchanged"],
+            "extra": extra_items,
             "writes": writes,
             "deletes": plan["deletes"],
-            "changes": len(writes) + len(plan["deletes"]),
-            "branch": branch,
+            "changes": sum(1 for f in files if f["action"] != "keep") + len(extra_items),
+            "token": plan_token(root, writes, plan["deletes"]),
+            "worktree": True,
         }
 
     @app.post("/api/renders/save/preview")
     def renders_save_preview(body: dict[str, Any]) -> dict[str, Any]:
         """Lo que escribiría «Guardar en el repo» (destino, estado por archivo y diffs), sin escribir."""
         require_edit()
+        require_local(body)
         root = resolved_root()
-        with render_root(_branch(body)) as base:
-            plan = save_plan(body, base, root)
+        plan = save_plan(body, root, root)
         plan.pop("writes")
         plan.pop("deletes")
         return plan
 
-    @app.post("/api/renders/save/commit")
-    def renders_save_commit(body: dict[str, Any]) -> dict[str, Any]:
-        """Guarda la salida en la carpeta destino (mismo repo) en una rama wizard/…; índice en el mismo commit."""
+    @app.post("/api/renders/save/write")
+    def renders_save_write(body: dict[str, Any]) -> dict[str, Any]:
+        """Guarda la salida en su carpeta destino del working tree (sin commit)."""
         require_edit()
+        require_local(body)
         root = resolved_root()
-        with render_root(_branch(body)) as base:
-            plan = save_plan(body, base, root)
-        if not plan["writes"] and not plan["deletes"]:
+        plan = save_plan(body, root, root)
+        if not plan["changes"] and not plan["writes"] and not plan["deletes"]:
             raise HTTPException(status_code=400, detail="la carpeta destino ya está al día")
-        message = " ".join(str(body.get("message") or "").split())[:200] or f"renders: guardar {plan['instance']}"
-        try:
-            from isot.renders import commit_files
-
-            result = commit_files(
-                root,
-                plan["writes"],
-                plan["deletes"],
-                message,
-                branch=_branch(body),
-                branch_label=f"render {plan['instance']}",
-            )
-        except WizardError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        clear_caches(root)
-        out = maybe_push(result) if result.get("created") else result
-        return {**out, "instance": plan["instance"], "dir": plan["dir"], "created_instance": bool(plan["new_instance"])}
+        prefixes = [plan["dir"], RENDERS_FILE]
+        result = save_to_worktree(body, plan["writes"], plan["deletes"], prefix=prefixes)
+        return {**result, "instance": plan["instance"], "dir": plan["dir"], "created_instance": bool(plan["new_instance"])}
 
 
 def validate_renders_text(text: str) -> list[str]:

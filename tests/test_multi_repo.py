@@ -155,12 +155,17 @@ def test_wizard_branch_lands_in_selected_repo(tmp_path: Path) -> None:
     bootstrap.create_multi_demo(parent, diff_example=False)
     client = TestClient(create_app(config_path=parent / "isot.yaml"))
     body = {"site": "site3", "cluster": "site3-edge", "role": "edge-server", "count": 1, "accept_warnings": True}
-    commit = client.post("/api/repos/demo-sur/wizard/device/commit", json=body)
+    saved = client.post("/api/repos/demo-sur/wizard/device/save", json=body)
+    assert saved.status_code == 200, saved.text
+    assert _git(parent / "demo-sur", "status", "--porcelain")
+    assert not _git(parent / "demo-norte", "status", "--porcelain")
+    assert client.get("/api/repos/demo-norte/worktree").json()["count"] == 0
+    commit = client.post("/api/repos/demo-sur/worktree/commit", json={"message": "edge server"})
     assert commit.status_code == 200, commit.text
     branch = commit.json()["branch"]
     assert branch in _git(parent / "demo-sur", "branch")
     assert branch not in _git(parent / "demo-norte", "branch")
-    assert _git(parent / "demo-sur", "rev-parse", "--abbrev-ref", "HEAD") == "main"
+    assert _git(parent / "demo-sur", "rev-parse", "--abbrev-ref", "HEAD") == branch
 
 
 def test_repo_flags_use_folder_name_ids(tmp_path: Path, demos: Path) -> None:

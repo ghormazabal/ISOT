@@ -84,17 +84,20 @@ def test_site_wizard_creates_first_site_on_empty_repo(tmp_path: Path, git_identi
     assert "sites/norte/topology/index.yaml" in paths
     assert "cluster-templates/rke2-rancher-hybrid-calico/template.yaml" in paths
     assert "cluster-templates/rke2-rancher-hybrid-calico/values/rke2-rancher-hybrid-calico.yaml" in paths
-    commit = client.post("/api/wizard/site/commit", json={**body, "accept_warnings": True})
+    saved = client.post("/api/wizard/site/save", json={**body, "accept_warnings": True})
+    assert saved.status_code == 200, saved.text
+    commit = client.post("/api/worktree/commit", json={"message": "sitio norte", "stay": False})
     assert commit.status_code == 200, commit.text
     branch = commit.json()["branch"]
     assert branch.startswith("wizard/")
+    assert commit.json()["current_branch"] == commit.json()["base"]
     assert _git(target, "log", "-1", "--format=%an", branch) == "Persona Ejemplo"
     assert "norte" in _git(target, "show", f"{branch}:sites.yaml")
     dci = client.post("/api/wizard/site/preview", json={**body, "dci": True, "dci_peer": "site1"})
     assert dci.status_code == 400 and "no existe" in dci.json()["detail"]
 
 
-def test_wizard_push_uses_configured_remote(tmp_path: Path, git_identity: None) -> None:
+def test_commit_never_pushes_even_with_push_config(tmp_path: Path, git_identity: None) -> None:
     target = bootstrap.scaffold(tmp_path / "nuevo")["path"]
     bare = tmp_path / "remote.git"
     subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
@@ -103,11 +106,12 @@ def test_wizard_push_uses_configured_remote(tmp_path: Path, git_identity: None) 
     cfg.write_text(f"data_repo:\n  path: {target}\nedit:\n  enabled: true\n  push: true\n", encoding="utf-8")
     client = TestClient(create_app(config_path=cfg))
     body = {"id": "sur", "name": "SUR", "template_site": "plantilla:edge", "clusters": []}
-    commit = client.post("/api/wizard/site/commit", json={**body, "accept_warnings": True})
+    assert client.post("/api/wizard/site/save", json={**body, "accept_warnings": True}).status_code == 200
+    commit = client.post("/api/worktree/commit", json={"message": "sitio sur"})
     assert commit.status_code == 200, commit.text
-    pushed = commit.json()["push"]
-    assert pushed["ok"] is True, pushed
-    assert pushed["branch"] in subprocess.run(["git", "-C", str(bare), "branch"], check=True, capture_output=True, text=True).stdout
+    assert "push" not in commit.json()
+    remote = subprocess.run(["git", "-C", str(bare), "branch"], check=True, capture_output=True, text=True).stdout
+    assert remote.strip() == ""
 
 
 def test_demo_copies_to_separate_git_repo(tmp_path: Path) -> None:

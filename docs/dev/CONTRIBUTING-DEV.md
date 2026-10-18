@@ -95,14 +95,19 @@ def rule_foo(ctx: RuleContext) -> list[Finding]:
   `register(app, …)` como `isot/web_renders.py`. Usa el prefijo `/api/…`: el
   middleware las expone también como `/api/repos/{id}/…`.
 - Lecturas: aceptan `ref` opcional (materializado con `gitdiff`), nunca
-  escriben. Escrituras: `…/preview` (sin efectos) + `…/commit`; exige
-  edición (`edit_globally()` + `edit_for(entry)`) y devuelve 403 si no;
-  escribe solo vía ramas `wizard/…` (`wizard.py` o `renders.commit_files`).
+  escriben. Escrituras: `…/preview` (sin efectos, devuelve `token` y
+  `pending`) + `…/save` o `…/write`; exige edición (`edit_globally()` +
+  `edit_for(entry)`) y devuelve 403 si no. Guardar escribe **solo en el
+  working tree** vía `worktree.save_files` (o `wizard.save_preview`), con el
+  `token` del preview (409 si el working tree cambió). Nunca hagas commit
+  desde una ruta de guardado: el commit es `POST /api/worktree/commit`
+  (`worktree.commit`, ramas `wizard/…`, sin push).
 - Valida todo lo que llegue a git o al disco (`validate_ref`, ids con regex,
   rutas con `safe_rel_dir`/`check_target_path`).
 - Renders: todo ocurre dentro del mismo repo de datos. No añadas destinos en
   otros repositorios ni código que copie o escriba de un repo a otro;
-  `commit_files` solo acepta rutas dentro de las carpetas destino de ese repo.
+  `save_files` solo acepta rutas dentro de los prefijos permitidos (carpeta
+  destino, `renders.yaml`, `manifest-templates/<id>/`) de ese repo.
 - Test con `fastapi.testclient.TestClient(create_app(repo, edit=True))` sobre
   una copia de la demo con `git init` en `tmp_path`.
 - Documenta la ruta en la sección API del README.
@@ -124,13 +129,17 @@ def rule_foo(ctx: RuleContext) -> list[Finding]:
 
 ## Escrituras e índice
 
-Toda ruta que escriba en el repo de datos debe dejar el índice al día **en
-el mismo commit**: usa `wizard.commit_preview` o `renders.commit_files` (ambos
-llaman a `indexer.write_indexes` antes de `git add`). Si añades un tipo de
-artefacto nuevo, súmalo a `indexer.source_groups` (huella) y a
-`build_artifacts_index`. `tests/test_index_fresh.py` recorre todas las rutas
-de escritura y comprueba `check_index` tras cada commit, además del estado
-desfasado, IDX-001, Reindexar y el reindexado incremental.
+Guardar y hacer commit son acciones separadas. Las rutas de guardado
+escriben en el working tree con `worktree.save_files` (no tocan el índice);
+`worktree.commit` llama a `indexer.write_indexes` (incremental) justo antes
+del `git add` e incluye el índice en el mismo commit (para una selección
+parcial, calcula el índice sobre HEAD + los archivos elegidos). Si añades un
+tipo de artefacto nuevo, súmalo a `indexer.source_groups` (huella), a
+`build_artifacts_index` y a `worktree._area` (grupo en **Cambios**).
+`tests/test_index_fresh.py` recorre todas las rutas de escritura, hace un
+solo commit y comprueba `check_index`; `tests/test_worktree.py` cubre varios
+guardados → un commit, selección parcial, descartar, protecciones de rutas
+y que nunca se hace commit en `main`.
 
 ## Comparar
 

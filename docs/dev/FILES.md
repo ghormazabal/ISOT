@@ -29,10 +29,12 @@ principales (no exhaustivo); los módulos privados (`_x`) se omiten.
 | `validator.py` | Validación (IPAM, refs, cableado, reglas, schemas) y salida texto/JSON/anotaciones GitHub | `validate`, `collect_issues`, `collect_warnings`, `format_report`, `github_annotations`, `main` |
 | `schemas.py` | JSON Schema del repo de datos generados desde el código; validación de documentos | `build_schemas`, `write_schemas`, `check_schemas`, `repo_documents`, `validate_document`, `main` |
 | `render_schemas.py` | Schemas del contexto de render, `template.yaml` y `renders.yaml` | `render_context_schema`, `render_template_schema`, `renders_config_schema`, `render_schemas` |
-| `renders.py` | Motor de renders: filtros, sandbox, contexto, templates, instancias, carpeta destino (mismo repo), diff, apply | `make_env`, `redact`, `scan_secrets`, `ContextBuilder`, `TemplateDef`, `parse_template`, `list_templates`, `find_template`, `load_render_config`, `check_target_path`, `target_folder`, `render_template`, `RenderService`, `diff_files`, `commit_files`, `file_diffs` |
+| `renders.py` | Motor de renders: filtros, sandbox, contexto, templates, instancias, carpeta destino (mismo repo), diff, apply | `make_env`, `redact`, `scan_secrets`, `ContextBuilder`, `TemplateDef`, `parse_template`, `list_templates`, `find_template`, `load_render_config`, `check_target_path`, `target_folder`, `render_template`, `RenderService`, `diff_files`, `file_diffs` |
 | `web.py` | App FastAPI: índices, grafos, detalle, values, refs/diff, hallazgos, wizards, multi-repo, estáticos | `create_app`, `RepoRegistry`, `RepoPrefixMiddleware`, `graph_from_index`, `kubernetes_graph`, `global_sites_graph`, `main` |
-| `web_renders.py` | Rutas `/api/renders/*` (lectura siempre; escritura con edición, en ramas) | `register`, `validate_renders_text` |
-| `wizard.py` | Wizards: preview en memoria, commit en `wizard/<slug>`, push opcional | `device_preview`, `site_preview`, `commit_preview`, `unique_wizard_branch`, `current_branch`, `push_branch`, `WizardError` |
+| `web_renders.py` | Rutas `/api/renders/*` (lectura siempre; `…/preview` + `…/write` con edición, guardan en el working tree) | `register`, `validate_renders_text` |
+| `worktree.py` | Guardar vs Commit: escribir en el working tree con token de concurrencia y rutas protegidas, `git status` por área, diff, descartar y commit en `wizard/…` con índice regenerado | `save_files`, `check_paths`, `plan_token`, `summary`, `status_entries`, `file_diff`, `pending_info`, `snapshot`, `restore`, `discard`, `commit`, `WorktreeError`, `ConflictError` |
+| `web_worktree.py` | Rutas `/api/worktree` (estado, diff; descartar y commit con edición) | `register` |
+| `wizard.py` | Wizards: preview en memoria y guardado en el working tree (restaura si el validador da errores nuevos) | `device_preview`, `site_preview`, `save_preview`, `unique_wizard_branch`, `current_branch`, `WizardError` |
 | `gitdiff.py` | Git sin checkout: refs, commits, snapshots por ref (o `local`), diff semántico | `validate_ref`, `resolve_sha`, `list_refs`, `list_commits`, `snapshot_ref`, `snapshot_for`, `semantic_diff`, `git`, `clear_caches` |
 | `helm.py` | Charts/values de cluster-templates y diff values clúster vs template | `charts_from_doc`, `load_chart_values`, `merge_values`, `cluster_values_diff`, `collect_chart_issues` |
 | `links.py` | Detalle de una conexión del grafo (y su diff entre refs) | `link_details`, `diff_details`, `view_from_tree`, `view_from_snapshot` |
@@ -68,7 +70,8 @@ principales (no exhaustivo); los módulos privados (`_x`) se omiten.
 | `tsconfig.json`, `vite.config.ts` | TS estricto; proxy `/api` en dev | — |
 | `src/main.tsx`, `src/Root.tsx` | Arranque; config, onboarding, repo activo/no disponible | `Root` |
 | `src/App.tsx` | Orquestación de vistas, cabecera, paneles, hallazgos, Comparar, Renders (`?tab=renders&sub=`) | `App` |
-| `src/api.ts` | Cliente HTTP con prefijo de repo | `api`, `repoUrl`, `setApiRepo` |
+| `src/api.ts` | Cliente HTTP con prefijo de repo; `ApiError` (409 = conflicto), eventos `isot:worktree-changed` / `isot:open-changes` | `api`, `repoUrl`, `setApiRepo`, `ApiError`, `isConflict`, `notifyWorktreeChanged`, `openChanges` |
+| `src/worktree.ts` | Cambios: grupos por área, selección, rama destino, motivo de bloqueo del commit | `groupByArea`, `defaultSelection`, `mergeSelection`, `commitTargets`, `newBranchName`, `commitBlockReason`, `isWizardBranch` |
 | `src/types.ts` | Tipos de la API | `AppView`, `GraphPayload`, `Finding`, `ConfigInfo`… |
 | `src/repos.ts` | Selección de repo (URL `?repo=`, localStorage) | `pickRepo`, `withRepoParam`, `repoFromUrl` |
 | `src/dataRepo.ts` | Lógica del repo activo y biblioteca | `mergeLibraryTemplates`, `isOffBranch`, `repoSummary` |
@@ -97,18 +100,19 @@ principales (no exhaustivo); los módulos privados (`_x`) se omiten.
 | `CompareControl.tsx` | Control único de Comparar en la barra (base → head, Local/rama/tag/commit, SHA validado) |
 | `CompareSidebar.tsx`, `CompareValues.tsx` | Lista e IPAM en Comparar; diff de values |
 | `FilesCompare.tsx` | Archivos que cambian base → head con diff unificado/lado a lado (pestaña Archivos, Renders) |
-| `IndexBanner.tsx` | Aviso «Índice desactualizado» y botón Reindexar |
+| `IndexBanner.tsx` | Aviso «Índice desactualizado» (cuenta los guardados sin commit) y botón Regenerar índice |
+| `ChangesControl.tsx` | Botón **Cambios (N)** de la barra (solo edición) y panel de commit: `git status` por área, diff, Descartar, selección, mensaje, rama `wizard/…`, Comparar base → rama |
 | `FindingsPanel.tsx` | Campana y panel de hallazgos (con arreglo por wizard) |
-| `WizardsView.tsx` | Wizards de equipo y sitio |
+| `WizardsView.tsx` | Wizards de equipo y sitio (Guardar en el working tree, aviso de cambios sin commit) |
 | `RepoSwitcher.tsx`, `RepoUnavailable.tsx`, `Onboarding.tsx` | Multi-repo y bienvenida |
 | `Splitter.tsx` | Divisores arrastrables | 
 | `renders/RendersView.tsx` | Sección Renders: sub-pestañas; datos = head de Comparar |
 | `renders/RendersSummaryTab.tsx` | Resumen, instancias, destino, `renders.yaml` como texto |
 | `renders/RendersTemplatesTab.tsx` | Biblioteca, editor, preview en vivo, contexto |
-| `renders/SaveOutputDialog.tsx` | «Guardar en el repo» desde la preview: destino, diff por archivo, crear instancia, resultado con enlaces a Diff |
+| `renders/SaveOutputDialog.tsx` | «Guardar en el repo» desde la preview: destino, diff por archivo, crear instancia, escritura en el working tree, resultado con Abrir Cambios / Comparar |
 | `renders/RendersDiffTab.tsx` | Diff contra el destino y aplicar; con Comparar: destino (base) vs render (head), salida base → head, templates |
 | `renders/RendersGuideTab.tsx` | Guías dentro de la UI |
-| `renders/common.tsx` | Editor con números de línea, diffs, árbol, diálogo de escritura |
+| `renders/common.tsx` | Editor con números de línea, diffs, árbol, diálogo de escritura (working tree, aviso de pendientes, re-preview ante 409) |
 
 ## Otros directorios
 

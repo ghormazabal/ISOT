@@ -58,42 +58,32 @@ def test_device_preview_allocates_consecutive_worker(tmp_path: Path) -> None:
     assert "site-a:server-02" in payload["focus_ids"]
 
 
-def test_device_commit_uses_wizard_branch_and_keeps_base(tmp_path: Path) -> None:
+def test_device_save_writes_worktree_without_commit(tmp_path: Path) -> None:
     root = _prepared(tmp_path)
     client = _client(root, edit=True)
-    response = client.post(
-        "/api/wizard/device/commit",
-        json={"site": "site-a", "kind": "baremetal", "cluster": "k8s-prod", "role": "k8s-worker", "count": 2},
-    )
+    body = {"site": "site-a", "kind": "baremetal", "cluster": "k8s-prod", "role": "k8s-worker", "count": 2}
+    preview = client.post("/api/wizard/device/preview", json=body).json()
+    assert preview["worktree"] is True and preview["token"] and preview["pending"] == []
+    response = client.post("/api/wizard/device/save", json={**body, "token": preview["token"]})
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["ok"] is True
-    assert payload["branch"].startswith("wizard/")
-    assert payload["base"] == "master" or payload["base"] == "main"
-    assert not (root / "sites" / "site-a" / "devices" / "baremetal" / "server-02.yaml").exists()
-    import subprocess
-
-    show = subprocess.run(
-        ["git", "-C", str(root), "show", f"{payload['branch']}:sites/site-a/devices/baremetal/server-02.yaml"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    assert "hostname: server-02" in show.stdout
-    show3 = subprocess.run(
-        ["git", "-C", str(root), "show", f"{payload['branch']}:sites/site-a/devices/baremetal/server-03.yaml"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    assert "hostname: server-03" in show3.stdout
+    assert payload["ok"] is True and payload["saved"] is True
+    assert "branch" in payload and payload["branch"] in {"main", "master"}
+    # en el working tree, sin commit ni ramas nuevas
+    assert "hostname: server-02" in (root / "sites/site-a/devices/baremetal/server-02.yaml").read_text()
+    assert "hostname: server-03" in (root / "sites/site-a/devices/baremetal/server-03.yaml").read_text()
+    assert all(not name.startswith("wizard/") for name in subprocess_branches(root))
+    status = client.get("/api/worktree").json()
+    paths = {f["path"]: f for f in status["files"]}
+    assert paths["sites/site-a/devices/baremetal/server-02.yaml"]["status"] == "untracked"
+    assert paths["sites/site-a/devices/baremetal/server-02.yaml"]["area"] == "sites"
 
 
-def test_commit_rolls_back_on_duplicate_hostname(tmp_path: Path) -> None:
+def test_save_rolls_back_on_duplicate_hostname(tmp_path: Path) -> None:
     root = _prepared(tmp_path)
     client = _client(root, edit=True)
     response = client.post(
-        "/api/wizard/device/commit",
+        "/api/wizard/device/save",
         json={
             "site": "site-a",
             "kind": "baremetal",
@@ -104,15 +94,14 @@ def test_commit_rolls_back_on_duplicate_hostname(tmp_path: Path) -> None:
     )
     assert response.status_code == 400
     assert "hostname" in response.json()["detail"]
-    branches = subprocess_branches(root)
-    assert all(not name.startswith("wizard/") for name in branches)
+    assert client.get("/api/worktree").json()["count"] == 0
 
 
-def test_commit_rolls_back_on_ip_collision(tmp_path: Path) -> None:
+def test_save_rolls_back_on_ip_collision(tmp_path: Path) -> None:
     root = _prepared(tmp_path)
     client = _client(root, edit=True)
     response = client.post(
-        "/api/wizard/device/commit",
+        "/api/wizard/device/save",
         json={
             "site": "site-a",
             "kind": "baremetal",
@@ -123,11 +112,11 @@ def test_commit_rolls_back_on_ip_collision(tmp_path: Path) -> None:
     )
     assert response.status_code == 400
     assert "duplicada" in response.json()["detail"] or "IP" in response.json()["detail"]
-    assert all(not name.startswith("wizard/") for name in subprocess_branches(root))
     assert not (root / "sites" / "site-a" / "devices" / "baremetal" / "server-02.yaml").exists()
+    assert client.get("/api/worktree").json()["count"] == 0
 
 
-def test_site_preview_and_commit(tmp_path: Path) -> None:
+def test_site_preview_and_save(tmp_path: Path) -> None:
     root = _prepared(tmp_path)
     client = _client(root, edit=True)
     body = {
@@ -146,27 +135,25 @@ def test_site_preview_and_commit(tmp_path: Path) -> None:
     assert "sites.yaml" in paths
     assert "sites/site-c/topology/index.yaml" in paths
     assert any(path.endswith("SITE-C-NODE001.yaml") for path in paths)
-    commit = client.post("/api/wizard/site/commit", json={**body, "accept_warnings": True})
-    assert commit.status_code == 200, commit.text
-    assert commit.json()["branch"].startswith("wizard/")
+    saved = client.post("/api/wizard/site/save", json={**body, "accept_warnings": True})
+    assert saved.status_code == 200, saved.text
     catalog = load_yaml(root / "sites.yaml")
-    ids = {item["id"] for item in catalog["sites"]}
-    assert "site-c" not in ids
-    import subprocess
-
-    show = subprocess.run(
-        ["git", "-C", str(root), "show", f"{commit.json()['branch']}:sites/site-c/devices/baremetal/SITE-C-NODE001.yaml"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    assert "10.90." in show.stdout or "ip:" in show.stdout
+    assert "site-c" in {item["id"] for item in catalog["sites"]}
+    node = root / "sites/site-c/devices/baremetal/SITE-C-NODE001.yaml"
+    assert node.is_file() and ("10.90." in node.read_text() or "ip:" in node.read_text())
     graph = preview.json()["graphs"]
     global_nodes = {item["id"]: item for item in graph["global"]["nodes"]}
     assert global_nodes["site:site-c"]["diff_status"] == "added"
     assert any(item["diff_status"] == "added" for item in graph["global"]["edges"])
     net_nodes = {item["id"]: item for item in graph["network"]["nodes"]}
     assert any(key.startswith("site-c:") and item["diff_status"] == "added" for key, item in net_nodes.items())
+    # Commit aparte: rama wizard/ nueva con todos los archivos + índice.
+    done = client.post("/api/worktree/commit", json={"message": "sitio site-c"})
+    assert done.status_code == 200, done.text
+    result = done.json()
+    assert result["branch"].startswith("wizard/") and result["created"] is True
+    assert any(path.endswith("_index_manifest.json") for path in result["index_files"])
+    assert client.get("/api/worktree").json()["count"] == 0
 
 
 def test_device_preview_matches_parent_bond_port(tmp_path: Path) -> None:
@@ -297,16 +284,23 @@ def test_preview_graph_recalculates_on_ip_edit(tmp_path: Path) -> None:
     assert field["auto"] is False
 
 
-def test_commit_refuses_dirty_tree(tmp_path: Path) -> None:
+def test_save_warns_about_uncommitted_and_detects_external_change(tmp_path: Path) -> None:
     root = _prepared(tmp_path)
-    (root / "scratch.txt").write_text("dirty", encoding="utf-8")
+    (root / "scratch.txt").write_text("dirty", encoding="utf-8")  # cambios ajenos: ya no bloquean
     client = _client(root, edit=True)
-    response = client.post(
-        "/api/wizard/device/commit",
-        json={"site": "site-a", "kind": "baremetal", "cluster": "k8s-prod", "role": "k8s-worker"},
-    )
-    assert response.status_code == 400
-    assert "sucio" in response.json()["detail"]
+    body = {"site": "site-a", "kind": "baremetal", "cluster": "k8s-prod", "role": "k8s-worker"}
+    preview = client.post("/api/wizard/device/preview", json=body).json()
+    cluster = next(f["path"] for f in preview["files"] if f["path"].endswith("k8s-prod.yaml"))
+    # alguien edita el archivo del clúster por fuera: aviso en la preview y conflicto con el token viejo
+    target = root / cluster
+    target.write_text(target.read_text() + "# editado a mano\n", encoding="utf-8")
+    again = client.post("/api/wizard/device/preview", json=body).json()
+    assert [p["path"] for p in again["pending"]] == [cluster]
+    assert "editado a mano" in again["pending"][0]["diff"]
+    stale = client.post("/api/wizard/device/save", json={**body, "token": preview["token"]})
+    assert stale.status_code == 409
+    ok = client.post("/api/wizard/device/save", json={**body, "token": again["token"]})
+    assert ok.status_code == 200, ok.text
 
 
 def subprocess_branches(root: Path) -> list[str]:

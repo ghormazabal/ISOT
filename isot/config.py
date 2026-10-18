@@ -3,7 +3,7 @@
 ISoT es un visualizador y editor del repositorio de datos al que el usuario ya
 tiene acceso. No guarda credenciales ni clona con tokens: lee el clon local con
 los permisos del usuario y cada operación git (refs, diff, ramas del wizard,
-push opcional) corre sobre ese clon con su `git config` y su credential helper.
+commit; nunca push) corre sobre ese clon con su `git config` y su credential helper.
 
 Orden de búsqueda del archivo de configuración:
 

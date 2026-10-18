@@ -1319,30 +1319,6 @@ def apply_files(repo: Path, files: list[dict[str, Any]]) -> list[Path]:
     return written
 
 
-def push_branch(repo: Path, branch: str, remote: str = "origin") -> dict[str, Any]:
-    """`git push -u <remote> <rama>` con las credenciales del usuario (credential helper,
-    ssh-agent…). ISoT no pide ni guarda tokens; sin prompt interactivo."""
-    import subprocess
-
-    if not branch.startswith("wizard/") or not SAFE_BRANCH.fullmatch(branch):
-        return {"ok": False, "remote": remote, "branch": branch, "message": "solo se publican ramas wizard/…"}
-    if not is_git_toplevel(repo):
-        return {"ok": False, "remote": remote, "branch": branch, "message": "el repo de datos no es un repo git"}
-    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
-    try:
-        proc = subprocess.run(
-            ["git", "-C", str(repo), "push", "-u", remote, f"{branch}:{branch}"],
-            check=False,
-            capture_output=True,
-            timeout=120,
-            env=env,
-        )
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "remote": remote, "branch": branch, "message": "git push excedió el tiempo"}
-    text = (proc.stderr or proc.stdout).decode("utf-8", errors="replace").strip()
-    return {"ok": proc.returncode == 0, "remote": remote, "branch": branch, "message": text[-600:]}
-
-
 SAFE_BRANCH = re.compile(r"^[A-Za-z0-9._/-]{1,120}$")
 
 
@@ -1358,81 +1334,36 @@ def unique_wizard_branch(repo: Path, description: str) -> str:
         n += 1
 
 
-def commit_preview(
-    repo: Path, preview: dict[str, Any], description: str, *, site: str | None = None
+def save_preview(
+    repo: Path, preview: dict[str, Any], *, site: str | None = None, token: str | None = None
 ) -> dict[str, Any]:
-    """Aplica el preview en una rama wizard/… y la confirma.
+    """Escribe los archivos del preview en el working tree (sin commit).
 
     Bloquea solo por errores *nuevos* del sitio del wizard (o no atribuibles a
-    ningún sitio); los errores previos o de otros sitios no bloquean.
+    ningún sitio); si los hay, deja los archivos como estaban.
     """
+    from isot.rules.evaluate import diff_findings, evaluate, wizard_scope
+    from isot.worktree import WorktreeError, check_paths, restore, save_files, snapshot
+
     files = preview.get("files") or []
     if not files:
         raise WizardError("preview sin archivos")
-    dirty = git(repo, ["status", "--porcelain"])
-    if dirty.stdout.strip():
-        raise WizardError("working tree sucio; confirma o descarta cambios antes del wizard")
-    from isot.rules.evaluate import diff_findings, evaluate, wizard_scope
-
+    writes = {str(item["path"]): str(item.get("content") or "") for item in files}
+    root = repo.resolve()
+    check_paths(root, list(writes))
     scope = site or (str(preview.get("site")) if preview.get("site") else None)
     base_findings = evaluate(repo)
-    branch_now = current_branch(repo)
-    if branch_now in PROTECTED_BRANCHES:
-        # still allowed to *create* a wizard branch from here; just never commit onto it
-        pass
-    new_branch = unique_wizard_branch(repo, description)
-    if new_branch in PROTECTED_BRANCHES or new_branch == branch_now:
-        raise WizardError("la rama destino no puede ser main ni la rama actual")
-    start = git(repo, ["rev-parse", "HEAD"])
-    if start.returncode != 0:
-        raise WizardError("el directorio no es un repositorio git")
-    create = git(repo, ["checkout", "-b", new_branch])
-    if create.returncode != 0:
-        detail = (create.stderr or create.stdout).decode("utf-8", errors="replace")
-        raise WizardError(detail or "no se pudo crear la rama wizard")
+    before = snapshot(root, writes)
+    result = save_files(repo, writes, [], token=token)
     try:
-        apply_files(repo, files)
-        write_indexes(repo)
         added, _ = diff_findings(base_findings, evaluate(repo))
-        errors = [item for item in wizard_scope(added, scope) if item.severity == "error"]
-        if errors:
-            git(repo, ["reset", "--hard", "HEAD"])
-            git(repo, ["clean", "-fd"])
-            git(repo, ["checkout", branch_now])
-            git(repo, ["branch", "-D", new_branch])
-            raise WizardError(
-                "validador: " + "; ".join(f"{item.id} {item.message}" for item in errors[:8])
-            )
-        git(repo, ["add", "-A"])
-        message = f"wizard: {description}"
-        # Autor: la identidad git del propio usuario (su git config). Solo si no
-        # tiene ninguna configurada se usa una identidad genérica.
-        has_identity = git(repo, ["config", "user.email"]).returncode == 0
-        identity = [] if has_identity else ["-c", "user.name=ISoT Wizard", "-c", "user.email=isot@example.net"]
-        env_args = [*identity, "commit", "-m", message]
-        committed = git(repo, env_args)
-        if committed.returncode != 0:
-            detail = (committed.stderr or committed.stdout).decode("utf-8", errors="replace")
-            git(repo, ["reset", "--hard", "HEAD"])
-            git(repo, ["checkout", branch_now])
-            git(repo, ["branch", "-D", new_branch])
-            raise WizardError(detail or "git commit falló")
-        sha_proc = git(repo, ["rev-parse", "HEAD"])
-        sha = sha_proc.stdout.decode("utf-8").strip()
-        git(repo, ["checkout", branch_now])
-        return {
-            "ok": True,
-            "branch": new_branch,
-            "sha": sha,
-            "short": sha[:7],
-            "base": branch_now,
-            "message": message,
-            "files": [item["path"] for item in files],
-        }
-    except WizardError:
-        raise
-    except Exception as exc:
-        git(repo, ["reset", "--hard", "HEAD"])
-        git(repo, ["checkout", branch_now])
-        git(repo, ["branch", "-D", new_branch])
+    except Exception as exc:  # noqa: BLE001
+        restore(root, before)
         raise WizardError(str(exc)) from exc
+    errors = [item for item in wizard_scope(added, scope) if item.severity == "error"]
+    if errors:
+        restore(root, before)
+        raise WorktreeError("validador: " + "; ".join(f"{item.id} {item.message}" for item in errors[:8]))
+    return {**result, "files": [item["path"] for item in files]}
+
+

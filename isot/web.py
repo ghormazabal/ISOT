@@ -58,11 +58,10 @@ from isot.indexer import build_template_index
 from isot.cabling import default_policy, policy_from_site_body
 from isot.wizard import (
     WizardError,
-    commit_preview,
+    save_preview,
     device_preview,
     edit_enabled,
     list_site_templates as wizard_site_templates,
-    push_branch,
     site_preview,
 )
 
@@ -726,7 +725,7 @@ def create_app(
             "default_repo": registry.default_id,
             "templates": [str(path) for path in cfg.templates],
             "edit": can,
-            "push": bool(can and cfg.edit.push),
+            "push": False,  # ISoT nunca hace push (sin escrituras remotas)
             "push_remote": entry.remote if cfg.edit.push_remote == "origin" else cfg.edit.push_remote,
             "ui": {"title": cfg.ui.title},
         }
@@ -791,20 +790,10 @@ def create_app(
         return {
             "repo": entry.id if entry else None,
             "edit": can,
-            "push": bool(can and registry.config.edit.push),
+            "push": False,  # ISoT no publica: el commit queda local
             "site_templates": wizard_site_templates(root),
             "template_library": library_catalog(root),
         }
-
-    def maybe_push(result: dict[str, Any]) -> dict[str, Any]:
-        entry = registry.entry()
-        if not registry.config.edit.push:
-            return result
-        remote = registry.config.edit.push_remote
-        if remote == "origin" and entry.remote:
-            remote = entry.remote
-        result["push"] = push_branch(entry.path, result["branch"], remote)
-        return result
 
     def require_edit() -> None:
         entry = registry.entry()
@@ -844,26 +833,46 @@ def create_app(
         except Exception:
             return default_policy(architecture)
 
+    def wizard_payload(preview: dict[str, Any]) -> dict[str, Any]:
+        """Preview del wizard + token de concurrencia + archivos que ya tienen cambios sin commit."""
+        from isot.worktree import pending_info, plan_token
+
+        root = resolved_root()
+        writes = {str(f["path"]): str(f.get("content") or "") for f in preview.get("files") or []}
+        pending = pending_info(root, writes)
+        return {
+            **preview,
+            "token": plan_token(root, writes, []),
+            "pending": [{"path": rel, **info} for rel, info in pending.items()],
+            "worktree": True,
+        }
+
+    def wizard_save(preview: dict[str, Any], body: dict[str, Any], site: Any) -> dict[str, Any]:
+        from isot.worktree import ConflictError
+
+        _guard_wizard_findings(preview, body)
+        try:
+            result = save_preview(resolved_root(), preview, site=site, token=str(body.get("token") or "") or None)
+        except ConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        clear_caches(resolved_root())
+        return {**result, "preview": preview}
+
     @app.post("/api/wizard/site/preview")
     def wizard_site_preview(body: dict[str, Any]) -> dict[str, Any]:
         require_edit()
         try:
-            return site_preview(resolved_root(), body)
+            return wizard_payload(site_preview(resolved_root(), body))
         except WizardError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    @app.post("/api/wizard/site/commit")
-    def wizard_site_commit(body: dict[str, Any]) -> dict[str, Any]:
+    @app.post("/api/wizard/site/save")
+    def wizard_site_save(body: dict[str, Any]) -> dict[str, Any]:
+        """Escribe el sitio nuevo en el working tree (sin commit; el commit va por «Cambios»)."""
         require_edit()
         try:
             preview = site_preview(resolved_root(), body)
-            _guard_wizard_findings(preview, body)
-            description = str(body.get("description") or body.get("id") or "nuevo-sitio")
-            result = commit_preview(
-                resolved_root(), preview, f"sitio {description}", site=preview.get("site") or body.get("id")
-            )
-            clear_caches(resolved_root())
-            return {**maybe_push(result), "preview": preview}
+            return wizard_save(preview, body, preview.get("site") or body.get("id"))
         except WizardError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -871,22 +880,17 @@ def create_app(
     def wizard_device_preview(body: dict[str, Any]) -> dict[str, Any]:
         require_edit()
         try:
-            return device_preview(resolved_root(), body)
+            return wizard_payload(device_preview(resolved_root(), body))
         except (WizardError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    @app.post("/api/wizard/device/commit")
-    def wizard_device_commit(body: dict[str, Any]) -> dict[str, Any]:
+    @app.post("/api/wizard/device/save")
+    def wizard_device_save(body: dict[str, Any]) -> dict[str, Any]:
+        """Escribe los devices en el working tree (sin commit; el commit va por «Cambios»)."""
         require_edit()
         try:
             preview = device_preview(resolved_root(), body)
-            _guard_wizard_findings(preview, body)
-            hostnames = ",".join(preview.get("hostnames") or []) or "device"
-            result = commit_preview(
-                resolved_root(), preview, f"device {hostnames}", site=preview.get("site") or body.get("site")
-            )
-            clear_caches(resolved_root())
-            return {**maybe_push(result), "preview": preview}
+            return wizard_save(preview, body, preview.get("site") or body.get("site"))
         except (WizardError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -911,6 +915,14 @@ def create_app(
         status.pop("groups", None)
         status["can_reindex"] = bool(registry.configured and edit_for(registry.entry()))
         status["live"] = not status["fresh"]
+        from isot.worktree import WorktreeError, status_entries
+
+        try:
+            entries = status_entries(root)
+        except WorktreeError:
+            entries = []
+        # El índice se calcula sobre el working tree: los cambios sin commit cuentan.
+        status["uncommitted"] = sum(1 for e in entries if e["area"] != "index")
         return status
 
     @app.get("/api/index/artifacts")
@@ -926,21 +938,21 @@ def create_app(
 
     @app.post("/api/index/reindex")
     def index_reindex() -> dict[str, Any]:
-        """Regenera el índice en una rama wizard/… nueva (nunca en main ni en el working tree)."""
+        """Regenera el índice en el working tree (sin commit; también se regenera al hacer commit)."""
         if not edit_globally() or not (registry.configured and edit_for(registry.entry())):
             raise HTTPException(status_code=403, detail="edición deshabilitada")
         root = resolved_root()
-        from isot.renders import commit_files
+        from isot.worktree import save_files
 
         writes = pending_index_writes(root)
         if not writes:
-            return {"ok": True, "branch": None, "message": "El índice ya está al día"}
+            return {"ok": True, "saved": False, "message": "El índice ya está al día"}
         try:
-            result = commit_files(root, writes, [], "reindexar")
+            result = save_files(root, writes, [])
         except WizardError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         clear_caches(root)
-        return maybe_push(result)
+        return {**result, "message": f"Índice regenerado en el working tree ({len(result['files'])} archivo(s)); entra en el próximo commit."}
 
     @app.get("/api/refs/resolve")
     def git_resolve(ref: str = Query(...)) -> dict[str, Any]:
@@ -1251,15 +1263,15 @@ def create_app(
             tdoc = {}
         return cluster_values_diff(base, cluster, found, tdoc)
 
-    from isot import web_renders
+    from isot import web_renders, web_worktree
 
+    web_worktree.register(app, registry=registry, resolved_root=resolved_root, require_edit=require_edit, edit_for=edit_for, edit_globally=edit_globally)
     web_renders.register(
         app,
         registry=registry,
         resolved_root=resolved_root,
         edit_for=edit_for,
         edit_globally=edit_globally,
-        maybe_push=maybe_push,
     )
 
     if FRONTEND_DIST.is_dir():

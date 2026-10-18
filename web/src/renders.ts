@@ -261,7 +261,13 @@ export function filterByPath<T extends { path: string }>(items: T[], query: stri
   });
 }
 
-export const SAVE_STATE_LABEL: Record<string, string> = { al_dia: "al día", desfasado: "desfasado", no_existe: "no existe", error: "error" };
+export const SAVE_STATE_LABEL: Record<string, string> = {
+  al_dia: "al día",
+  desfasado: "desfasado",
+  no_existe: "no existe",
+  guardado_sin_commit: "guardado sin commit",
+  error: "error",
+};
 
 /** Motivo por el que «Guardar en el repo» está deshabilitado (null = se puede). */
 export function saveBlockReason(input: {

@@ -125,5 +125,6 @@ describe("guardar la salida en el repo", () => {
   it("etiquetas del estado en el repo", () => {
     assert.equal(SAVE_STATE_LABEL.al_dia, "al día");
     assert.equal(SAVE_STATE_LABEL.no_existe, "no existe");
+    assert.equal(SAVE_STATE_LABEL.guardado_sin_commit, "guardado sin commit");
   });
 });

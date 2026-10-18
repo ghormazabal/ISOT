@@ -12,7 +12,7 @@ from isot.rules.context import load_context
 from isot.rules.evaluate import attribute_template_findings, evaluate, evaluate_overlay
 from isot.rules.model import Finding
 from isot.web import create_app
-from isot.wizard import WizardError, commit_preview
+from isot.wizard import WizardError, save_preview
 
 from tests.conftest import _git_ident_env, git_init_and_commit, seed_mini_repo, write_yaml
 
@@ -145,14 +145,16 @@ def test_wizard_only_blocks_on_its_site(tmp_path: Path) -> None:
     assert all(item["site"] in ("site-b", None) for item in other["added"])
     own = evaluate_overlay(root, files, site="site-a")
     assert own["blocked"] is True
+    before = (root / files[0]["path"]).read_text()
     try:
-        commit_preview(root, {"files": files}, "bad-cidr", site="site-a")
+        save_preview(root, {"files": files}, site="site-a")
         raised = False
     except WizardError:
         raised = True
     assert raised
-    result = commit_preview(root, {"files": files}, "cidr-otro-sitio", site="site-b")
-    assert result["ok"] and result["branch"].startswith("wizard/")
+    assert (root / files[0]["path"]).read_text() == before  # se deshace
+    result = save_preview(root, {"files": files}, site="site-b")
+    assert result["ok"] and result["saved"] and (root / files[0]["path"]).read_text() == BAD_CIDR
 
 
 def test_sample_inventory_template_finding_per_site(repo_root: Path) -> None:

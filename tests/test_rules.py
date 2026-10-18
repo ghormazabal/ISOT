@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from isot.rules.evaluate import evaluate, evaluate_overlay
 from isot.validator import validate
 from isot.web import create_app
-from isot.wizard import WizardError, commit_preview
+from isot.wizard import WizardError, save_preview
 
 from tests.conftest import git_init_and_commit, seed_mini_repo, write_yaml
 
@@ -520,7 +520,7 @@ def test_wizard_blocks_on_new_error(tmp_path: Path) -> None:
     assert overlay["blocked"] is True
     assert any(item["id"] == "K8S-NET-001" and item["severity"] == "error" for item in overlay["added"])
     try:
-        commit_preview(root, preview, "bad-cidr")
+        save_preview(root, preview)
         raised = False
     except WizardError as exc:
         raised = True

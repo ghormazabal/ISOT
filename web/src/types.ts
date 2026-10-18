@@ -416,6 +416,8 @@ export type IndexStatus = {
   stale: string[];
   files: number;
   can_reindex: boolean;
+  /** Cambios sin commit en el working tree (el índice se calcula sobre él). */
+  uncommitted?: number;
 };
 
 export type SemanticDiff = {
@@ -458,6 +460,11 @@ export type WizardFile = {
 };
 
 export type WizardPreview = {
+  /** Huella de lo que hay en disco + lo que se escribiría (409 al guardar si cambió). */
+  token?: string;
+  /** Archivos del preview que ya tienen cambios sin commit en el working tree. */
+  pending?: ({ path: string } & PendingChange)[];
+  worktree?: boolean;
   kind?: string;
   site?: string;
   count?: number;
@@ -585,17 +592,65 @@ export type WizardFindings = {
   fix?: FixStatus | null;
 };
 
-export type WizardCommit = {
+/** Un archivo del plan que ya tenía cambios sin commit (se avisa antes de sobrescribirlo). */
+export type PendingChange = { status: WorktreeFileStatus; diff: string; binary?: boolean };
+
+/** Resultado de «Guardar»: escrito en el working tree del repo de datos, sin commit. */
+export type WizardSave = {
+  ok: boolean;
+  saved: boolean;
+  written: string[];
+  deleted: string[];
+  files: string[];
+  /** Cambios sin commit en el repo tras guardar (sin contar el índice). */
+  pending: number;
+  /** Rama actual del repo de datos (no cambia al guardar). */
+  branch: string;
+  preview?: WizardPreview;
+};
+
+export type WorktreeFileStatus = "modified" | "added" | "deleted" | "untracked";
+export type WorktreeArea = "output" | "templates" | "renders" | "sites" | "index" | "other";
+
+export type WorktreeFile = { path: string; status: WorktreeFileStatus; area: WorktreeArea; staged: boolean };
+
+/** `GET /api/worktree`: lo pendiente de commit en el repo de datos. */
+export type WorktreeStatus = {
+  branch: string;
+  head: string | null;
+  on_wizard: boolean;
+  default_target: "current" | "new";
+  files: WorktreeFile[];
+  count: number;
+  pending: number;
+  counts: Record<WorktreeArea, number>;
+  areas: { id: WorktreeArea; label: string }[];
+  edit?: boolean;
+};
+
+export type WorktreeDiff = { path: string; binary: boolean; diff: string; truncated: boolean; token: string };
+
+export type WorktreeCommitBody = {
+  paths?: string[];
+  message: string;
+  target?: "current" | "new";
+  branch_name?: string;
+  stay?: boolean;
+};
+
+export type WorktreeCommitResult = {
   ok: boolean;
   branch: string;
+  created: boolean;
+  base: string;
   sha: string;
   short: string;
-  base: string;
   message: string;
   files: string[];
-  preview?: WizardPreview;
-  /** Solo con edit.push: resultado de `git push -u` con las credenciales del usuario. */
-  push?: { ok: boolean; remote: string; branch: string; message: string };
+  index_files: string[];
+  current_branch: string;
+  note: string | null;
+  pending: number;
 };
 export type SiteFilter = "all" | string;
 

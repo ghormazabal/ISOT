@@ -3,7 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import { isLocalRef, refLabel, type CompareRefs } from "../../compare";
 import { RENDER_SUBTAB_LABELS, RENDER_SUBTABS, type RenderSubTab } from "../../renders";
 import type { SiteIndexEntry } from "../../types";
-import type { WriteMode } from "./common";
+import { useWorktreeTick, type WriteMode } from "./common";
 import { RendersDiffTab } from "./RendersDiffTab";
 import { RendersGuideTab } from "./RendersGuideTab";
 import { RendersSummaryTab } from "./RendersSummaryTab";
@@ -24,15 +24,16 @@ type Props = {
 export function RendersView({ sub, onSub, sites, editEnabled, compare, onCompare, onAfterCommit }: Props) {
   // Una sola fuente de refs: el control Comparar de la barra superior (head = lo que se ve).
   const ref = compare && !isLocalRef(compare.head) ? compare.head : "";
-  const [version, setVersion] = useState(0);
+  const [ownVersion, setVersion] = useState(0);
+  // Guardar/descartar/commit desde cualquier sitio (p. ej. «Cambios») recarga las sub-pestañas.
+  const version = ownVersion + useWorktreeTick();
   const [focusTemplate, setFocusTemplate] = useState<{ id: string; source?: "repo" | "bundled"; key: number } | null>(null);
   const [focusInstance, setFocusInstance] = useState<string | null>(null);
 
   const write: WriteMode = useMemo(() => {
-    if (!editEnabled) return { canWrite: false, branch: null, reason: "Solo lectura: arranca ISoT con --edit (ISOT_EDIT=1) para escribir." };
-    if (!ref) return { canWrite: true, branch: null, reason: "Los cambios se guardan en una rama wizard/… nueva." };
-    if (ref.startsWith("wizard/")) return { canWrite: true, branch: ref, reason: `Los cambios continúan la rama ${ref}.` };
-    return { canWrite: false, branch: null, reason: `Viendo ${refLabel(ref)}: solo se escribe con head = Local o una rama wizard/….` };
+    if (!editEnabled) return { canWrite: false, reason: "Solo lectura: arranca ISoT con --edit (ISOT_EDIT=1) para escribir." };
+    if (!ref) return { canWrite: true, reason: "«Guardar» escribe en el working tree local (sin commit); el commit va por «Cambios» en la barra superior." };
+    return { canWrite: false, reason: `Viendo ${refLabel(ref)}: solo se guarda con head = Local (working tree).` };
   }, [editEnabled, ref]);
 
   const afterCommit = useCallback(() => {
@@ -40,15 +41,6 @@ export function RendersView({ sub, onSub, sites, editEnabled, compare, onCompare
     onAfterCommit?.();
   }, [onAfterCommit]);
 
-  // «Ver la rama»: head = la rama nueva, base = Local (qué añade la rama).
-  const viewBranch = useCallback(
-    (branch: string) => {
-      onCompare({ base: "local", head: branch });
-      setVersion((value) => value + 1);
-      onAfterCommit?.();
-    },
-    [onCompare, onAfterCommit],
-  );
 
   return (
     <section className="wizard-pane renders-pane" aria-label="Renders">
@@ -67,7 +59,7 @@ export function RendersView({ sub, onSub, sites, editEnabled, compare, onCompare
           </span>
         ) : null}
         <p className={`badge${write.canWrite ? "" : " is-readonly"}`} title={write.reason}>
-          {write.canWrite ? (write.branch ? `edición · ${write.branch}` : "edición · rama nueva") : "solo lectura"}
+          {write.canWrite ? "edición · working tree" : "solo lectura"}
         </p>
       </div>
       {sub === "resumen" ? (
@@ -77,7 +69,6 @@ export function RendersView({ sub, onSub, sites, editEnabled, compare, onCompare
             sites={sites}
             write={write}
             onAfterCommit={afterCommit}
-            onViewBranch={viewBranch}
             onOpenDiff={(instance) => {
               setFocusInstance(instance);
               onSub("diff");
@@ -101,14 +92,12 @@ export function RendersView({ sub, onSub, sites, editEnabled, compare, onCompare
           write={write}
           focus={focusTemplate}
           onAfterCommit={afterCommit}
-          onViewBranch={viewBranch}
         />
       ) : null}
       {sub === "diff" ? (
         <RendersDiffTab
           refName={ref || null}
           compare={compare}
-          onCompare={onCompare}
           version={version}
           write={write}
           instance={focusInstance}

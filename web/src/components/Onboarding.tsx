@@ -11,7 +11,7 @@ const EXAMPLE = `version: 1
 data_repo:
   path: ~/repos/mi-inventario   # clon local de tu repositorio de datos
 edit:
-  enabled: true                 # wizards (ramas wizard/… en ese repo)
+  enabled: true                 # Guardar en el working tree; Commit en ramas wizard/…
   push: false`;
 
 /** Pantalla inicial cuando no hay repositorio de datos configurado. */

@@ -71,7 +71,7 @@ flowchart LR
     agent["agente / LLM<br/>docs/llm/INGEST.md"]
   end
   api -- "lee el clon local<br/>git archive / log / diff" --> r1
-  api -- "rama wizard/… + commit<br/>(push opcional)" --> r2
+  api -- "Guardar: working tree<br/>Commit: rama wizard/… (sin push)" --> r2
   r1 -- "push / PR" --> val
   val --> pr
   pr -- "merge a main" --> r1
@@ -84,8 +84,10 @@ flowchart LR
 - **La herramienta** no tiene estado propio: cada repositorio se abre de
   forma perezosa desde su ruta y un cambio en `isot.yaml` se recarga sin
   reiniciar.
-- **Los repositorios de datos** son la fuente de verdad. ISoT nunca escribe
-  en `main` ni en la rama de trabajo: solo crea ramas `wizard/…`.
+- **Los repositorios de datos** son la fuente de verdad. «Guardar» escribe
+  solo en el working tree del clon local (sin commit); el commit es una
+  acción aparte (**Cambios**) que va a una rama `wizard/…`. ISoT nunca hace
+  commit en `main` ni en ramas protegidas y nunca hace push.
 - **La CI del repo de datos** corre el mismo validador e indexer
   (workflow reutilizable de este repo), así que las reglas se aplican igual
   en la UI y en el PR.
@@ -275,7 +277,7 @@ ingesta (solo lectura, sin git) y un repositorio cuya ruta no existe, marcado
   se lee hasta pedirlo) y un cambio en `isot.yaml` se recarga sin reiniciar.
 - **API.** La forma canónica es `/api/repos/{id}/<ruta>` para toda la API de
   datos (`/api/repos/sur/sites`, `/api/repos/sur/diff?base=…`,
-  `/api/repos/sur/wizard/device/commit`…). Las rutas sin prefijo
+  `/api/repos/sur/wizard/device/save`…). Las rutas sin prefijo
   (`/api/sites`, …) siguen funcionando contra el repositorio por defecto.
   `GET /api/repos` lista los repositorios con `id`, `name`, `path` (solo el
   nombre de la carpeta), `branch`, `short`/`head`, `dirty`, `git`,
@@ -409,12 +411,15 @@ de cada grupo de fuentes (sitios, devices, clústeres, cluster-templates,
 `manifest-templates/`, `renders.yaml`, salidas `rendered/` y `_ingest/`).
 
 - **Toda escritura de la app** (wizards, guardar/clonar plantillas de render,
-  `renders.yaml`, Aplicar, Corregir, Reindexar) regenera el índice **en el
-  mismo commit** de la rama `wizard/…`.
-- **Al cargar**, ISoT compara el manifiesto con los archivos. Si el índice
-  está desactualizado nunca sirve datos viejos: los recalcula al vuelo
+  `renders.yaml`, Aplicar, Corregir) deja los archivos en el working tree; el
+  índice se regenera (incremental) **justo antes del commit** de **Cambios**
+  y entra solo en ese mismo commit.
+- **Al cargar**, ISoT compara el manifiesto con los archivos **del working
+  tree** (incluidos los guardados sin commit). Si el índice está
+  desactualizado nunca sirve datos viejos: los recalcula al vuelo
   (incremental) y muestra el aviso **Índice desactualizado**; con edición, el
-  botón **Reindexar** lo deja commiteado en una rama `wizard/…`.
+  botón **Regenerar índice** lo escribe en el working tree (se commitea desde
+  **Cambios**).
 - `isot index` es **incremental** (solo reparsea los grupos cuya huella
   cambió; `--full` rehace todo, `--status` informa sin escribir) e
   `isot index --check` es la comprobación estricta byte a byte que usa la CI.
@@ -495,8 +500,9 @@ nuevos trae.*
 
 ### Edición con wizards
 
-La UI no escribe YAML hasta que confirmas, y solo en una rama `wizard/…` del
-repositorio de datos activo. Para encender los wizards:
+La UI no escribe YAML hasta que confirmas, y entonces solo en el working tree
+del repositorio de datos activo; el commit se hace aparte desde **Cambios**,
+en una rama `wizard/…`. Para encender los wizards:
 
 ```bash
 ISOT_EDIT=1 ./scripts/serve.sh --edit   # o edit.enabled: true en isot.yaml
@@ -510,15 +516,30 @@ Sitios / Kubernetes / Comparar **con el mismo sitio**.
 
 #### Flujo Git
 
-El preview corre en memoria (nada se escribe). **Confirmar** crea, en el
-repositorio de datos, una rama `wizard/<descripcion>` desde HEAD, escribe
-YAML + índices, corre el validador y hace commit con tu identidad git
-(`user.name` / `user.email`; si no hay, «ISoT Wizard»). Con `edit.push: true`
-la rama se publica con `git push -u` y tus credenciales; si el push falla el
-commit queda local y la UI lo informa. Si el validador falla: `git reset --hard`, se borra la rama y
-no queda rastro. Nunca escribe en `main` ni en la rama de trabajo. Después
-abre **Comparar** con base = la rama actual y head = `wizard/…` (verde
-agregado, amarillo afectado).
+Guardar y hacer commit son **dos acciones separadas**, para que puedas
+acumular varios cambios (varios renders, plantillas, `renders.yaml`, altas
+con wizards, correcciones) y hacer un solo commit.
+
+1. **Guardar** (wizards, Corregir, Guardar en el repo, Aplicar, plantillas,
+   `renders.yaml`). El preview corre en memoria y muestra el diff por archivo.
+   Al confirmar, ISoT escribe los archivos **solo en el working tree** del
+   repositorio de datos (sin commit, sin cambiar de rama) y corre el
+   validador; si aparecen errores nuevos restaura los archivos tal como
+   estaban. Si un archivo que se va a sobrescribir ya tiene cambios sin
+   commit, el diálogo lo avisa con su diff. Si el working tree cambió entre
+   el preview y la confirmación (otra pestaña, tu editor), ISoT no escribe:
+   vuelve a calcular y te muestra el diff nuevo.
+2. **Cambios (N)** en la barra superior (solo con edición) lista el `git
+   status` agrupado por área (salida de renders, plantillas, `renders.yaml`,
+   datos de sitios, índice) con diff por archivo, **Descartar** por archivo
+   (con confirmación), casillas para elegir qué entra y el mensaje de commit.
+   **Commit** va a la rama actual si es `wizard/…`; si no, crea
+   `wizard/<slug>` desde HEAD. Nunca hace commit en `main`/`master` ni en una
+   rama protegida. El índice se regenera (incremental) justo antes y se
+   incluye solo. Usa tu identidad git (`user.name` / `user.email`; si no hay,
+   «ISoT Wizard»). Por defecto sigues en la rama nueva (puedes volver a la
+   original); el resultado ofrece **Comparar base → rama**. No hay push:
+   publica la rama y abre el PR/MR con tu flujo Git habitual.
 
 #### Autoasignación por rol
 
@@ -557,7 +578,7 @@ Confirmar. Grafo oculto y ancho del panel se guardan con el borrador.
 Wizard activo, paso, campos, reglas y preview viven en el estado de la app y
 en `sessionStorage` (`isot.wizard.session`). Cambiar de pestaña o recargar no
 tira el avance. Un badge **borrador** en Editar indica que hay un wizard en
-curso; **Descartar borrador** pide confirmación. Un commit exitoso limpia el
+curso; **Descartar borrador** pide confirmación. Guardar con éxito limpia el
 borrador.
 
 ![Wizard sitio: paso Arquitectura](docs/images/wizard-site-architecture.png)
@@ -611,15 +632,15 @@ lo que quieras) **sin salir de la web**. Tiene cuatro sub-pestañas enlazables
   de solo lectura y clonables), editor por archivo con errores por línea,
   **preview en vivo** por sitio/clúster/instancia y explorador del contexto.
   La preview no escribe nada; muestra `Destino: … · en repo: al día |
-  desfasado | no existe` y, con edición, **Guardar en el repo** (lo mismo que
-  Aplicar para esa instancia, con diff por archivo y commit en `wizard/…`; si
-  no hay instancia con esos parámetros, la crea en `renders.yaml` en el mismo
-  commit).
+  desfasado | no existe | guardado sin commit` y, con edición, **Guardar en
+  el repo** (lo mismo que Aplicar para esa instancia, con diff por archivo,
+  escrito en el working tree; si no hay instancia con esos parámetros, la
+  crea en `renders.yaml`). El commit se hace después desde **Cambios**.
 - **Diff**: render fresco contra la carpeta destino **de este mismo repo de
   datos** (`rendered/` por defecto, configurable con `target_dir` global o por
   instancia): árbol con *nuevo / modificado / igual / huérfano* y diff
   unificado o lado a lado. **Aplicar** (solo con edición) muestra el diff y
-  hace commit en una rama `wizard/…` del mismo repo de datos.
+  escribe en el working tree del mismo repo de datos.
 - **Guía**: [docs/renders/GUIDE.md](docs/renders/GUIDE.md) (personas) y
   [docs/llm/RENDERS.md](docs/llm/RENDERS.md) (LLMs) dentro de la UI.
 
@@ -640,7 +661,8 @@ guarda cachés ni salidas propias.
 **Un solo repositorio por render**: los renders funcionan enteramente dentro
 del mismo repo de datos. La carpeta destino es siempre una carpeta de ese
 repo (`rendered/` por defecto, o el `target_dir` de la instancia) y
-«Aplicar» hace commit en una rama `wizard/…` de ese mismo repo. ISoT nunca
+«Aplicar» escribe en el working tree de ese mismo repo (el commit, desde
+**Cambios**, va a una rama `wizard/…` de ese repo). ISoT nunca
 mueve ni escribe nada de un repositorio a otro: no hay repos destino.
 
 ![Renders: resumen con conteos y drift](docs/images/renders-summary.png)
@@ -738,8 +760,8 @@ data_repo:
 templates: []                   # carpetas extra de cluster-templates (opcional)
 edit:
   enabled: false                # wizards (también --edit o ISOT_EDIT=1)
-  push: false                   # true: git push -u de la rama wizard/… con tus credenciales
-  push_remote: origin
+  push: false                   # ignorado: ISoT nunca hace push (se acepta por compatibilidad)
+  push_remote: origin           # ignorado
 ui:
   title: null
 ```
@@ -758,11 +780,10 @@ el repo no tiene; no entran en el `_template_index.json` del repo de datos.
 
 - ISoT **no guarda credenciales**, no clona con tokens y no tiene usuarios
   propios. Lee el clon local con los permisos del usuario que lo ejecuta.
-- Toda operación git (`rev-parse`, `archive`, `log`, ramas `wizard/…`,
-  commit y el push opcional) corre en el repositorio de datos con tu
-  `git config` y tu credential helper / ssh-agent. El push está apagado por
-  defecto, solo publica ramas `wizard/*` y corre con
-  `GIT_TERMINAL_PROMPT=0` (nunca pide contraseñas).
+- Toda operación git (`rev-parse`, `archive`, `log`, `status`, ramas
+  `wizard/…` y commit) corre en el repositorio de datos con tu `git config`.
+  ISoT **nunca hace push** (`edit.push` se ignora): publicar la rama es cosa
+  tuya.
 - Quién puede leer, aprobar o fusionar cambios lo decide el repositorio de
   datos (permisos, ramas protegidas, revisiones, CI). ISoT nunca escribe en
   `main` ni en la rama de trabajo.
@@ -877,15 +898,20 @@ usan el repositorio por defecto): `/api/health`, `/api/repos`,
 y `global`), `/api/findings?base=&head=[&site=]`, `/api/rules`,
 `/api/link?source=&target=[&base=&head=]`.
 Con edición: `GET /api/wizard/status`, `GET /api/wizard/cabling-defaults`,
-`POST /api/wizard/device/preview|commit`, `POST /api/wizard/site/preview|commit`.
+`POST /api/wizard/device/preview|save`, `POST /api/wizard/site/preview|save`
+(guardan en el working tree). Cambios: `GET /api/worktree` (git status por
+área, rama destino), `GET /api/worktree/diff?path=`, `POST /api/worktree/discard`
+`{paths, tokens?}`, `POST /api/worktree/commit` `{paths?, message, target:
+current|new, branch_name?, stay?}`.
 Renders: `GET /api/renders[?ref=]`, `/api/renders/templates[/{id}[?source=repo|bundled]]`,
 `/api/renders/templates/{id}/clone?new_id=`, `/api/renders/context?site=&cluster=`,
 `POST /api/renders/preview`, `/api/renders/diff?instance=&target_ref=&ref=`,
 `/api/renders/compare?base=&head=[&instance=]`, `POST /api/renders/save/status`
 (destino de la preview y su estado en el repo),
 `/api/renders/config`, `/api/renders/guide?doc=human|llm`; con edición
-`POST /api/renders/templates/save|config|apply|save/preview|commit` (siempre en una
-rama `wizard/…`).
+`POST /api/renders/templates/save|config|apply|save` + `/preview` y `/write`
+(escriben en el working tree; `/write` lleva el `token` del preview y responde
+409 si el working tree cambió).
 
 ### Desarrollo de la herramienta
 

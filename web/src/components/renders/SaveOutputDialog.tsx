@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 
+import { isConflict, notifyWorktreeChanged, openChanges } from "../../api";
 import { rendersApi } from "../../rendersApi";
 import type { SaveBody, SavePlan, SaveResult, SaveStatus } from "../../rendersTypes";
-import { errorMessage, StatusBadge, UnifiedDiff } from "./common";
+import { CONFLICT_NOTICE, errorMessage, PendingNote, StatusBadge, UnifiedDiff } from "./common";
 
 type Props = {
   body: SaveBody;
   status: SaveStatus | null;
   onClose: () => void;
   onDone: (result: SaveResult) => void;
-  /** Revisar el resultado: Diff con base = rama nueva y head = Local, o Comparar base → rama. */
+  /** Revisar lo guardado: Comparar con base = la rama actual (HEAD) y head = Local (working tree). */
   onReview: (refs: { base: string; head: string }) => void;
 };
 
@@ -17,14 +18,16 @@ const ACTION_LABEL: Record<string, string> = { write: "se escribe", delete: "se 
 
 /**
  * «Guardar en el repo» desde la preview: igual que Diff → Aplicar para esta instancia.
- * Muestra destino, estado y diff por archivo; commit en una rama wizard/… del mismo repo.
+ * Muestra destino, estado y diff por archivo y escribe en el working tree (sin commit);
+ * el commit es aparte, desde «Cambios» en la barra superior.
  */
 export function SaveOutputDialog({ body, status, onClose, onDone, onReview }: Props) {
   const needsInstance = Boolean(status?.needs_instance);
   const [createInstance, setCreateInstance] = useState(false);
   const [newId, setNewId] = useState(status?.new_instance?.id ?? "");
   const [prune, setPrune] = useState(false);
-  const [message, setMessage] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
   const [plan, setPlan] = useState<SavePlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -58,17 +61,24 @@ export function SaveOutputDialog({ body, status, onClose, onDone, onReview }: Pr
       window.clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, createInstance, newId, prune]);
+  }, [ready, createInstance, newId, prune, reload]);
 
   const confirm = async () => {
     setBusy(true);
     setError(null);
     try {
-      const value = await rendersApi.saveCommit({ ...request, message: message.trim() || undefined });
+      const value = await rendersApi.saveWrite({ ...request, token: plan?.token });
       setResult(value);
+      notifyWorktreeChanged();
       onDone(value);
     } catch (err) {
-      setError(errorMessage(err));
+      if (isConflict(err)) {
+        // El working tree cambió entre la vista previa y el guardado: se recalcula el diff.
+        setNotice(CONFLICT_NOTICE);
+        setReload((value) => value + 1);
+      } else {
+        setError(errorMessage(err));
+      }
     } finally {
       setBusy(false);
     }
@@ -90,8 +100,9 @@ export function SaveOutputDialog({ body, status, onClose, onDone, onReview }: Pr
         </header>
         <p className="muted">
           Escribe lo que renderiza <code>{body.template}</code> para <code>{body.site}{body.cluster ? `/${body.cluster}` : ""}</code> en su carpeta destino de
-          este mismo repo de datos, con su <code>.isot-render.json</code>, en una rama <code>wizard/…</code> nueva
-          {body.branch ? <> (continúa <code>{body.branch}</code>)</> : null}. El índice se regenera en el mismo commit. Nunca escribe en main ni en otro repo.
+          este mismo repo de datos, con su <code>.isot-render.json</code>, en el <strong>working tree local</strong> (sin commit). Puedes
+          guardar varias cosas y luego hacer <strong>un</strong> commit desde <strong>Cambios</strong> (barra superior), en una rama{" "}
+          <code>wizard/…</code>. Nunca escribe en otro repo.
         </p>
 
         {needsInstance && !result ? (
@@ -111,11 +122,12 @@ export function SaveOutputDialog({ body, status, onClose, onDone, onReview }: Pr
             ) : null}
             <label className="checkbox">
               <input type="checkbox" id="save-create-instance" checked={createInstance} onChange={(event) => setCreateInstance(event.target.checked)} />
-              <span>Crear instancia con estos parámetros (se añade a renders.yaml en el mismo commit)</span>
+              <span>Crear instancia con estos parámetros (se añade a renders.yaml, en el mismo guardado)</span>
             </label>
           </div>
         ) : null}
 
+        {notice ? <p className="pending-warning is-conflict" id="save-conflict">{notice}</p> : null}
         {error ? <p className="error">{error}</p> : null}
         {ready && !plan && !error && !result ? <p className="muted">Calculando cambios…</p> : null}
 
@@ -139,7 +151,9 @@ export function SaveOutputDialog({ body, status, onClose, onDone, onReview }: Pr
                 <details key={file.path} open={open === file.path} onToggle={(event) => event.currentTarget.open && setOpen(file.path)}>
                   <summary>
                     <StatusBadge status={file.status} /> <code>{file.path}</code> <span className="muted">· {ACTION_LABEL[file.action]}</span>
+                    {file.pending ? <span className="pending-flag"> ⚠ sin commit</span> : null}
                   </summary>
+                  <PendingNote pending={file.pending} />
                   {file.diff ? <UnifiedDiff diff={file.diff} /> : <p className="muted">Igual que en el repo.</p>}
                 </details>
               ))}
@@ -147,7 +161,9 @@ export function SaveOutputDialog({ body, status, onClose, onDone, onReview }: Pr
                 <details key={file.path} open={open === file.path} onToggle={(event) => event.currentTarget.open && setOpen(file.path)}>
                   <summary>
                     <StatusBadge status={file.status} /> <code>{file.path}</code> <span className="muted">· se escribe</span>
+                    {file.pending ? <span className="pending-flag"> ⚠ sin commit</span> : null}
                   </summary>
+                  <PendingNote pending={file.pending} />
                   <UnifiedDiff diff={file.diff} />
                 </details>
               ))}
@@ -158,10 +174,6 @@ export function SaveOutputDialog({ body, status, onClose, onDone, onReview }: Pr
                 <span>borrar los {orphans} huérfano(s) (están en el destino pero el render ya no los genera)</span>
               </label>
             ) : null}
-            <label className="save-message">
-              <span>Mensaje del commit (opcional)</span>
-              <input id="save-message" value={message} placeholder={`renders: guardar ${plan.instance}`} onChange={(event) => setMessage(event.target.value)} />
-            </label>
             {!plan.changes ? <p className="muted">La carpeta destino ya está al día: no hay nada que guardar.</p> : null}
           </>
         ) : null}
@@ -169,23 +181,33 @@ export function SaveOutputDialog({ body, status, onClose, onDone, onReview }: Pr
         {result ? (
           <div className="render-result" id="save-output-result">
             <p>
-              ✔ Commit <code>{result.short}</code> en la rama <code>{result.branch}</code>
-              {result.created ? " (nueva)" : " (continuada)"} · destino <code>{result.dir}/</code>
+              ✔ Guardado en el working tree ({result.files.length} archivo(s), <strong>sin commit</strong>) · destino{" "}
+              <code>{result.dir}/</code>
               {result.created_instance ? <> · instancia <code>{result.instance}</code> añadida a renders.yaml</> : null}.
             </p>
-            {result.push ? <p className={result.push.ok ? "muted" : "error"}>Push: {result.push.message}</p> : null}
-            <p className="muted">Tu working tree sigue en {result.base}. Revisa la rama y ábrela como PR/MR desde tu flujo Git habitual.</p>
+            <p className="muted">
+              Cambios pendientes en <code>{result.branch}</code>: {result.pending}. Sigue guardando lo que necesites y haz un solo commit
+              desde <strong>Cambios</strong>.
+            </p>
           </div>
         ) : null}
 
         <div className="wizard-actions">
           {result ? (
             <>
-              <button type="button" className="primary" onClick={() => onReview({ base: result.branch, head: "local" })} title="Diff con base = la rama nueva y head = Local">
-                Ver en Diff (rama → Local)
+              <button
+                type="button"
+                className="primary"
+                id="save-open-changes"
+                onClick={() => {
+                  onClose();
+                  openChanges();
+                }}
+              >
+                Abrir Cambios (commit)
               </button>
-              <button type="button" onClick={() => onReview({ base: result.base, head: result.branch })} title={`Comparar ${result.base} → ${result.branch}`}>
-                Comparar {result.base} → rama
+              <button type="button" onClick={() => onReview({ base: result.branch, head: "local" })} title={`Comparar ${result.branch} (HEAD) → Local: lo guardado sin commit`}>
+                Ver en Comparar ({result.branch} → Local)
               </button>
               <button type="button" onClick={onClose}>
                 Cerrar
@@ -194,7 +216,7 @@ export function SaveOutputDialog({ body, status, onClose, onDone, onReview }: Pr
           ) : (
             <>
               <button type="button" className="primary" id="save-confirm" disabled={busy || !plan || !plan.changes} onClick={confirm}>
-                {busy ? "Guardando…" : "Confirmar y hacer commit"}
+                {busy ? "Guardando…" : "Guardar en el working tree"}
               </button>
               <button type="button" onClick={onClose}>
                 Cancelar

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { api } from "../api";
+import { api, notifyWorktreeChanged, WORKTREE_EVENT } from "../api";
 import type { IndexStatus } from "../types";
 
 type Props = {
@@ -11,8 +11,9 @@ type Props = {
 };
 
 /**
- * Aviso de índice desactualizado: el backend ya sirve un índice recalculado al vuelo
- * (nunca datos viejos en silencio); con edición, «Reindexar» lo deja commiteado en una rama wizard/….
+ * Aviso de índice desactualizado: el backend ya sirve un índice recalculado al vuelo sobre el
+ * working tree (incluidos los cambios sin commit; nunca datos viejos en silencio). Con edición,
+ * «Regenerar índice» lo escribe en el working tree; además se regenera solo al hacer commit.
  */
 export function IndexBanner({ editEnabled, refreshKey, onReindexed }: Props) {
   const [status, setStatus] = useState<IndexStatus | null>(null);
@@ -21,6 +22,12 @@ export function IndexBanner({ editEnabled, refreshKey, onReindexed }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [hiddenKey, setHiddenKey] = useState<string | null>(null);
 
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setTick((value) => value + 1);
+    window.addEventListener(WORKTREE_EVENT, bump);
+    return () => window.removeEventListener(WORKTREE_EVENT, bump);
+  }, []);
   useEffect(() => {
     let cancelled = false;
     api
@@ -30,7 +37,7 @@ export function IndexBanner({ editEnabled, refreshKey, onReindexed }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [refreshKey]);
+  }, [refreshKey, tick]);
 
   if (message && status?.fresh !== false) {
     return (
@@ -52,7 +59,8 @@ export function IndexBanner({ editEnabled, refreshKey, onReindexed }: Props) {
     setError(null);
     try {
       const result = await api.reindex();
-      setMessage(result.branch ? `Índice regenerado y commiteado en ${result.branch}.` : (result.message ?? "El índice ya está al día."));
+      setMessage(result.message ?? "El índice ya está al día.");
+      notifyWorktreeChanged();
       onReindexed();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -66,12 +74,14 @@ export function IndexBanner({ editEnabled, refreshKey, onReindexed }: Props) {
       <strong>Índice desactualizado</strong>
       <span>
         {" "}
-        — los archivos del repo cambiaron desde el último <code>isot index</code>; los datos se calculan al vuelo.
+        — los archivos del repo cambiaron desde el último <code>isot index</code>
+        {status.uncommitted ? <> (incluidos {status.uncommitted} cambio(s) sin commit del working tree)</> : null}; los datos se
+        calculan al vuelo y el índice se regenera solo al hacer commit desde <strong>Cambios</strong>.
         {what ? <span className="muted"> ({what}{status.stale.length > 4 ? " …" : ""})</span> : null}
       </span>
       {editEnabled && status.can_reindex ? (
         <button type="button" className="primary" id="index-reindex" disabled={busy} onClick={() => void reindex()}>
-          {busy ? "Reindexando…" : "Reindexar"}
+          {busy ? "Regenerando…" : "Regenerar índice"}
         </button>
       ) : (
         <span className="muted"> Ejecuta <code>isot index</code> y commitea los índices.</span>

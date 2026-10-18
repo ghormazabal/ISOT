@@ -269,22 +269,22 @@ def test_api_dashboard_templates_and_context(data_repo: Path) -> None:
 
 def test_api_read_only_refuses_writes(data_repo: Path) -> None:
     client = TestClient(create_app(data_repo))
-    for url in ("/api/renders/templates/save/commit", "/api/renders/config/commit", "/api/renders/apply/commit"):
+    for url in ("/api/renders/templates/save/write", "/api/renders/config/write", "/api/renders/apply/write", "/api/renders/save/write", "/api/worktree/commit", "/api/worktree/discard"):
         assert client.post(url, json={"id": "x"}).status_code == 403
 
 
-def test_api_apply_writes_branch_and_then_in_sync(data_repo: Path) -> None:
+def test_api_apply_writes_worktree_and_then_in_sync(data_repo: Path) -> None:
     client = TestClient(create_app(data_repo, edit=True))
     preview = client.post("/api/renders/apply/preview", json={}).json()
     assert any(f["path"].endswith(SIDECAR) for f in preview["files"])
     assert all(f["path"].startswith("rendered/") for f in preview["files"])
-    result = client.post("/api/renders/apply/commit", json={})
+    result = client.post("/api/renders/apply/write", json={"token": preview["token"]})
     assert result.status_code == 200, result.text
-    branch = result.json()["branch"]
-    assert branch.startswith("wizard/")
+    assert result.json()["saved"] is True and "sha" not in result.json()
     assert git(data_repo, "rev-parse", "--abbrev-ref", "HEAD") == "main"
-    assert not (data_repo / "rendered").exists()
-    diff = client.get("/api/renders/diff", params={"target_ref": branch}).json()
+    assert (data_repo / "rendered").is_dir()  # en el working tree, sin commit
+    assert client.post("/api/renders/apply/write", json={}).status_code == 400  # ya al día
+    diff = client.get("/api/renders/diff").json()
     assert diff["drift"] == 0 and diff["in_sync"] == 7
     sidecar = diff["instances"][0]["sidecar"]
     assert sidecar["generated_by"] == "ISoT" and sidecar["source_commit"]
@@ -307,11 +307,13 @@ def test_per_instance_target_dir_stays_in_the_same_repo(data_repo: Path) -> None
     entry = diff["instances"][0]
     assert entry["dir"] == "gitops/clusters/site1/site/chrony-conf"
     assert {f["path"]: f["status"] for f in entry["files"]} == {"chrony.conf": "new", "old.conf": "orphaned"}
-    result = client.post("/api/renders/apply/commit", json={"instances": ["site1-chrony"], "prune": True})
+    result = client.post("/api/renders/apply/write", json={"instances": ["site1-chrony"], "prune": True})
     assert result.status_code == 200, result.text
-    listed = git(data_repo, "ls-tree", "-r", "--name-only", result.json()["branch"])
-    assert "gitops/clusters/site1/site/chrony-conf/chrony.conf" in listed
-    assert "gitops/clusters/site1/site/chrony-conf/old.conf" not in listed
+    assert (data_repo / "gitops/clusters/site1/site/chrony-conf/chrony.conf").is_file()
+    assert not (data_repo / "gitops/clusters/site1/site/chrony-conf/old.conf").exists()
+    status = {f["path"]: f["status"] for f in client.get("/api/worktree").json()["files"]}
+    assert status["gitops/clusters/site1/site/chrony-conf/old.conf"] == "deleted"
+    assert status["gitops/clusters/site1/site/chrony-conf/chrony.conf"] == "untracked"
     bad = client.post("/api/renders/config/preview", json={"upsert_instance": {"id": "x", "template": "chrony-conf", "site": "site1", "target_dir": "../otro-repo"}}).json()
     assert bad["errors"]
 
@@ -338,44 +340,46 @@ def test_api_template_save_and_config_upsert(data_repo: Path) -> None:
     body = {"id": "netplan-mine", "spec_text": clone["spec_text"], "files": clone["file_contents"]}
     preview = client.post("/api/renders/templates/save/preview", json=body).json()
     assert {f["status"] for f in preview["files"]} == {"new"}
-    saved = client.post("/api/renders/templates/save/commit", json=body)
+    saved = client.post("/api/renders/templates/save/write", json={**body, "token": preview["token"]})
     assert saved.status_code == 200, saved.text
-    branch = saved.json()["branch"]
-    assert "manifest-templates/netplan-mine/template.yaml" in git(data_repo, "ls-tree", "-r", "--name-only", branch)
-    invalid = client.post("/api/renders/templates/save/commit", json={**body, "spec_text": "scope: nope\n"})
+    assert (data_repo / "manifest-templates/netplan-mine/template.yaml").is_file()
+    invalid = client.post("/api/renders/templates/save/write", json={**body, "spec_text": "scope: nope\n"})
     assert invalid.status_code == 400
-    upsert = {"upsert_instance": {"id": "site1-mine", "template": "netplan-mine", "site": "site1", "cluster": "site1-apps"}, "branch": branch}
+    upsert = {"upsert_instance": {"id": "site1-mine", "template": "netplan-mine", "site": "site1", "cluster": "site1-apps"}}
     preview = client.post("/api/renders/config/preview", json=upsert).json()
     assert preview["errors"] == [] and "site1-mine" in preview["text"]
-    committed = client.post("/api/renders/config/commit", json=upsert)
+    committed = client.post("/api/renders/config/write", json=upsert)
     assert committed.status_code == 200, committed.text
-    assert committed.json()["branch"] == branch and committed.json()["created"] is False
-    on_branch = client.get("/api/renders", params={"ref": branch}).json()
-    assert any(r["id"] == "site1-mine" and r["status"] == "ok" for r in on_branch["rows"])
+    local = client.get("/api/renders").json()
+    assert any(r["id"] == "site1-mine" and r["status"] == "ok" for r in local["rows"])
     bad = client.post("/api/renders/config/preview", json={"text": "target_dir: ../up\n"}).json()
     assert bad["errors"]
 
 
-def test_api_writes_continuing_a_branch_read_that_branch(data_repo: Path) -> None:
-    """Al continuar una rama wizard/…, el estado actual se lee de esa rama, no del working tree."""
+def test_api_writes_only_with_local_head(data_repo: Path) -> None:
+    """Guardar escribe en el working tree: viendo otra ref (o pidiendo una rama) se rechaza."""
     client = TestClient(create_app(data_repo, edit=True))
     first = {"upsert_instance": {"id": "chrony-first", "template": "chrony-conf", "site": "site1"}}
-    branch = client.post("/api/renders/config/commit", json=first).json()["branch"]
-    assert git(data_repo, "branch", "--show-current") == "main"
-    second = {"upsert_instance": {"id": "chrony-second", "template": "chrony-conf", "site": "site1"}, "branch": branch}
+    for extra in ({"branch": "wizard/x"}, {"ref": "main"}):
+        assert client.post("/api/renders/config/write", json={**first, **extra}).status_code == 400
+    assert client.post("/api/renders/config/write", json={**first, "ref": "local"}).status_code == 200
+    second = {"upsert_instance": {"id": "chrony-second", "template": "chrony-conf", "site": "site1"}}
     preview = client.post("/api/renders/config/preview", json=second).json()
     assert "chrony-first" in preview["text"] and "chrony-second" in preview["text"]
-    assert client.post("/api/renders/config/commit", json=second).status_code == 200
-    text = git(data_repo, "show", f"{branch}:renders.yaml")
-    assert "chrony-first" in text and "chrony-second" in text
-    assert "chrony-first" not in (data_repo / "renders.yaml").read_text()
-    same = client.post("/api/renders/config/commit", json={**second})
-    assert same.status_code == 400  # nada cambia
-    spec = client.get("/api/renders/templates/chrony-conf").json()
-    body = {"id": "chrony-conf", "spec_text": spec["spec_text"], "files": {**spec["file_contents"], "chrony.conf.j2": "pool x\n"}, "branch": branch}
-    assert client.post("/api/renders/templates/save/commit", json=body).status_code == 200
-    again = client.post("/api/renders/templates/save/preview", json=body).json()
-    assert again["files"] == []  # en la rama ya está así
+    # renders.yaml ya tiene cambios sin commit: la preview avisa con su diff vs HEAD
+    assert preview["files"][0]["pending"]["status"] == "modified" and "chrony-first" in preview["files"][0]["pending"]["diff"]
+    assert client.post("/api/renders/config/write", json=second).status_code == 200
+    assert client.post("/api/renders/config/write", json=second).status_code == 400  # nada cambia
+    # concurrencia: el archivo cambia por fuera entre la preview y el guardado
+    third = {"upsert_instance": {"id": "chrony-third", "template": "chrony-conf", "site": "site1"}}
+    token = client.post("/api/renders/config/preview", json=third).json()["token"]
+    path = data_repo / "renders.yaml"
+    path.write_text(path.read_text() + "# a mano\n")
+    conflict = client.post("/api/renders/config/write", json={**third, "token": token})
+    assert conflict.status_code == 409
+    fresh = client.post("/api/renders/config/preview", json=third).json()
+    assert "a mano" in fresh["files"][0]["pending"]["diff"]
+    assert client.post("/api/renders/config/write", json={**third, "token": fresh["token"]}).status_code == 200
 
 
 # -------------------------------------------------------------------- reglas

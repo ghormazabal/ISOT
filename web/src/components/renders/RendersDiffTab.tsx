@@ -11,7 +11,6 @@ type Props = {
   refName: string | null;
   /** Comparar global (barra superior): head = datos que se renderizan; base = destino / salida contra la que se compara. */
   compare: CompareRefs | null;
-  onCompare: (refs: CompareRefs) => void;
   version: number;
   write: WriteMode;
   instance: string | null;
@@ -29,7 +28,7 @@ type DiffView = "drift" | "output" | "files";
  * Render fresco vs carpeta destino: árbol con estados + diff unificado o lado a lado + aplicar.
  * Con Comparar activo: destino en base vs render en head, salida base→head, o templates/renders.yaml.
  */
-export function RendersDiffTab({ refName, compare, onCompare, version, write, instance, onInstance, onAfterCommit }: Props) {
+export function RendersDiffTab({ refName, compare, version, write, instance, onInstance, onAfterCommit }: Props) {
   const [view, setView] = useState<DiffView>("drift");
   const [wrap, setWrap] = useWrap();
   const targetRef = compare && !isLocalRef(compare.base) ? compare.base : "";
@@ -99,9 +98,9 @@ export function RendersDiffTab({ refName, compare, onCompare, version, write, in
     const body = { instances: instance ? [instance] : undefined, prune };
     setFlow({
       title: "Aplicar renders en este repo de datos",
-      description: `Escribe ${instance ? `la instancia ${instance}` : "todas las instancias con drift"} en su carpeta destino (${data?.target_dir ?? "rendered"}/ o la propia de la instancia) en una rama wizard/… nueva de este mismo repo${prune ? " y borra los huérfanos" : ""}. Cada carpeta lleva su .isot-render.json.`,
+      description: `Escribe ${instance ? `la instancia ${instance}` : "todas las instancias con drift"} en su carpeta destino (${data?.target_dir ?? "rendered"}/ o la propia de la instancia) del working tree de este mismo repo, sin commit${prune ? ", y borra los huérfanos" : ""}. Cada carpeta lleva su .isot-render.json.`,
       preview: () => rendersApi.applyPreview(body),
-      commit: () => rendersApi.applyCommit(body),
+      write: (token) => rendersApi.applyWrite({ ...body, token }),
     });
   };
 
@@ -239,9 +238,8 @@ export function RendersDiffTab({ refName, compare, onCompare, version, write, in
         <WriteDialog
           flow={flow}
           onClose={() => setFlow(null)}
-          onDone={(result) => {
-            // Destino tal como quedó en la rama wizard/… vs render local: debería verse en sync.
-            if (result.branch) onCompare({ base: result.branch, head: "local" });
+          onDone={() => {
+            // Guardado en el working tree: el Diff (Local) ya debería verse en sync.
             onAfterCommit();
           }}
         />

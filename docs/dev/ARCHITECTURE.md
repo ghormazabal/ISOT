@@ -24,8 +24,8 @@ flowchart LR
     repo[("sites/, cluster-templates/,<br/>manifest-templates/, renders.yaml,<br/>_ingest/, rendered/")]
   end
   core -->|lee working tree o refs| repo
-  core -->|commits en ramas wizard/…| repo
-  core -->|apply de renders en ramas wizard/… del mismo repo| repo
+  core -->|Guardar: escribe en el working tree| repo
+  core -->|Commit: rama wizard/… del mismo repo, sin push| repo
 ```
 
 ## Piezas
@@ -44,11 +44,12 @@ flowchart LR
   compara huellas (con caché de hashes por tamaño/mtime) y `IndexBuilder`
   reutiliza del disco los índices de los grupos sin cambios: reindexar es
   **incremental**. Si el índice está desfasado la API sirve un overlay en
-  memoria (`live_indexes`) y la UI muestra el aviso; nunca escribe en el
-  working tree por su cuenta (lo dejaría sucio y bloquearía los wizards).
-  Todas las escrituras (`wizard.commit_preview`, `renders.commit_files`,
-  Reindexar) llaman a `write_indexes` antes del commit. La regla IDX-001 y
-  `indexer --check` (CI) detectan índices commiteados desfasados.
+  memoria (`live_indexes`) y la UI muestra el aviso; las huellas se calculan
+  sobre el **working tree**, así que los guardados sin commit también lo
+  marcan. Nunca escribe índices por su cuenta: `worktree.commit` llama a
+  `write_indexes` (incremental) justo antes de cada commit y los incluye
+  («Regenerar índice» los escribe en el working tree a petición). La regla
+  IDX-001 y `indexer --check` (CI) detectan índices commiteados desfasados.
 - `isot/validator.py` integra integridad referencial, IPAM, cableado y
   reglas; `isot/schemas.py` genera los JSON Schema de `schemas/` **desde el
   código** (y `--check` verifica que estén al día).
@@ -73,18 +74,37 @@ derivado del inventario (`ContextBuilder`, `context_version: 1`, esquema en
 `schemas/render-context.schema.json`). `RenderService` resuelve instancias
 (`renders.yaml`) y su carpeta destino (`target_dir`), renderiza en memoria,
 compara contra la carpeta destino (`target_diff`) y prepara el «apply»
-(`apply_plan` + `commit_files`). Guías: [docs/renders/GUIDE.md](../renders/GUIDE.md),
+(`apply_plan`, escrito con `worktree.save_files`). Guías: [docs/renders/GUIDE.md](../renders/GUIDE.md),
 [docs/llm/RENDERS.md](../llm/RENDERS.md). Principio: **un render vive en un
 solo repo**; la carpeta destino es siempre una carpeta del mismo repo de datos
 y ISoT nunca escribe de un repositorio a otro.
 
-### Edición (`isot/wizard.py`)
-Los wizards (nuevo equipo, nuevo sitio, arreglar un hallazgo) y las
-escrituras de renders calculan un **preview en memoria** (diff + grafo +
-hallazgos nuevos) y, al confirmar, hacen commit en una rama nueva
-`wizard/<slug>` (o continúan una rama `wizard/…`), vuelven a la rama
-original y nunca tocan ramas protegidas. El push es opcional
-(`edit.push`), solo de ramas `wizard/`.
+### Edición: Guardar vs Commit (`isot/wizard.py`, `isot/worktree.py`)
+Guardar y hacer commit son acciones separadas:
+
+- **Guardar.** Los wizards (nuevo equipo, nuevo sitio, Corregir un hallazgo)
+  y las escrituras de renders (Guardar en el repo, Aplicar, plantillas,
+  `renders.yaml`) calculan un **preview en memoria** (diff + grafo +
+  hallazgos nuevos) con un `token` (sha1 de ruta, hash en disco y hash
+  nuevo de cada archivo). Al confirmar, `worktree.save_files` vuelve a
+  comprobar el token (si el working tree cambió → `ConflictError`, HTTP 409,
+  la UI re-previsualiza), valida rutas (`check_paths`: dentro del repo de
+  datos y del prefijo permitido, sin `..`, `.git` ni symlinks que escapen;
+  nunca la instalación de ISoT) y escribe **solo en el working tree**, sin
+  cambiar de rama. `wizard.save_preview` guarda con `snapshot`/`restore`:
+  si el validador da errores nuevos, restaura los archivos. Ya no se exige
+  árbol limpio: el preview marca con `pending` (y su diff) los archivos que
+  ya tenían cambios sin commit.
+- **Commit.** `worktree.summary` agrupa el `git status` por área (salida de
+  renders, plantillas, `renders.yaml`, sitios, índice). `worktree.commit`
+  hace commit de todo lo pendiente o de una selección: en la rama actual si
+  es `wizard/…`, si no en `wizard/<slug>` nueva desde HEAD; rechaza
+  `main`/`master` y ramas no `wizard/`. Regenera el índice justo antes (para
+  una selección, lo calcula sobre `git archive HEAD` + los archivos
+  elegidos, así el índice commiteado es coherente con el árbol commiteado).
+  Ante un fallo deshace con `git reset` y borra la rama creada (nunca
+  `reset --hard`). `worktree.discard` restaura archivos desde HEAD (o borra
+  los nuevos). No hay push: `edit.push` se ignora.
 
 ### Git y Comparar (`isot/refs.py`, `isot/gitdiff.py`, `isot/compare.py`)
 Todo Comparar usa base/head donde cualquiera puede ser `local` (working
@@ -134,11 +154,12 @@ añaden el prefijo `/api/repos/{id}`.
    con remediaciones que la UI convierte en acciones («abrir», «arreglar con
    wizard»).
 3. **Edición**: formulario → `POST …/preview` (sin escribir) → diff y
-   hallazgos nuevos → `POST …/commit` → rama `wizard/…` → revisión y merge
-   en el repo de datos (PR/MR, CI con el workflow reutilizable).
+   hallazgos nuevos → `POST …/save` (working tree) → … más guardados … →
+   **Cambios** → `POST /api/worktree/commit` → rama `wizard/…` → revisión y
+   merge en el repo de datos (PR/MR, CI con el workflow reutilizable).
 4. **Renders**: template + instancia + contexto → archivos en memoria →
-   diff contra la carpeta destino del mismo repo → «aplicar» en una rama
-   `wizard/…` de ese mismo repo.
+   diff contra la carpeta destino del mismo repo → «Guardar/Aplicar» en el
+   working tree de ese mismo repo → commit desde **Cambios**.
 
 ## Por qué está diseñado así
 
@@ -153,9 +174,11 @@ añaden el prefijo `/api/repos/{id}`.
   datos, nunca a otro repositorio ni a la instalación de ISoT (se rechaza por código y
   hay tests de ello). Esto evita mezclar datos de clientes con la
   herramienta.
-- **Edición vía ramas.** Nada escribe en `main`: los wizards y renders
-  proponen ramas `wizard/…` que una persona revisa. El árbol debe estar
-  limpio y se vuelve a la rama original tras el commit.
+- **Guardar en el working tree, commit aparte en ramas.** Guardar no hace
+  commit, para poder juntar varios cambios (renders, plantillas,
+  `renders.yaml`, wizards) en un solo commit y revisarlos con Comparar →
+  Local antes. El commit nunca va a `main`: los wizards y renders proponen
+  ramas `wizard/…` que una persona revisa y publica (ISoT no hace push).
 - **Render determinista y en sandbox.** Jinja2 `SandboxedEnvironment` +
   `StrictUndefined`: un template no puede ejecutar código ni leer archivos,
   y una variable inexistente es un error con archivo:línea en lugar de una

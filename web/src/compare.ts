@@ -68,7 +68,7 @@ export function swapRefs(refs: CompareRefs): CompareRefs {
   return { base: refs.head, head: refs.base };
 }
 
-/** Escribir solo tiene sentido sobre el working tree (o continuando una rama wizard/…). */
+/** Guardar escribe en el working tree: solo con head = Local. */
 export function headIsWritable(refs: CompareRefs | null): boolean {
-  return !refs || isLocalRef(refs.head) || refs.head.startsWith("wizard/");
+  return !refs || isLocalRef(refs.head);
 }

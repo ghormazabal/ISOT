@@ -1,4 +1,4 @@
-import { repoUrl } from "./api";
+import { ApiError, repoUrl } from "./api";
 import type {
   RenderInstance,
   RenderPreview,
@@ -26,7 +26,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     } catch {
       /* respuesta no JSON */
     }
-    throw new Error(detail);
+    throw new ApiError(detail, response.status);
   }
   return response.json() as Promise<T>;
 }
@@ -58,8 +58,8 @@ export type ConfigBody = {
   settings?: { target_dir?: string };
   upsert_instance?: Partial<RenderInstance> & { id: string; template: string; site: string };
   remove_instance?: string;
-  branch?: string | null;
   description?: string;
+  token?: string;
 };
 
 export type TemplateSaveBody = {
@@ -67,10 +67,10 @@ export type TemplateSaveBody = {
   spec_text?: string;
   files?: Record<string, string>;
   delete_template?: boolean;
-  branch?: string | null;
+  token?: string;
 };
 
-export type ApplyBody = { instances?: string[]; prune?: boolean; branch?: string | null };
+export type ApplyBody = { instances?: string[]; prune?: boolean; token?: string };
 
 export const rendersApi = {
   dashboard: (ref?: string | null) => request<RendersDashboard>(`/api/renders${query({ ref })}`),
@@ -91,12 +91,12 @@ export const rendersApi = {
   config: (ref?: string | null) =>
     request<{ path: string; exists: boolean; text: string; errors: string[] }>(`/api/renders/config${query({ ref })}`),
   templateSavePreview: (body: TemplateSaveBody) => post<WritePreview>("/api/renders/templates/save/preview", body),
-  templateSaveCommit: (body: TemplateSaveBody) => post<WriteResult>("/api/renders/templates/save/commit", body),
+  templateSaveWrite: (body: TemplateSaveBody) => post<WriteResult>("/api/renders/templates/save/write", body),
   configPreview: (body: ConfigBody) => post<WritePreview>("/api/renders/config/preview", body),
-  configCommit: (body: ConfigBody) => post<WriteResult>("/api/renders/config/commit", body),
+  configWrite: (body: ConfigBody) => post<WriteResult>("/api/renders/config/write", body),
   saveStatus: (body: SaveBody) => post<SaveStatus>("/api/renders/save/status", body),
   savePreview: (body: SaveBody) => post<SavePlan>("/api/renders/save/preview", body),
-  saveCommit: (body: SaveBody) => post<SaveResult>("/api/renders/save/commit", body),
+  saveWrite: (body: SaveBody) => post<SaveResult>("/api/renders/save/write", body),
   applyPreview: (body: ApplyBody) => post<WritePreview>("/api/renders/apply/preview", body),
-  applyCommit: (body: ApplyBody) => post<WriteResult>("/api/renders/apply/commit", body),
+  applyWrite: (body: ApplyBody) => post<WriteResult>("/api/renders/apply/write", body),
 };

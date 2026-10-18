@@ -48,39 +48,45 @@ def test_bundled_demo_index_is_fresh() -> None:
     assert indexer.index_status(demo_repo_dir())["fresh"]
 
 
-def test_every_write_path_commits_a_fresh_index(tmp_path: Path) -> None:
+def test_every_write_path_saves_to_worktree_then_one_commit_has_fresh_index(tmp_path: Path) -> None:
     root = _demo(tmp_path)
     client = TestClient(create_app(root, edit=True))
     wizard = client.post(
-        "/api/wizard/device/commit",
+        "/api/wizard/device/save",
         json={"site": "site1", "kind": "baremetal", "cluster": "site1-apps", "role": "k8s-worker", "count": 1, "accept_warnings": True},
     )
     assert wizard.status_code == 200, wizard.text
-    _fresh_on(root, wizard.json()["branch"])
 
     clone = client.get("/api/renders/templates/netplan-node/clone", params={"new_id": "netplan-mine"}).json()
-    saved = client.post("/api/renders/templates/save/commit", json={"id": "netplan-mine", "spec_text": clone["spec_text"], "files": clone["file_contents"]})
+    saved = client.post("/api/renders/templates/save/write", json={"id": "netplan-mine", "spec_text": clone["spec_text"], "files": clone["file_contents"]})
     assert saved.status_code == 200, saved.text
-    branch = saved.json()["branch"]
+
+    upsert = {"upsert_instance": {"id": "site1-mine", "template": "netplan-mine", "site": "site1", "cluster": "site1-apps"}}
+    assert client.post("/api/renders/config/write", json=upsert).status_code == 200
+
+    applied = client.post("/api/renders/apply/write", json={"instances": ["site1-chrony"]})
+    assert applied.status_code == 200, applied.text
+    # Nada commiteado todavía: todo está en el working tree, en main.
+    assert _git(root, "rev-parse", "--abbrev-ref", "HEAD") == "main"
+    assert _git(root, "log", "--oneline") .count("\n") == 0
+    status = client.get("/api/worktree").json()
+    areas = {f["area"] for f in status["files"]}
+    assert {"sites", "templates", "renders", "output"} <= areas
+    assert client.get("/api/index/status").json()["uncommitted"] == status["pending"]
+    # Un único commit con todo + índice regenerado.
+    done = client.post("/api/worktree/commit", json={"message": "varios cambios"})
+    assert done.status_code == 200, done.text
+    branch = done.json()["branch"]
     _fresh_on(root, branch)
     with tree_for(root, branch) as tree:
-        ids = [t["id"] for t in indexer.build_artifacts_index(tree)["manifest_templates"]]
-    assert "netplan-mine" in ids
-
-    upsert = {"upsert_instance": {"id": "site1-mine", "template": "netplan-mine", "site": "site1", "cluster": "site1-apps"}, "branch": branch}
-    assert client.post("/api/renders/config/commit", json=upsert).status_code == 200
-    _fresh_on(root, branch)
-
-    applied = client.post("/api/renders/apply/commit", json={"instances": ["site1-chrony"]})
-    assert applied.status_code == 200, applied.text
-    _fresh_on(root, applied.json()["branch"])
-    with tree_for(root, applied.json()["branch"]) as tree:
-        rendered = indexer.build_artifacts_index(tree)["rendered"]
-    assert any(item["instance"] == "site1-chrony" and item["files"] == ["chrony.conf"] for item in rendered)
+        data = indexer.build_artifacts_index(tree)
+    assert "netplan-mine" in [t["id"] for t in data["manifest_templates"]]
+    assert any(item["instance"] == "site1-chrony" and item["files"] == ["chrony.conf"] for item in data["rendered"])
     assert _git(root, "status", "--porcelain") == ""
+    assert _git(root, "rev-list", "--count", f"main..{branch}") == "1"
 
 
-def test_stale_index_is_detected_served_live_and_reindexed_on_a_branch(tmp_path: Path) -> None:
+def test_stale_index_is_detected_served_live_and_reindexed_in_worktree(tmp_path: Path) -> None:
     root = _demo(tmp_path)
     client = TestClient(create_app(root, edit=True))
     assert client.get("/api/index/status").json()["fresh"] is True
@@ -102,10 +108,14 @@ def test_stale_index_is_detected_served_live_and_reindexed_on_a_branch(tmp_path:
     assert any(f.id == "IDX-001" for f in evaluate_ref(root, "HEAD"))  # índice commiteado viejo
     result = client.post("/api/index/reindex")
     assert result.status_code == 200, result.text
-    branch = result.json()["branch"]
-    assert branch.startswith("wizard/")
+    assert result.json()["saved"] is True and _git(root, "status", "--porcelain")  # en el working tree
+    assert client.get("/api/index/status").json()["fresh"] is True
+    done = client.post("/api/worktree/commit", json={"message": "reindexar"})  # solo índice
+    assert done.status_code == 200, done.text
+    branch = done.json()["branch"]
+    assert branch.startswith("wizard/") and done.json()["files"] == []
     _fresh_on(root, branch)
-    assert _git(root, "status", "--porcelain") == ""  # el working tree no se toca
+    assert _git(root, "status", "--porcelain") == ""
     assert not any(f.id == "IDX-001" for f in evaluate_ref(root, branch))
     assert TestClient(create_app(root, edit=False)).post("/api/index/reindex").status_code == 403
 

@@ -23,7 +23,11 @@ import type {
   ValuesDiff,
   FindingsDiffPayload,
   FindingsPayload,
-  WizardCommit,
+  WizardSave,
+  WorktreeCommitBody,
+  WorktreeCommitResult,
+  WorktreeDiff,
+  WorktreeStatus,
   WizardPreview,
   WizardStatus,
 } from "./types";
@@ -47,6 +51,32 @@ export function repoUrl(url: string, repoId: string | null = activeRepo): string
   return `/api/repos/${encodeURIComponent(repoId)}/${url.slice("/api/".length)}`;
 }
 
+/** Error HTTP con su código (409 = el working tree cambió desde la vista previa). */
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+export function isConflict(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 409;
+}
+
+/** Avisa a la barra superior («Cambios») de que el working tree cambió. */
+export const WORKTREE_EVENT = "isot:worktree-changed";
+export function notifyWorktreeChanged(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(WORKTREE_EVENT));
+}
+
+/** Abre el panel «Cambios» de la barra superior (p. ej. desde el resultado de un guardado). */
+export const OPEN_CHANGES_EVENT = "isot:open-changes";
+export function openChanges(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(OPEN_CHANGES_EVENT));
+}
+
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(repoUrl(url), init);
   if (!response.ok) {
@@ -57,7 +87,7 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
     } catch {
       /* respuesta no JSON */
     }
-    throw new Error(detail);
+    throw new ApiError(detail, response.status);
   }
   return response.json() as Promise<T>;
 }
@@ -118,7 +148,12 @@ export const api = {
   compareFile: (base: string, head: string, path: string) =>
     fetchJSON<CompareFilePayload>(`/api/compare/file?${new URLSearchParams({ base, head, path }).toString()}`),
   indexStatus: () => fetchJSON<IndexStatus>("/api/index/status"),
-  reindex: () => postJSON<{ ok: boolean; branch: string | null; message?: string }>("/api/index/reindex", {}),
+  reindex: () => postJSON<{ ok: boolean; saved: boolean; files?: string[]; message?: string }>("/api/index/reindex", {}),
+  worktree: () => fetchJSON<WorktreeStatus>("/api/worktree"),
+  worktreeDiff: (path: string) => fetchJSON<WorktreeDiff>(`/api/worktree/diff?path=${encodeURIComponent(path)}`),
+  worktreeDiscard: (paths: string[], tokens?: Record<string, string>) =>
+    postJSON<WorktreeStatus & { discarded: string[] }>("/api/worktree/discard", { paths, tokens }),
+  worktreeCommit: (body: WorktreeCommitBody) => postJSON<WorktreeCommitResult>("/api/worktree/commit", body),
   commits: (rev: string, limit = 80) => {
     const params = new URLSearchParams({ rev, limit: String(limit) });
     return fetchJSON<CommitsPayload>(`/api/commits?${params.toString()}`);
@@ -151,9 +186,9 @@ export const api = {
     return fetchJSON<ConnectionPolicy>(`/api/wizard/cabling-defaults?${params.toString()}`);
   },
   wizardDevicePreview: (body: unknown) => postJSON<WizardPreview>("/api/wizard/device/preview", body),
-  wizardDeviceCommit: (body: unknown) => postJSON<WizardCommit>("/api/wizard/device/commit", body),
+  wizardDeviceSave: (body: unknown) => postJSON<WizardSave>("/api/wizard/device/save", body),
   wizardSitePreview: (body: unknown) => postJSON<WizardPreview>("/api/wizard/site/preview", body),
-  wizardSiteCommit: (body: unknown) => postJSON<WizardCommit>("/api/wizard/site/commit", body),
+  wizardSiteSave: (body: unknown) => postJSON<WizardSave>("/api/wizard/site/save", body),
   findings: (params?: { site?: string; ref?: string }) => {
     const search = new URLSearchParams();
     if (params?.site && params.site !== "all") search.set("site", params.site);

@@ -54,7 +54,7 @@ describe("refs por defecto y escritura", () => {
     assert.deepEqual(swapRefs({ base: "main", head: "local" }), { base: "local", head: "main" });
     assert.ok(headIsWritable(null));
     assert.ok(headIsWritable({ base: "main", head: "local" }));
-    assert.ok(headIsWritable({ base: "main", head: "wizard/a" }));
+    assert.ok(!headIsWritable({ base: "main", head: "wizard/a" }));
     assert.ok(!headIsWritable({ base: "local", head: "main" }));
   });
 });

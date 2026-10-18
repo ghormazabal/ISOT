@@ -41,10 +41,10 @@ compartir enlaces (`?tab=renders&sub=resumen|plantillas|diff|guia`).
 
 Renders usa el control **Comparar** de la barra superior (el mismo de todas
 las vistas, ver [Comparar](../compare/GUIDE.md)): los datos que se ven son los
-de **head** (Local = working tree, una rama, un tag o un commit). Si head es
-una rama `wizard/…`, los siguientes guardados continúan esa misma rama; con
-head en otra rama o commit todo es de solo lectura. «Ver la rama» tras un
-guardado pone base = Local y head = la rama nueva.
+de **head** (Local = working tree, una rama, un tag o un commit). Solo se
+guarda con head = **Local**: todo guardado escribe en el working tree del
+repo de datos (sin commit) y Local lo muestra al instante; con head en una
+rama o commit todo es de solo lectura.
 
 Sin `--edit` (o `ISOT_EDIT=1`) todo es de solo lectura: puedes explorar,
 previsualizar y ver diffs, pero los botones de guardar y aplicar están
@@ -63,39 +63,56 @@ deshabilitados.
 4. Edita los `.j2`. Si te equivocas, verás el error con archivo y línea; al
    pulsarlo, el editor salta a esa línea (marcada en rojo en el margen).
 5. Pulsa **Guardar…**: ves el diff de lo que se va a escribir en
-   `manifest-templates/netplan-mi-sitio/` y confirmas. ISoT hace commit en una
-   rama nueva `wizard/…`; **main nunca se toca**.
-6. Pulsa **Ver rama** para seguir trabajando sobre esa rama.
-7. En **Resumen → + Nueva instancia** crea la instancia: id, template, sitio,
+   `manifest-templates/netplan-mi-sitio/` y confirmas. ISoT lo escribe en el
+   **working tree** (sin commit); el botón **Cambios (N)** de la barra
+   superior cuenta lo pendiente.
+6. En **Resumen → + Nueva instancia** crea la instancia: id, template, sitio,
    clúster, params opcionales (JSON). «Ver cambios en renders.yaml…» muestra
-   el diff y, al confirmar, hace commit en la misma rama.
-8. Ve a **Diff**: verás los archivos `nuevos`. **Aplicar…** muestra el diff
-   completo y, al confirmar, los escribe en `rendered/` en una rama.
-9. Revisa y fusiona la rama con tu flujo Git habitual (PR/MR).
+   el diff y, al confirmar, lo guarda en el working tree.
+7. Ve a **Diff**: verás los archivos `nuevos`. **Aplicar…** muestra el diff
+   completo y, al confirmar, los escribe en `rendered/` (working tree).
+8. Abre **Cambios (N)**: revisa los archivos agrupados (plantillas,
+   `renders.yaml`, salida), elige cuáles entran, escribe el mensaje y pulsa
+   **Commit**. Va a la rama actual si es `wizard/…`; si no, a una rama nueva
+   `wizard/<slug>` desde HEAD, con el índice regenerado en el mismo commit;
+   **main nunca se toca**.
+9. **Comparar main → rama** muestra lo que trae; publícala y fusiónala con tu
+   flujo Git habitual (PR/MR). ISoT no hace push.
+
+### Guardar vs Commit
+
+Son dos acciones separadas, para que puedas tocar varios renders, plantillas
+y `renders.yaml` y hacer un solo commit:
+
+| Acción | Dónde escribe | Qué hace |
+| --- | --- | --- |
+| **Guardar** (Guardar en el repo, Aplicar, Guardar plantilla, Clonar, renders.yaml) | Working tree del repo de datos | Diff por archivo y confirmación; aviso con diff si el archivo ya tenía cambios sin commit; si el working tree cambió desde el preview, vuelve a calcular y muestra el diff nuevo |
+| **Commit** (botón **Cambios (N)**) | Rama `wizard/…` | `git status` por área, diff y **Descartar** por archivo, selección y mensaje; índice regenerado e incluido; nunca en `main` ni ramas protegidas; sin push |
 
 ### Preview vs guardar
 
 La **Salida** de Plantillas es una *preview*: se calcula en memoria y no
 escribe nada (puedes copiarla con **Copiar**). Bajo las pestañas se ve
-`Destino: <carpeta> · en repo: al día | desfasado | no existe`: la carpeta de
-este mismo repo donde se guardaría y si lo que hay ahí coincide con la preview.
+`Destino: <carpeta> · en repo: al día | desfasado | no existe | guardado sin
+commit`: la carpeta de este mismo repo donde se guardaría y si lo que hay ahí
+coincide con la preview («guardado sin commit»: coincide, pero está en el
+working tree pendiente de commit).
 
-**Guardar en el repo** (solo en modo edición, con head = Local o una rama
-`wizard/…`, el template guardado y sin errores de render) hace lo mismo que
-Diff → **Aplicar** para esa instancia: muestra la carpeta destino
-(`target_dir` de la instancia o `rendered/<sitio>/<clúster>/<template>/`), el
-estado de cada archivo (nuevo, modificado, igual, huérfano) con su diff, un
-mensaje de commit opcional y, al confirmar, hace commit en una rama
-`wizard/…` nueva **del mismo repo** (con el índice regenerado en ese commit).
-Al terminar ofrece **Ver en Diff** (base = la rama nueva, head = Local) y
-**Comparar main → rama**.
+**Guardar en el repo** (solo en modo edición, con head = Local, el template
+guardado y sin errores de render) hace lo mismo que Diff → **Aplicar** para
+esa instancia: muestra la carpeta destino (`target_dir` de la instancia o
+`rendered/<sitio>/<clúster>/<template>/`) y el estado de cada archivo (nuevo,
+modificado, igual, huérfano) con su diff y, al confirmar, lo escribe en el
+**working tree del mismo repo** (sin commit). Al terminar ofrece **Abrir
+Cambios (commit)** y **Ver en Comparar**. Puedes guardar varias salidas antes
+de hacer un único commit.
 
 La salida siempre se guarda **a partir de una instancia** de `renders.yaml`,
 para que Diff, Aplicar y la CI la reproduzcan igual. Si el template no tiene
 instancia para ese sitio/clúster (p. ej. uno incluido que aún no usas) o los
 params de la preview difieren de los de la instancia, el diálogo lo explica y
 ofrece **Crear instancia con estos parámetros**: añade la instancia a
-`renders.yaml` en el mismo commit.
+`renders.yaml` en el mismo guardado.
 
 ## Anatomía de un template
 
@@ -224,8 +241,9 @@ que hay en el destino:
   - **Templates y renders.yaml**: diff de archivos de `manifest-templates/` y
     `renders.yaml` entre base y head.
 - Vista **Unificado** o **Lado a lado** por archivo.
-- **Aplicar…** (solo edición): muestra el diff completo, y al confirmar hace
-  commit en una rama `wizard/…` **de este mismo repo de datos**. «Borrar huérfanos»
+- **Aplicar…** (solo edición, head = Local): muestra el diff completo, y al
+  confirmar lo escribe en el working tree **de este mismo repo de datos**
+  (el commit, desde **Cambios**). «Borrar huérfanos»
   elimina los archivos que sobran. «versión vieja» indica que el
   `.isot-render.json` del destino es de otra versión del template.
 
@@ -259,7 +277,8 @@ repo con `target_dir` y deja que tu CI la lleve a donde haga falta.
   en `rendered/` (o la carpeta `target_dir` de cada instancia).
 
 ISoT no guarda cachés ni salidas propias en disco: renderiza en memoria y
-solo escribe cuando confirmas un «Aplicar», en una rama `wizard/…` del mismo repo de datos.
+solo escribe cuando confirmas un guardado, en el working tree del mismo repo
+de datos; los commits (desde **Cambios**) van a ramas `wizard/…` de ese repo.
 
 ## Reglas relacionadas
 
@@ -277,16 +296,19 @@ solo escribe cuando confirmas un «Aplicar», en una rama `wizard/…` del mismo
   diccionario; por eso los values de Helm están en `cluster.helm_values`.
 - **per_item sin archivos**: revisa `for_each`/`where`; el preview muestra
   0 archivos si el filtro no deja nada.
-- **No puedo guardar**: ¿arrancaste con `--edit`? ¿Estás viendo una rama que
-  no es `wizard/…`? La barra superior lo indica.
+- **No puedo guardar**: ¿arrancaste con `--edit`? ¿Head es una rama o un
+  commit en vez de Local? La barra superior lo indica.
+- **«El working tree cambió»**: otro proceso tocó esos archivos entre el
+  preview y la confirmación. Revisa el diff nuevo y vuelve a confirmar.
 
 Para que un LLM escriba templates por ti, pásale
 [docs/llm/RENDERS.md](../llm/RENDERS.md) y la descripción de lo que quieres.
 
 ## Índice
 
-Cada guardado (plantilla, clon, `renders.yaml`, Aplicar) regenera el índice
-del repo de datos (`_artifacts_index.json`, `_index_manifest.json`, …) en el
-mismo commit. Si copias plantillas o salidas a mano, ejecuta `isot index`
-y commitea los índices; si no, ISoT muestra «Índice desactualizado» y la
-regla IDX-001 lo marca.
+El commit de **Cambios** regenera el índice del repo de datos
+(`_artifacts_index.json`, `_index_manifest.json`, …) justo antes y lo incluye
+en el mismo commit. Mientras haya guardados sin commit, el aviso «Índice
+desactualizado» lo indica (los datos se calculan al vuelo desde el working
+tree). Si copias plantillas o salidas a mano, ejecuta `isot index` y
+commitea los índices; si no, la regla IDX-001 lo marca.

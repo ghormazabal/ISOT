@@ -75,20 +75,25 @@ abajo indica que el índice está desactualizado y se calcula al vuelo.*
 ## Ejemplos
 
 - *¿Qué toqué en local?* — base `main`, head `Local`.
+- *¿Qué tengo guardado sin commit?* — base `HEAD` (o `main`), head `Local`:
+  todo lo que guardaste (wizards, Corregir, Renders) aparece aquí antes del
+  commit.
 - *¿Qué trae la rama del wizard?* — base `main`, head `wizard/…`. Tras un
-  commit del wizard, «Comparar» se abre así solo.
+  commit desde **Cambios**, «Comparar base → rama» lo abre así.
 - *¿Qué cambió entre dos commits?* — base `a1b2c3d`, head `HEAD`.
 - *¿Mi working tree deshace algo de una rama?* — base `wizard/…`, head
   `Local` (o ⇄).
-- *Tras «Aplicar» en Renders* — base = la rama nueva, head = Local: el destino
-  debería verse en sync.
+- *Tras «Aplicar» en Renders* — base `HEAD`, head `Local`: los archivos
+  guardados (aún sin commit) aparecen como nuevos o modificados.
 
 ## Escritura
 
 Comparar es **solo lectura**: no hace checkout, no toca el working tree ni
-escribe entre repositorios. Los commits (wizards, Renders, Reindexar) parten
-del working tree; en Renders solo se puede escribir con head = **Local** (o
-continuando una rama `wizard/…`).
+escribe entre repositorios. Los guardados (wizards, Corregir, Renders,
+Regenerar índice) escriben en el working tree del repo, así que **Local** los
+muestra de inmediato (también los archivos nuevos sin seguimiento); en Renders
+solo se puede guardar con head = **Local**. El commit es aparte: el botón
+**Cambios (N)** lo hace en una rama `wizard/…`.
 
 ## Límites
 

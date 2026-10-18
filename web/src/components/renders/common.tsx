@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { buildTree, classifyDiffLine, FILE_FILTER_MIN, filterByPath, sideBySide, splitPath, type TreeNode } from "../../renders";
+import { isConflict, notifyWorktreeChanged, openChanges, WORKTREE_EVENT } from "../../api";
 import type { RenderError, RenderWarning, WritePreview, WriteResult } from "../../rendersTypes";
+import type { PendingChange } from "../../types";
 
-/** Permisos de escritura de la vista actual (edición + rama que se continúa). */
+/** Permisos de escritura de la vista actual: solo con edición y head = Local (working tree). */
 export type WriteMode = {
   canWrite: boolean;
-  /** Rama `wizard/…` que se continúa (la ref que se está viendo) o null = rama nueva. */
-  branch: string | null;
   reason: string;
 };
 
@@ -219,23 +219,52 @@ export type WriteFlow = {
   title: string;
   description?: string;
   preview: () => Promise<WritePreview>;
-  commit: () => Promise<WriteResult>;
+  /** Escribe en el working tree; `token` = huella de la vista previa (409 si el disco cambió). */
+  write: (token?: string) => Promise<WriteResult>;
 };
 
-/** Diálogo «ver cambios → confirmar → commit en rama». Nunca escribe sin confirmar. */
+/** Cambia cada vez que algo guarda/descarta/commitea en el working tree (para recargar estados). */
+export function useWorktreeTick(): number {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setTick((value) => value + 1);
+    window.addEventListener(WORKTREE_EVENT, bump);
+    return () => window.removeEventListener(WORKTREE_EVENT, bump);
+  }, []);
+  return tick;
+}
+
+export const CONFLICT_NOTICE = "El working tree cambió desde la vista previa: este es el diff nuevo; revísalo y confirma otra vez.";
+
+/** Aviso: el archivo ya tenía cambios sin commit (se sobrescriben) con su diff vs HEAD. */
+export function PendingNote({ pending }: { pending?: PendingChange }) {
+  if (!pending) return null;
+  return (
+    <details className="pending-warning">
+      <summary>⚠ ya tiene cambios sin commit ({STATUS_LABEL[pending.status] ?? pending.status}); se sobrescriben — ver diff vs HEAD</summary>
+      {pending.binary ? <p className="muted">(binario)</p> : <UnifiedDiff diff={pending.diff} />}
+    </details>
+  );
+}
+
+/** Texto del resultado de «Guardar» (working tree, sin commit). */
+export function savedMessage(result: WriteResult): string {
+  return `Guardado en el working tree (${result.files.length} archivo(s), sin commit). Cambios pendientes en ${result.branch}: ${result.pending}. Haz commit desde «Cambios» en la barra superior.`;
+}
+
+/** Diálogo «ver cambios → confirmar → guardar en el working tree». Nunca escribe sin confirmar ni hace commit. */
 export function WriteDialog({
   flow,
   onClose,
   onDone,
-  onViewBranch,
 }: {
   flow: WriteFlow;
   onClose: () => void;
   onDone?: (result: WriteResult) => void;
-  onViewBranch?: (branch: string) => void;
 }) {
   const [preview, setPreview] = useState<WritePreview | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<WriteResult | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -256,15 +285,29 @@ export function WriteDialog({
   }, [flow]);
 
   const errors = (preview?.errors ?? []).map((item) => (typeof item === "string" ? item : `${item.file ?? ""}${item.line ? `:${item.line}` : ""} ${item.message}`));
+  const pendingCount = (preview?.files ?? []).filter((file) => file.pending).length;
   const confirm = async () => {
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
-      const value = await flow.commit();
+      const value = await flow.write(preview?.token);
       setResult(value);
+      notifyWorktreeChanged();
       onDone?.(value);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (isConflict(err)) {
+        try {
+          const fresh = await flow.preview();
+          setPreview(fresh);
+          setOpen(fresh.files[0]?.path ?? null);
+          setNotice(CONFLICT_NOTICE);
+        } catch (again) {
+          setError(again instanceof Error ? again.message : String(again));
+        }
+      } else {
+        setError(err instanceof Error ? err.message : String(err));
+      }
     } finally {
       setBusy(false);
     }
@@ -281,6 +324,7 @@ export function WriteDialog({
         </header>
         {flow.description ? <p className="muted">{flow.description}</p> : null}
         {!preview && !error ? <p className="muted">Calculando cambios…</p> : null}
+        {notice ? <p className="pending-warning is-conflict" id="write-conflict">{notice}</p> : null}
         {error ? <p className="error">{error}</p> : null}
         {errors.length ? (
           <ul className="render-errors">
@@ -295,8 +339,10 @@ export function WriteDialog({
           <>
             {preview.files.length ? (
               <p className="muted">
-                {preview.files.length} archivo(s) cambian. Se hará commit en una rama <code>wizard/…</code> de este mismo
-                repo de datos; nunca en main ni en otro repositorio.
+                {preview.files.length} archivo(s) cambian. Se escriben en el <strong>working tree local</strong> de este repo de
+                datos, sin commit; el commit lo haces después desde <strong>Cambios</strong> (barra superior), en una rama{" "}
+                <code>wizard/…</code>.
+                {pendingCount ? <> {pendingCount} ya tenían cambios sin commit (ver aviso).</> : null}
               </p>
             ) : (
               <p className="muted">No hay cambios que escribir.</p>
@@ -306,7 +352,9 @@ export function WriteDialog({
                 <details key={file.path} open={open === file.path} onToggle={(event) => event.currentTarget.open && setOpen(file.path)}>
                   <summary>
                     <StatusBadge status={file.status} /> <code>{file.path}</code>
+                    {file.pending ? <span className="pending-flag" title="Ya tiene cambios sin commit"> ⚠ sin commit</span> : null}
                   </summary>
+                  <PendingNote pending={file.pending} />
                   <UnifiedDiff diff={file.diff} />
                 </details>
               ))}
@@ -314,33 +362,31 @@ export function WriteDialog({
           </>
         ) : null}
         {result ? (
-          <div className="render-result">
-            <p>
-              ✔ Commit <code>{result.short}</code> en la rama <code>{result.branch}</code>
-              {result.created ? " (nueva)" : " (continuada)"}.
-            </p>
-            {result.push ? <p className={result.push.ok ? "muted" : "error"}>Push: {result.push.message}</p> : null}
-            <p className="muted">
-              Revisa la rama y ábrela como PR/MR desde tu flujo Git habitual. main no se toca.
-            </p>
+          <div className="render-result" id="write-result">
+            <p>✔ {savedMessage(result)}</p>
           </div>
         ) : null}
         <div className="wizard-actions">
           {result ? (
             <>
-              {onViewBranch ? (
-                <button type="button" className="primary" onClick={() => onViewBranch(result.branch)}>
-                  Ver rama {result.branch}
-                </button>
-              ) : null}
+              <button
+                type="button"
+                className="primary"
+                onClick={() => {
+                  onClose();
+                  openChanges();
+                }}
+              >
+                Abrir Cambios (commit)
+              </button>
               <button type="button" onClick={onClose}>
                 Cerrar
               </button>
             </>
           ) : (
             <>
-              <button type="button" className="primary" disabled={busy || !preview || !preview.files.length || errors.length > 0} onClick={confirm}>
-                {busy ? "Guardando…" : "Confirmar y hacer commit"}
+              <button type="button" className="primary" id="write-confirm" disabled={busy || !preview || !preview.files.length || errors.length > 0} onClick={confirm}>
+                {busy ? "Guardando…" : "Guardar en el working tree"}
               </button>
               <button type="button" onClick={onClose}>
                 Cancelar

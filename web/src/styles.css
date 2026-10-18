@@ -3279,7 +3279,7 @@ label.checkbox {
   background: rgba(5, 8, 10, 0.72);
   display: grid;
   place-items: center;
-  z-index: 50;
+  z-index: 80; /* por encima del aviso de índice (60) */
 }
 
 .render-modal-box {
@@ -3749,4 +3749,184 @@ label.checkbox {
   padding: 4px 8px;
   color: var(--text);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* ---- Guardar (working tree) vs Commit («Cambios») ---- */
+.render-save-state.is-guardado_sin_commit {
+  color: #c9a0ff;
+}
+
+.pending-warning {
+  border: 1px solid #5a4a2a;
+  background: #2a2412;
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin: 6px 0;
+  font-size: 12px;
+  color: #e8d3a0;
+}
+
+.pending-warning summary {
+  cursor: pointer;
+}
+
+.pending-warning pre.diff {
+  max-height: 220px;
+  overflow: auto;
+  font-size: 11px;
+}
+
+.pending-warning.is-conflict {
+  border-color: #7a3a3a;
+  background: #2c1616;
+  color: #f0c0c0;
+}
+
+.pending-flag {
+  color: #e0b050;
+  font-size: 11px;
+  margin-left: 6px;
+}
+
+.changes-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.changes-count {
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  background: var(--line);
+  color: var(--muted);
+}
+
+.changes-button.has-changes {
+  border-color: #c9a0ff;
+}
+
+.changes-button.has-changes .changes-count {
+  background: #c9a0ff;
+  color: #1a1024;
+  font-weight: 700;
+}
+
+.render-modal-box.changes-box {
+  width: min(1180px, 96vw);
+  max-height: 92vh;
+}
+
+.changes-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 42%) 1fr;
+  gap: 12px;
+  min-height: 0;
+  height: min(40vh, 420px);
+}
+
+.changes-list,
+.changes-diff {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: var(--bg);
+  min-width: 0;
+}
+
+.changes-group h4 {
+  margin: 6px 0 2px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.changes-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.changes-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.changes-file.is-active {
+  background: #1e2a33;
+}
+
+.changes-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+.changes-path .file-path {
+  min-width: 0;
+  font-size: 12px;
+}
+
+.changes-discard {
+  flex: none;
+  font-size: 11px;
+  color: var(--danger);
+}
+
+.changes-auto {
+  font-size: 10px;
+  color: var(--muted);
+  width: 26px;
+  text-align: center;
+}
+
+.changes-diff-path {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.changes-commit {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.changes-target {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.render-status.is-wt-untracked,
+.render-status.is-wt-added {
+  color: #7fd17f;
+  border-color: #2f5a35;
+}
+
+.render-status.is-wt-modified {
+  color: #d9b45f;
+  border-color: #5a4a2a;
+}
+
+.render-status.is-wt-deleted {
+  color: var(--danger);
+  border-color: #5a2f2f;
 }
